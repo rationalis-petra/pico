@@ -4,7 +4,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/debug.h"
+#include "pico/stdlib/core/debug.h"
 
 void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
@@ -12,7 +12,7 @@ void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     convert_c_fn(debug_break, &fn_ctype, type, ass, a, point); 
 }
 
-void add_debug_module(Target target, Package* base, RegionAllocator* region) {
+void add_debug_module(Target target, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -20,17 +20,22 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("debug")),
+        .name = string_to_name(mv_string("debug")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
-    Symbol sym;
+    Package* base = get_package(lang);
+    Module* module = mk_module(header, base, lang);
+    Name name;
 
     PiType type;
     //PiType* typep;
@@ -39,10 +44,7 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    // TODO: we use int64_t as it has the requisite size (8 bytes)
-    // for pico values: currently don't support non-64 bit values 
     TermFormer former;
-    //TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
 
@@ -55,8 +57,8 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     // Term Formers
     // ------------------------------------------------------------------------
     former = FDescribe;
-    sym = string_to_symbol(mv_string("describe"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("describe"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
     // Functions
@@ -71,13 +73,10 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     PiType* typep;
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
     build_debug_break_fn(typep, target.target, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("debug-break"));
+    name = string_to_name(mv_string("debug-break"));
     fn_segments.code = get_instructions(target.target);
     prepped = prep_target(module, fn_segments, target.target, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(target.target);
-
-    Result r = add_module(string_to_symbol(mv_string("debug")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }
 

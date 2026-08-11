@@ -600,8 +600,8 @@ CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
 
 CType mk_string_ctype(PiAllocator* pia) {
     return mk_struct_ctype(pia, 2,
-                    "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                    "bytes", mk_voidptr_ctype(pia));
+                           "bytes", mk_voidptr_ctype(pia),
+                           "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
 }
 
 CType mk_allocator_vtable_ctype(PiAllocator* pia) {
@@ -618,11 +618,16 @@ CType mk_allocator_ctype(PiAllocator* pia) {
                            "context", mk_voidptr_ctype(pia));
 }
 
-CType mk_list_ctype(PiAllocator* pia) {
-    return mk_struct_ctype(pia, 4,
+CType mk_slice_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 2,
                            "data", mk_voidptr_ctype(pia),
+                           "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+}
+
+CType mk_list_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 3,
+                           "data", mk_slice_ctype(pia),
                            "len", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                           "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                            "allocator", mk_allocator_ctype(pia));
 }
 

@@ -62,11 +62,12 @@ String string_from_UTF_32(U32Array arr, Allocator* a) {
     String out;
     out.memsize = numbytes * sizeof(uint8_t);
     out.bytes = mem_alloc(out.memsize, a);
-    for (size_t i = 0; i < arr.len; ) {
+    size_t offset = 0;
+    for (size_t i = 0; i < arr.len; i++) {
         uint8_t nbytes;
         uint32_t codepoint = arr.data[i];
-        encode_point_utf8(out.bytes + i, &nbytes, codepoint);
-        i += nbytes;
+        encode_point_utf8(out.bytes + offset, &nbytes, codepoint);
+        offset += nbytes;
     }
     return out;
 }

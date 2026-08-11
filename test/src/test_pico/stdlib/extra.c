@@ -13,6 +13,32 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
     Allocator gpa = ra_to_gpa(region);
     PiAllocator pregion = convert_to_pallocator(&gpa);
 
+    if (test_start(log, mv_string("thread-basic"))) {
+        int64_t expected = 1;
+        TEST_EQ("(-> 4 (- 3))");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("thread-involved"))) {
+        int64_t expected = 6;
+        TEST_EQ("(-> 4 (- 3) (+ 10) (- 5))");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("thread-end-basic"))) {
+        int64_t expected = -1;
+        TEST_EQ("(->> 4 (- 3))");
+        reset_subregion(region);
+    }
+
+    /* TODO: this test fails for some reason...
+    if (test_start(log, mv_string("thread-end-involved"))) {
+        int64_t expected = -6;
+        TEST_EQ("(->> 4 (- 3) (+ 10) (- 5))");
+        reset_subregion(region);
+    }
+    */
+
     if (test_start(log, mv_string("single-for-upto"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);

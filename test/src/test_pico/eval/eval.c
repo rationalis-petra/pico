@@ -2,6 +2,7 @@
 #include "platform/memory/region.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/helpers.h"
 
 #include "test_pico/helper.h"
 #include "test_pico/eval/eval.h"
@@ -16,22 +17,27 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(8, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 1, "prelude");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 2, "data", "pointer");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
-    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
+    add_import_flags(&imports.clauses, a, ImportTypes | ImportInstances,
+                     2, seg_name("data"), seg_wild());
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_name(mv_string("eval-test-module")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
 
@@ -79,5 +85,5 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     }
 
     delete_env(env, a);
-    delete_module(module);
+    remove_module(base, string_to_name(mv_string("eval-test-module")));
 }

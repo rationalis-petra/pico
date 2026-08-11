@@ -63,6 +63,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
     }
 
+    if (test_start(log, mv_string("poly-return"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+
+        int64_t expected = 987;
+        TEST_EQ("(id 987)");
+    }
+
     if (test_start(log, mv_string("call-multiple-polymorphic-functions-in-sequence"))) {
         RUN("(def id all [A] proc [(x A)] x)");
         RUN("(def sequence all [A] proc [(x A)] (seq (id x) (id x)))");
@@ -112,11 +119,11 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [1] A))"
             "  [.= proc [l r] (eq.= (aelt 0 l) (aelt 0 r))]"
             "  [.!= proc [l r] (eq.!= (aelt 0 l) (aelt 0 r))])");
-        RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
-        RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
+        RUN("(def eql all [A] proc {(e Eql A)} [l r] (e.= l r))");
+        RUN("(def not-eql all [A] proc {(e Eql A)} [l r] (e.!= l r))");
 
         bool expected = false;
-        TEST_EQ("(!= (array [#q]) (array [#q]))");
+        TEST_EQ("(not-eql (array [#q]) (array [#q]))");
     }
 
     // -------------------------------------------------------------------------
@@ -127,7 +134,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("seq-simple"))) {
         int64_t expected = 17;
-        TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
+        TEST_EQ("((all [A] (is I64 (seq 3 4 10 17))) {Unit})");
     }
 
     if (test_start(log, mv_string("seq-fvar"))) {
@@ -137,12 +144,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("seq-bind-lit"))) {
         int64_t expected = 6;
-        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] 10 y) I64)) -10)");
+        TEST_EQ("((all [A] proc [(x A)] (is I64 (seq [let! y 6] 10 y))) -10)");
     }
 
     if (test_start(log, mv_string("seq-bind-lit-multi"))) {
         int64_t expected = 6;
-        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] [let! z 3] [let! p 2] 10 y) I64)) -10)");
+        TEST_EQ("((all [A] proc [(x A)] (is I64 (seq [let! y 6] [let! z 3] [let! p 2] 10 y))) -10)");
     }
 
     if (test_start(log, mv_string("seq-bind-fvar"))) {
@@ -159,12 +166,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
-        TEST_EQ("((all [A] (let [x (is -3 I32)] x)) {Unit})");
+        TEST_EQ("((all [A] (let [x (is I32 -3)] x)) {Unit})");
     }
 
     if (test_start(log, mv_string("simple-let-multi"))) {
         int32_t expected = -3;
-        TEST_EQ("((all [A] (let [x (is -3 I32)] [y (is 2 I32)] x)) {Unit})");
+        TEST_EQ("((all [A] (let [x (is I32 -3)] [y (is I32 2)] x)) {Unit})");
     }
 
     // TODO: polymorphic let of large values
@@ -313,13 +320,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     }
 
     if (test_start(log, mv_string("array-polymorphic-element-small"))) {
-        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 3;
         TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
     }
 
     if (test_start(log, mv_string("array-polymorphic-multi-element-access"))) {
-        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 5;
         TEST_EQ("((all [A] proc {(n (Num A))} [(a (Array [4] A))] (n.+ (aelt 2 a) (aelt 1 a))) my-array)");
     }
@@ -461,6 +468,19 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("poly-proc-in-proc"))) {
         int64_t expected = 72;
         TEST_EQ("((proc [x] (let [id (all [A] proc [(y A)] y)] (id {I64} x))) 72)");
+    }
+
+    if (test_start(log, mv_string("double-poly-call"))) {
+        RUN(
+        "(def svtest proc [(start U64) (end U64) (string String)] seq \n"
+        "  [let! start-byte (local start)]\n"
+        "  [let! index (local 5)]\n"
+        "  (= start (get index))"
+        "  \n"
+        "  string)");
+
+        uint64_t expected = 4;
+        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 \"test\").len)");
     }
 
     set_std_current_allocator(old);

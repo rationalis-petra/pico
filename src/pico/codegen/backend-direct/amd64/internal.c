@@ -1012,68 +1012,74 @@ typedef struct {
   void* data;
 } TraitFields;
 
-void* mk_trait_ty(Symbol name, TraitSyms syms, TraitFields fields) {
+typedef struct {
+    Symbol name;
+    TraitSyms syms;
+    TraitFields implicit_fields;
+    TraitFields fields;
+    void* pad; /** This makes the struct size larger than 8 eightbytes, forcing
+                   it to be passed in memory on SysV64 */
+} TraitData;
+
+void* mk_trait_ty(TraitData* data) {
     PiAllocator pia = get_std_temp_allocator();
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TTrait,
         .trait.id = distinct_id(),
-        .trait.name = name,
+        .trait.name = data->name,
 
-        .trait.vars.data = syms.data,
-        .trait.vars.len = syms.len,
-        .trait.vars.size = syms.len,
+        .trait.vars.data = data->syms.data,
+        .trait.vars.len = data->syms.len,
+        .trait.vars.size = data->syms.len,
         .trait.vars.gpa = pia,
 
-        .trait.fields.data = fields.data,
-        .trait.fields.len = fields.len,
-        .trait.fields.capacity = fields.len,
+        .trait.implicit_fields.data = data->implicit_fields.data,
+        .trait.implicit_fields.len = data->implicit_fields.len,
+        .trait.implicit_fields.capacity = data->implicit_fields.len,
+        .trait.implicit_fields.gpa = pia,
+
+        .trait.fields.data = data->fields.data,
+        .trait.fields.len = data->fields.len,
+        .trait.fields.capacity = data->fields.len,
         .trait.fields.gpa = pia,
     };
     return ty;
 }
 
-void gen_mk_trait_ty(Symbol name, SymbolArray syms, Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_trait_ty(Symbol name, SymbolArray syms, Location dest,  Location nifields, Location ifield_data, Location nfields,Location field_data, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: this allocation is fine for definitions as types get copied,
     // probably not fine if we have a proc which returns a family!
     // in that case we maybe want this in a data-segment?
     void* sym_data = mem_alloc(syms.len * sizeof(Symbol), a);
     memcpy(sym_data, syms.data, syms.len * sizeof(Symbol));
 
-#if ABI == SYSTEM_V_64
+    build_binary_op(Sub, reg(RSP, sz_64), imm8(0x48), ass, a, point);
+
     build_binary_op(Mov, reg(RDI, sz_64), imm64(name.name), ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), imm64(name.did), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm64(syms.len), ass, a, point);
-    build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)sym_data), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x0, sz_64), reg(RDI, sz_64), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x8, sz_64), imm32(name.did), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x10, sz_64), imm32(syms.len), ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)sym_data), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x18, sz_64), reg(RSI, sz_64), ass, a, point);
+
+    build_binary_op(Mov, rref8(RSP, 0x20, sz_64), nifields, ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x28, sz_64), ifield_data, ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x30, sz_64), nfields, ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x38, sz_64), field_data, ass, a, point);
+
+#if ABI == SYSTEM_V_64
+    build_binary_op(Mov, reg(RDI, sz_64), reg(RSP, sz_64), ass, a, point);
 #elif ABI == WIN_64
-    build_unary_op(Push, imm32(name.did), ass, a, point);
-    build_unary_op(Push, imm32(name.name), ass, a, point);
     build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
-
-    build_binary_op(Mov, reg(R10, sz_64), imm64((uint64_t)syms.data), ass, a, point);
-    build_unary_op(Push, reg(R10, sz_64), ass, a, point);
-    build_unary_op(Push, imm32(syms.len), ass, a, point);
-
-    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
-
-    build_binary_op(Mov, reg(R10, sz_64), data, ass, a, point);
-    build_unary_op(Push, reg(R10, sz_64), ass, a, point);
-    build_unary_op(Push, nfields, ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
-
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_trait_ty, ass, a, point);
     
-#if ABI == WIN_64
-    // Pop all structs from the stack
-    build_binary_op(Add, reg(RSP, sz_64), imm8(0x30), ass, a, point);
-#endif
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x48), ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);

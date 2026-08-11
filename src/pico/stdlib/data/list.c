@@ -9,25 +9,36 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, &ra),
+        .clauses = mk_import_clause_array(8, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
+    add_import(&imports.clauses, &ra, 2, "data", "slice");
 
+    add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
+                     2, seg_name("num"), seg_wild());
+    add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "order");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
+
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("list")),
+        .name = string_to_name(mv_string("list")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -40,53 +51,44 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     }
 
     // TODO (FEAT): add/implement the following:
-    //  - list-free or delete-list
-
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
-        "  [.data Address]\n"
+        "  [.data (slice.Slice A)]\n"
         "  [.len U64]\n"
-        "  [.capacity U64]\n"
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, region);
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
-        "(def mk-list all [A] proc [len capacity]\n"
+        "(def init all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
-        "    [.capacity capacity]\n"
-        "    [.len len]\n"
-        "    [.data (alloc (u64.* (size-of A) capacity))]))";
+        "    [.len len ]\n"
+        "    [.data slice.new capacity]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, region);
 
     const char *mk_null_list_fn = 
-        "(def null-list all [A] proc []\n"
+        "(def null all [A] proc []\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
-        "    [.capacity 0]\n"
         "    [.len 0]\n"
-        "    [.data (num-to-address 0)]))";
+        "    [.data (slice.null)]))";
     compile_toplevel(mk_null_list_fn, module, target, &point, &pi_point, region);
     
-    // TODO (BUG): use list allocator
-    const char *mk_free_fn = 
-        "(def free-list all [A] proc [(list (List A))]\n"
-        "  (free list.data))";
-    compile_toplevel(mk_free_fn, module, target, &point, &pi_point, region);
+    const char *mk_deinit_fn = 
+        "(def de-init all [A] proc [(list (List A))]\n"
+        "  (bind [current-allocator list.gpa]"
+        "    (slice.de-init list.data)))";
+    compile_toplevel(mk_deinit_fn, module, target, &point, &pi_point, region);
 
     const char *elt_fn =
-        "(def elt all [A] proc [idx (arr (List A))]\n"
-        "  (load {A} (num-to-address (u64.+ (u64.* idx (size-of A))\n"
-        "                                   (address-to-num arr.data)))))";
+        "(def elt all [A] proc [idx (lst (List A))]\n"
+        "  (slice.elt {A} idx lst.data))";
     compile_toplevel(elt_fn, module, target, &point, &pi_point, region);
 
     const char *eset_fn = 
-        "(def eset all [A] proc [idx (val A) (arr (List A))]\n"
-        "  (store {A}\n"
-        "    (num-to-address (u64.+ (u64.* idx (size-of A))\n"
-        "                           (address-to-num arr.data)))\n"
-        "    val))";
+        "(def eset all [A] proc [idx (val A) (lst (List A))]\n"
+        "  (slice.eset idx val lst.data))";
     compile_toplevel(eset_fn, module, target, &point, &pi_point, region);
 
     const char *each_fn =
@@ -97,7 +99,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     const char *map_fn =
         "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
-        "  (let [new-list (mk-list {B} lst.len lst.len)] (seq\n"
+        "  (let [new-list (init {B} lst.len lst.len)] (seq\n"
         "    (loop [for i from 0 below lst.len]\n"
         "      (eset i (fn (elt i lst)) new-list))\n"
         "      new-list)))";
@@ -105,21 +107,21 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
-        "  [let! new-terms mk-list {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len)]\n"
-        "  [let! let-terms mk-list {Syntax} 3 3]\n"
-        "  [let! arr-terms mk-list {Syntax} 3 3]\n"
+        "  [let! new-terms init {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len)]\n"
+        "  [let! let-terms init {Syntax} 3 3]\n"
+        "  [let! arr-terms init {Syntax} 3 3]\n"
         "\n"
         "  [let! ar get-range (elt 0 terms)]\n"
         "\n"
         "  [let! local-sym Syntax:atom ar (Atom:symbol (mk-unique-symbol \"local-list\"))]\n"
         "  [let! eset-sym capture eset]\n"
         "\n"
-        "  [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
+        "  [let! eset-elt-terms init {Syntax} 4 4]\n"
         "\n"
         "\n"
-        "  (eset 0 (capture mk-list) arr-terms)\n"
-        "  (eset 1 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
-        "  (eset 2 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
+        "  (eset 0 (capture init) arr-terms)\n"
+        "  (eset 1 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
+        "  (eset 2 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
         "\n"
         "  (eset 0 (Syntax:atom ar (:symbol (mk-symbol \"let!\"))) let-terms)\n"
         "  (eset 1 local-sym let-terms)\n"
@@ -130,9 +132,9 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "\n"
         "  (labels (go-to loop 1)\n"
         "    [loop [i] seq\n"
-        "      [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
+        "      [let! eset-elt-terms init {Syntax} 4 4]\n"
         "      [let! elt-range get-range (elt i terms)]\n"
-        "      [let! idx-node Syntax:atom elt-range (:integral (narrow (u64.- i 1) I64))]\n"
+        "      [let! idx-node Syntax:atom elt-range (:integral (narrow I64 (u64.- i 1)))]\n"
         "      (eset 0 eset-sym eset-elt-terms)\n"
         "      (eset 1 idx-node eset-elt-terms)\n"
         "      (eset 2 (elt i terms) eset-elt-terms)\n"
@@ -152,7 +154,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     const char *list_push_fn =
         "(def push all [A] proc [(val A) (l (Ptr (List A)))] \n"
         "  let [lst (get l)]\n"
-        "    (if (u64.< lst.len lst.capacity)\n"
+        "    (if (u64.< lst.len lst.data.len)\n"
         "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented: grow on list push\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
@@ -169,6 +171,33 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "  (set l (struct (get l) [.len 0])))";
     compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
 
-    Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
-    if (r.type == Err) panic(r.error_message);
+    /**
+     *  Implementations for Abstractions
+     */
+
+    const char *list_eq =
+        "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"
+        "  [.= proc [(l1 (List A)) (l2 (List A))] \n"
+        "    (labels (seq \n"
+        "              (when (u64.!= l1.len l2.len) (go-to not-eq))\n"
+        "              (loop [for i from 0 below l1.len] \n"
+        "                (when (eq.!= (elt i l1) (elt i l2)) (go-to not-eq)))\n"
+        "              :true) \n"
+        "      [not-eq :false])]\n"
+        "  [.!= proc [(l1 (List A)) (l2 (List A))] \n"
+        "    (labels (seq \n"
+        "              (when (u64.!= l1.len l2.len) (go-to not-eq))\n"
+        "              (loop [for i from 0 below l1.len] \n"
+        "                (when (eq.!= (elt i l1) (elt i l2)) (go-to not-eq)))\n"
+        "              :false) \n"
+        "      [not-eq :true])])\n";
+    compile_toplevel(list_eq, module, target, &point, &pi_point, region);
+
+    const char *list_delete =
+        "(def list-delete instance [A] {(del (Delete A))} (Delete (List A))\n"
+        "  [.delete proc [list] seq\n"
+        "    (loop [for i from 0 below list.len]\n"
+        "      (del.delete (elt i list)))\n"
+        "    (de-init list)])\n";
+    compile_toplevel(list_delete, module, target, &point, &pi_point, region);
 }

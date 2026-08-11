@@ -11,6 +11,8 @@
 
 #include "data/result.h"
 
+#include "pico/data/name_ptr_amap.h"
+
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 #include "pico/values/modular.h"
@@ -25,6 +27,15 @@ typedef struct EnvEntry {
     void* value;
     Module* source;
 } EnvEntry;
+
+
+typedef struct {
+    NamePtrAMap* origins;
+    U64NameAMap* rename;
+} ImportData;
+
+void incorporate_import_clause(ImportClause clause, ImportData origins, Module* module, ErrorPoint* point, Allocator* a);
+PtrArray get_import_sources(ImportClause clause, Module* module, ErrorPoint* point, Allocator* a);
 
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a);
 void delete_env(Environment* env, Allocator* a);
@@ -42,9 +53,11 @@ typedef enum {
 
 typedef struct {
     ImportClauseStatusType type;
-    Symbol bad_symbol;
+    Name bad_symbol;
 } ImportClauseStatus;
-ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause);
+
+ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Allocator* a);
+NameSourceAMap gather_re_exports(Module* module, ErrorPoint* point, Allocator* a);
 
 EnvEntry env_lookup(Symbol sym, Environment* env);
 PiType* env_lookup_tydecl(Symbol sym, Environment* env);

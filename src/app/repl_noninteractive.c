@@ -12,12 +12,11 @@
 #include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 
 #include "app/repl.h"
 
-bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
-    IStream *cin = get_stdin_stream();
+bool noninteractive_repl_iter(IStream* cin, Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
     FormattedOStream* cout = get_formatted_stdout();
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
@@ -48,7 +47,7 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
     Environment* env = env_from_module(module, &point, &ra);
 
     if (!opts.is_eval) {
-        String name = symbol_to_string(module_name(module), &ra);
+        String name = name_to_string(module_name(module), &ra);
         write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }

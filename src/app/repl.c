@@ -6,7 +6,7 @@
 
 #include "components/pretty/stream_printer.h"
 #include "pico/data/error.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
@@ -61,7 +61,7 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
 
     PosCursorData start_pos = get_cursor_pos();
 
-    String name = view_symbol_string(module_name(module));
+    String name = view_name_string(module_name(module));
     terminal_write_string_unbuffered(name);
     terminal_write_string_unbuffered(mv_string(" > "));
     
@@ -113,7 +113,7 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
           .cursor_pos = start_pos,
         });
 
-      String name = view_symbol_string(module_name(module));
+      String name = view_name_string(module_name(module));
       terminal_write_string_unbuffered(name);
       terminal_write_string_unbuffered(mv_string(" > "));
       String buf_contents = get_contents(buffer, &ra);

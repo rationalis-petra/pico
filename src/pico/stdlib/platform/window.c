@@ -8,7 +8,7 @@
 #include "pico/data/client/meta/list_impl.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/core/kernel.h"
 #include "pico/stdlib/platform/submodules.h"
 
 #ifdef WINDOW_SYSTEM
@@ -137,18 +137,22 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("window")),
+        .name = string_to_name(mv_string("window")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     delete_module_header(header);
-    Symbol sym;
+    Name name;
 
     ModuleEntry* e;
     PiType type;
@@ -168,26 +172,26 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     // The window type is simple an opaque pointer (address)
     typep = mk_opaque_type(pia, "Window", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Window"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Window"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     window_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyMap", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("KeyMap"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("KeyMap"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     keymap_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyState", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("KeyState"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("KeyState"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     keystate_ty = e->value;
 
     // Message Type
@@ -209,10 +213,10 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
         "space", 0, "shift", 0, "enter", 0, "backspace", 0));
 
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("RawKey"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("RawKey"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     raw_key_ty = e->value;
 
 
@@ -237,10 +241,10 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
         "space", 0, "shift", 0, "enter", 0, "backspace", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Key"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Key"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     key_ty = e->value;
 
 
@@ -252,58 +256,58 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
 
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Message"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Message"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     window_message_ty = e->value;
 
     typep = mk_proc_type(pia, 3, mk_string_type(pia), mk_prim_type(pia, Int_32), mk_prim_type(pia, Int_32), copy_pi_type_p(window_ty, pia));
     build_create_window_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("create-window"));
+    name = string_to_name(mv_string("create-window"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Unit));
     build_destroy_window_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("destroy-window"));
+    name = string_to_name(mv_string("destroy-window"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Bool));
     build_window_should_close_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("should-close"));
+    name = string_to_name(mv_string("should-close"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_list_type(), window_message_ty));
     build_poll_events_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("poll-events"));
+    name = string_to_name(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, keymap_ty, keystate_ty);
     build_create_keystate_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("create-keystate"));
+    name = string_to_name(mv_string("create-keystate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, keystate_ty, mk_prim_type(pia, Unit));
     build_destroy_keystate_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("destroy-keystate"));
+    name = string_to_name(mv_string("destroy-keystate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 4,
@@ -313,10 +317,10 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
                          keystate_ty,
                          mk_prim_type(pia, Unit));
     build_update_keystate_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("update-keystate"));
+    name = string_to_name(mv_string("update-keystate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 5,
@@ -327,26 +331,23 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
                          keystate_ty,
                          mk_prim_type(pia, Unit));
     build_update_keystate_mod_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("update-keystate-modifier"));
+    name = string_to_name(mv_string("update-keystate-modifier"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2, raw_key_ty, keystate_ty, key_ty);
     build_get_key_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("get-key"));
+    name = string_to_name(mv_string("get-key"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
-    if (r.type == Err) panic(r.error_message);
 }
 
 #endif

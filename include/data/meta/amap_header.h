@@ -27,5 +27,6 @@
     val_t* fprefix##_lookup(key_t key, tprefix##AMap map);              \
     bool fprefix##_find(size_t* idx, key_t key, tprefix##AMap map);     \
     void fprefix##_insert(key_t key, val_t val, tprefix##AMap* map);    \
+    void fprefix##_remove(key_t key, void(*delete_val)(val_t val, void* param), void* param, tprefix##AMap* map); \
 
 #endif

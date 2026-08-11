@@ -189,14 +189,28 @@ typedef struct {
     uint32_t offset; 
 } AttributeDescription;
 
+typedef struct {
+    ShaderStage stage;
+    uint32_t offset;
+    uint32_t size;
+} PushConstantRange;
+
 PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
 PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
+PICO_LIST_HEADER_TYPE(PushConstantRange, PushConstantRange)
 
-HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,
-                                BindingDescriptionPiList bdesc,
-                                AttributeDescriptionPiList adesc,
-                                AddrPiList shaders,
-                                HedronSurface* surface);
+typedef struct {
+    /** TODO: determine which values can become Maybes? or have an
+        empty/defalud structure? */
+    AddrPiList descriptor_set_layouts;
+    BindingDescriptionPiList bdesc;
+    AttributeDescriptionPiList adesc;
+    PushConstantRangePiList push_const_ranges;
+    AddrPiList shaders;
+    HedronSurface* surface;
+} PipelineInfo;
+
+HedronPipeline *create_pipeline(PipelineInfo pinfo);
 void destroy_pipeline(HedronPipeline* pipeline);
 
 // ----------------------------------------------------------------------------
@@ -311,6 +325,8 @@ void command_pipeline_barrier(HedronCommandBuffer *commands,
 
 // Data transfer
 void command_copy_buffer_to_image(HedronCommandBuffer* commands, HedronBuffer* buffer, HedronImage* image, uint32_t width, uint32_t height);
+
+void command_push_constants(HedronCommandBuffer* buffer, HedronPipeline *pipeline, ShaderStage stage, uint32_t offset, uint32_t size, const void* constants);
 
 // Bind things
 void command_bind_descriptor_set(HedronCommandBuffer* commands, HedronPipeline* pipeline, HedronDescriptorSet* descriptor_set);

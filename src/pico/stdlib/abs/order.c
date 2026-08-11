@@ -8,22 +8,25 @@
 void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, &ra),
+        .clauses = mk_import_clause_array(2, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
-    add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "data");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("order")),
+        .name = string_to_name(mv_string("order")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -39,8 +42,7 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     // TODO: make eq a superclass?
     const char* ord_trait = 
         "(def Ord Trait Ord [A]"
-        "  [.=  Proc [A A] Bool]" 
-        "  [.!= Proc [A A] Bool]" 
+        "  {.eq (Eq A)}"
         "  [.<  Proc [A A] Bool]"
         "  [.<= Proc [A A] Bool]" 
         "  [.>  Proc [A A] Bool]"
@@ -62,7 +64,4 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     const char* geq_fn =
         "(def >= all [A] proc {(ord (Ord A))} [(x A) (y A)] ord.>= x y)";
     compile_toplevel(geq_fn, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(abs, string_to_symbol(mv_string("order")), module);
-    if (r.type == Err) panic(r.error_message);
 }

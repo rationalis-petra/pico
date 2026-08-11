@@ -204,7 +204,7 @@ InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
             if (eql) {
                 push_inst_src(*src, &sources);
 
-                ModuleEntry* m_entry = get_def(src->src_sym, src->src);
+                ModuleEntry* m_entry = get_def_external(src->src_sym, src->src);
                 if (!m_entry) panic(mv_string("Module entry is null!"));
 
                 if (m_entry->is_module) {

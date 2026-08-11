@@ -7,13 +7,17 @@ void add_meta_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("meta")),
+        .name = string_to_name(mv_string("meta")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
@@ -24,8 +28,5 @@ void add_meta_module(Assembler* ass, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_refl_module(ass, module, subregion);
     release_subregion(subregion);
-
-    add_module(string_to_symbol(mv_string("meta")), module, base);
-
 }
 

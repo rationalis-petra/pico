@@ -72,10 +72,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         PiType* ptype = mk_proc_type(pia, 1, mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64));
         convert_c_fn(foreign_add_10, &ctype, ptype, ass, &ra, &point); 
 
-        Symbol sym = string_to_symbol(mv_string("foreign-add-10"));
+        Name name = string_to_name(mv_string("foreign-add-10"));
         fn_segments.code = get_instructions(ass);
         prepped = prep_target(module, fn_segments, ass, NULL);
-        add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);
@@ -108,10 +108,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         PiType* ptype = mk_proc_type(pia, 1, struct_type, mk_prim_type(pia, Bool));
         convert_c_fn(examine_struct, &ctype, ptype, ass, &ra, &point); 
 
-        Symbol sym = string_to_symbol(mv_string("examine-4word-struct"));
+        Name name = string_to_name(mv_string("examine-4word-struct"));
         fn_segments.code = get_instructions(ass);
         prepped = prep_target(module, fn_segments, ass, NULL);
-        add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);
@@ -144,10 +144,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         PiType* ptype = mk_proc_type(pia, 2, struct_type, copy_pi_type_p(struct_type, pia), mk_prim_type(pia, Bool));
         convert_c_fn(examine_two_structs, &ctype, ptype, ass, &ra, &point); 
 
-        Symbol sym = string_to_symbol(mv_string("examine-two-4word-structs"));
+        Name name = string_to_name(mv_string("examine-two-4word-structs"));
         fn_segments.code = get_instructions(ass);
         prepped = prep_target(module, fn_segments, ass, NULL);
-        add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);

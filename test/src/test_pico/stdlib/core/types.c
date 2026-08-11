@@ -1,4 +1,4 @@
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/core/kernel.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
@@ -94,7 +94,7 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("exists-with-implicits"))) {
         RUN("(def Unital Trait Unital [A] [.val A])");
-        PiType* trait = mk_trait_type(pia, 1, "A", 1,
+        PiType* trait = mk_trait_type(pia, 1, "A", 0, 1,
                                       "val", mk_var_type(pia, "A"));
         trait->trait.id--;
         PiType* var_type = mk_var_type(pia, "A");

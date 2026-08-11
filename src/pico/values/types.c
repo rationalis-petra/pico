@@ -101,6 +101,9 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
     }
     case TTrait: {
         sdelete_sym_list(t.trait.vars);
+        for (size_t i = 0; i < t.trait.implicit_fields.len; i++)
+            delete_pi_type_p(t.trait.implicit_fields.data[i].val, pia);
+        sdelete_sym_addr_piamap(t.trait.implicit_fields);
         for (size_t i = 0; i < t.trait.fields.len; i++)
             delete_pi_type_p(t.trait.fields.data[i].val, pia);
         sdelete_sym_addr_piamap(t.trait.fields);
@@ -115,6 +118,9 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
             delete_pi_type_p(t.instance.args.data[i], pia);
         sdelete_addr_list(t.instance.args);
 
+        for (size_t i = 0; i < t.instance.implicit_fields.len; i++)
+            delete_pi_type_p(t.instance.implicit_fields.data[i].val, pia);
+        sdelete_sym_addr_piamap(t.instance.implicit_fields);
         for (size_t i = 0; i < t.instance.fields.len; i++)
             delete_pi_type_p(t.instance.fields.data[i].val, pia);
         sdelete_sym_addr_piamap(t.instance.fields);
@@ -218,6 +224,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.trait.id = t.trait.id;
         out.trait.name = t.trait.name;
         out.trait.vars = scopy_sym_list(t.trait.vars, pia);
+        out.trait.implicit_fields = copy_sym_addr_piamap(t.trait.implicit_fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         out.trait.fields = copy_sym_addr_piamap(t.trait.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
     case TTraitInstance:
@@ -226,6 +233,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.instance.over = scopy_sym_list(t.instance.over, pia);
         out.instance.implicits = copy_addr_list(t.instance.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.instance.args = copy_addr_list(t.instance.args,  (TyCopier)copy_pi_type_p, pia);
+        out.instance.implicit_fields = copy_sym_addr_piamap(t.instance.implicit_fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         out.instance.fields = copy_sym_addr_piamap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
     case TCType:
@@ -535,8 +543,17 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     }
     case TTraitInstance: {
         void* data = *(void**)val;
-        PtrArray nodes = mk_ptr_array(5 + type->instance.fields.len, a);
+        PtrArray nodes = mk_ptr_array(5 + type->instance.implicit_fields.len + type->instance.fields.len, a);
         push_ptr(mk_str_doc(mv_string("(instance <TYPE>"), a), &nodes);
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            SymAddrPiCell cell = type->instance.fields.data[i];
+            PtrArray lcl_nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &lcl_nodes);
+            push_ptr(pretty_pi_value(data, (PiType*)cell.val, params, a), &lcl_nodes);
+
+            data += pi_size_of(*(PiType*)cell.val);
+            push_ptr(mk_paren_doc("{.", "}", mv_sep_doc(lcl_nodes, a), a), &nodes);
+        }
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             SymAddrPiCell cell = type->instance.fields.data[i];
             PtrArray lcl_nodes = mk_ptr_array(2, a);
@@ -624,7 +641,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     }
     case TTrait:  {
         // trait #id (vars...) [.field ty1] ...
-        PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
+        PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("Trait"), a), &nodes);
         push_ptr(pretty_u64(type->trait.id, a), &nodes);
 
@@ -634,6 +651,19 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
 
+        PtrArray field_nodes = mk_ptr_array(type->trait.implicit_fields.len + type->trait.fields.len, a);
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
+            PtrArray field = mk_ptr_array(4, a);
+            SymAddrPiCell cell = type->trait.fields.data[i];
+            push_ptr(mk_str_doc(mv_string("."), a), &field);
+            push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &field);
+            push_ptr(mk_str_doc(mv_string(" "), a), &field);
+            // TODO: make this pretty value?
+            push_ptr(pretty_type(cell.val, params.type, a), &field);
+
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(field, a), a), &field_nodes);
+        }
+
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray field = mk_ptr_array(4, a);
             SymAddrPiCell cell = type->trait.fields.data[i];
@@ -642,8 +672,9 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             push_ptr(mk_str_doc(mv_string(" "), a), &field);
             push_ptr(pretty_type(cell.val, params.type, a), &field);
 
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &field_nodes);
         }
+        push_ptr(mv_nest_doc(2, mv_group_doc(mv_sep_doc(field_nodes, a), a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -833,7 +864,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             if (ty_nodes.len != 0) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
-                var_doc = mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
+                var_doc = mv_group_doc(mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a), a);
             } else {
                 var_doc = mv_sep_doc(var_nodes, a);
             }
@@ -956,17 +987,28 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         break;
     }
     case TTrait:  {
-        PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
-        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &nodes);
-        
-        push_ptr(mk_str_doc(view_symbol_string(type->trait.name), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &head_nodes);
+        push_ptr(mk_str_doc(view_symbol_string(type->trait.name), a), &head_nodes);
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), a), &vars);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_nodes);
 
+        PtrArray field_nodes = mk_ptr_array(type->trait.implicit_fields.len + type->trait.fields.len, a);
+        for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
+            PtrArray fd_nodes = mk_ptr_array(2, a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->trait.implicit_fields.data[i].key, a), a), a);
+            Document* arg = pretty_type_internal(type->trait.implicit_fields.data[i].val, ctx, a);
+
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            Document* fd_doc = mk_paren_doc("{.", "}", mv_sep_doc(fd_nodes, a), a);
+
+            push_ptr(mv_group_doc(fd_doc, a), &field_nodes);
+        }
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->trait.fields.data[i].key, a), a), a);
@@ -976,8 +1018,11 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(mv_group_doc(fd_doc, a), &nodes);
+            push_ptr(mv_group_doc(fd_doc, a), &field_nodes);
         }
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(field_nodes, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -988,8 +1033,19 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
             push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
 
-            PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
+            PtrArray nodes = mk_ptr_array(1 + type->instance.implicit_fields.len + type->instance.fields.len, a);
             push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+            for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+                PtrArray fd_nodes = mk_ptr_array(2, a);
+                Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.implicit_fields.data[i].key, a), a), a);
+                Document* arg = pretty_type_internal(type->instance.implicit_fields.data[i].val, ctx, a);
+
+                push_ptr(fname, &fd_nodes);
+                push_ptr(arg,   &fd_nodes);
+                Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+
+                push_ptr(mv_nest_doc(2, mv_group_doc(fd_doc, a), a), &nodes);
+            }
             for (size_t i = 0; i < type->instance.fields.len; i++) {
                 PtrArray fd_nodes = mk_ptr_array(2, a);
                 Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
@@ -1359,11 +1415,35 @@ size_t pi_align_of(PiType type) {
 }
 
 size_t pi_instance_size_of(PiType type) {
-    PiType as_struct = {
-        .sort = TStruct,
-        .structure.fields = type.instance.fields,
-    };
-    return pi_size_of(as_struct);
+  size_t align = 1;
+  size_t total = 0; 
+  for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
+    size_t tmp_align;
+    Result_t res = pi_maybe_align_of(*(PiType*)type.instance.implicit_fields.data[i].val, &tmp_align);
+    if (res != Ok) goto invalid_type;
+    align = align > tmp_align ? align : tmp_align;
+    total = pi_size_align(total, tmp_align);
+    size_t field_size;
+    res = pi_maybe_size_of(*(PiType*)type.instance.implicit_fields.data[i].val, &field_size);
+    if (res != Ok) goto invalid_type;
+    total += field_size;
+  }
+  for (size_t i = 0; i < type.instance.fields.len; i++) {
+    size_t tmp_align;
+    Result_t res = pi_maybe_align_of(*(PiType*)type.instance.fields.data[i].val, &tmp_align);
+    if (res != Ok) goto invalid_type;
+    align = align > tmp_align ? align : tmp_align;
+    total = pi_size_align(total, tmp_align);
+    size_t field_size;
+    res = pi_maybe_size_of(*(PiType*)type.instance.fields.data[i].val, &field_size);
+    if (res != Ok) goto invalid_type;
+    total += field_size;
+  }
+
+  return total;
+
+ invalid_type:
+  panic(mv_string("Cannot get size of polymorphic type!"));
 }
 
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
@@ -1684,6 +1764,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
     case TTrait:
         // TODO (BUG): ensure to shadow trait variables here.
+        for (size_t i = 0; i < body->trait.implicit_fields.len; i++) {
+            type_app_subst(body->trait.implicit_fields.data[i].val, subst, shadowed, pia, logger, a);
+        }
         for (size_t i = 0; i < body->trait.fields.len; i++) {
             type_app_subst(body->trait.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
@@ -1697,6 +1780,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         for (size_t i = 0; i < body->instance.args.len; i++) {
             type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
+        }
+        for (size_t i = 0; i < body->instance.implicit_fields.len; i++) {
+            type_app_subst(body->instance.implicit_fields.data[i].val, subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->instance.fields.len; i++) {
             type_app_subst(body->instance.fields.data[i].val, subst, shadowed, pia, logger, a);
@@ -1789,6 +1875,15 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             sym_ptr_bind(var, tipe, &subst);
         }
 
+        SymAddrPiAMap new_implicit_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
+        for (size_t i = 0; i < family.trait.implicit_fields.len; i++) {
+            SymAddrPiCell cell = family.trait.implicit_fields.data[i];
+            PiType* new_type = copy_pi_type_p(cell.val, pia);
+            SymbolArray shadowed = mk_symbol_array(8, a);
+            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
+            sdelete_symbol_array(shadowed);
+            sym_addr_insert(cell.key, new_type, &new_implicit_fields);
+        }
         SymAddrPiAMap new_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
         for (size_t i = 0; i < family.trait.fields.len; i++) {
             SymAddrPiCell cell = family.trait.fields.data[i];
@@ -1825,6 +1920,7 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             .gpa = *pia
           },
           .instance.args = saved_args,
+          .instance.implicit_fields = new_implicit_fields,
           .instance.fields = new_fields,
         };
         return out_ty;
@@ -1977,7 +2073,7 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             return false;
         if (lhs->distinct.id != rhs->distinct.id)
             return false;
-        if (lhs->distinct.type != rhs->distinct.type)
+        if (!pi_type_eql_i(lhs->distinct.type, rhs->distinct.type, array))
             return false;
         if (!lhs->distinct.args != !rhs->distinct.args)
             return false;
@@ -2508,10 +2604,12 @@ PiType* mk_struct_type(PiAllocator* pia, size_t nfields, ...) {
     return structure;
 }
 
-// Sample usage: mk_trait_type(a, 1, "A", 2
-//   "val", mk_var_type(a, "A"),
-//   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
-PiType *mk_trait_type(PiAllocator* pia, size_t nvars, ...) {
+/**
+ * Sample usage: mk_trait_type(a, 1, "A", 2
+ *   "val", mk_var_type(a, "A"),
+ *   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
+ */
+PiType* mk_trait_type(PiAllocator* pia, size_t nvars, ...) {
     va_list args;
     va_start(args, nvars);
 
@@ -2519,6 +2617,14 @@ PiType *mk_trait_type(PiAllocator* pia, size_t nvars, ...) {
     for (size_t i = 0; i < nvars ; i++) {
         Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
         push_sym(name, &vars);
+    }
+
+    size_t nimplicit_fields = va_arg(args, int);
+    SymAddrPiAMap implicit_fields = mk_sym_addr_piamap(nimplicit_fields, pia);
+    for (size_t i = 0; i < nimplicit_fields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* arg = va_arg(args, PiType*);
+        sym_addr_insert(name, arg, &implicit_fields);
     }
     
     size_t nfields = va_arg(args, int);
@@ -2536,6 +2642,7 @@ PiType *mk_trait_type(PiAllocator* pia, size_t nvars, ...) {
         .sort = TTrait,
         .trait.id = distinct_id(),
         .trait.vars = vars,
+        .trait.implicit_fields = implicit_fields,
         .trait.fields = fields,
     };
     return trait;
@@ -2750,10 +2857,17 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
     return out;
 }
 
+PiType* mk_slice_type(PiAllocator* pia) {
+    SymbolPiList vars = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &vars);
+    return mk_named_type(pia, "Slice",
+                         mk_type_family(pia, vars,
+                                        mk_struct_type(pia, 2,
+                                                       "addr", mk_prim_type(pia, Address),
+                                                       "len", mk_prim_type(pia, UInt_64))));
+}
+
 PiType* mk_string_type(PiAllocator* pia) {
-    // Named String Struct [.memsize U64] [.bytes Address]
     return mk_named_type(pia, "String",
-                         mk_struct_type(pia, 2,
-                                        "memsize", mk_prim_type(pia, UInt_64),
-                                        "bytes", mk_prim_type(pia, Address)));
+                         mk_app_type(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
 }

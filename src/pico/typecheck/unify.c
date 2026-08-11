@@ -499,16 +499,18 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 }
 
 UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
-    // ------------------------------------------------------------
-    // Uvar Subst
-    //  -------- 
-    // 
-    // The goal of uvar subst is to ensure the uvar points to a specific type by
-    // assigning the 'subst' field. If the type in the 'subst' field is itself a
-    // uvar, then the constraints from the uvar argument must be propagated into
-    // the type argument. 
-    // 
-    // ------------------------------------------------------------
+    /**
+     * ------------------------------------------------------------
+     * Uvar Subst
+     * ============ 
+     * 
+     * The goal of uvar subst is to ensure the uvar points to a specific type by
+     * assigning the 'subst' field. If the type in the 'subst' field is itself a
+     * uvar, then the constraints from the uvar argument must be propagated into
+     * the type argument. 
+     * 
+     * ------------------------------------------------------------
+     */
     if (ctx.logger) {
         PtrArray docs = mk_ptr_array(2, ctx.a);
         push_ptr(mv_str_doc(mv_string("instantiating:"), ctx.a), &docs);
@@ -521,6 +523,10 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
     Allocator* a = ctx.a;
     if (type->sort == TUVar) {
         UVarType* rhs = type->uvar; 
+        // Do an occurs check to ensure that we don't accidentally unify a type
+        // with itself, creating an infinite loop;
+        if (uvar == rhs) 
+            return (UnifyResult){.type = UOk};
         // type has been traced, so if it's a uvar, no need to chase!
         // check that the defaults are compatible
         if (uvar->default_behaviour != NoDefault) {
@@ -544,6 +550,8 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         //   unify literals with named types, particularly enumerations, without 
         //   having to specify the name.
         PiType* unwrapped = unname_type(type, ctx.current_module, ctx.pia, a);
+        // TODO (BUG): what about if the named type has arugments???
+        // TODO (BUG): add occurs check
 
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
@@ -747,6 +755,10 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
 
+        for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.implicit_fields.data[i].val))
+                return true;
+        }
         for (size_t i = 0; i < type.instance.fields.len; i++) {
             if (has_unification_vars_p(*(PiType*)type.instance.fields.data[i].val))
                 return true;
@@ -890,6 +902,9 @@ void squash_type(PiType* type, UnifyContext ctx) {
     }
     case TTrait: {
         // TODO (INVESTIGATE PERFORMANCE): do we need to squash implicits also?
+        for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
+            squash_type((type->trait.implicit_fields.data + i)->val, ctx);
+        }
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             squash_type((type->trait.fields.data + i)->val, ctx);
         }
@@ -900,6 +915,9 @@ void squash_type(PiType* type, UnifyContext ctx) {
             squash_type(type->instance.args.data[i], ctx);
         }
 
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            squash_type(type->instance.implicit_fields.data[i].val, ctx);
+        }
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             squash_type(type->instance.fields.data[i].val, ctx);
         }

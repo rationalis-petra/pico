@@ -40,17 +40,21 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("time")),
+        .name = string_to_name(mv_string("time")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
-    Symbol sym;
+    Module* module = mk_module(header, get_package(platform), platform);
+    Name name;
 
     ModuleEntry* e;
     PiType type;
@@ -69,36 +73,33 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
 
     typep = mk_opaque_type(pia, "Timer", module, mk_prim_type(pia, Float_64));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Timer"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Timer"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     PiType* timer_ty = e->value;
 
     typep = mk_distinct_type(pia, "Seconds", mk_prim_type(pia, Float_64));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Seconds"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Seconds"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(name, module);
     PiType* seconds_ty = e->value;
 
     typep = mk_proc_type(pia, 0, copy_pi_type_p(timer_ty, pia));
     build_start_timer_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("start-timer"));
+    name = string_to_name(mv_string("start-timer"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(timer_ty, pia), copy_pi_type_p(seconds_ty, pia));
     build_time_elapsed_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("time-elapsed"));
+    name = string_to_name(mv_string("time-elapsed"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("time")), module);
-    if (r.type == Err) panic(r.error_message);
 }

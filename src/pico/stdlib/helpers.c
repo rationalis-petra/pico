@@ -6,7 +6,7 @@
 #include "data/stream.h"
 
 #include "pico/parse/parse.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/abstraction/abstraction.h"
 #include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
@@ -14,11 +14,11 @@
 
 #include "pico/stdlib/helpers.h"
 
-void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, RegionAllocator* region) {
+void compile_str_toplevel(String string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     clear_target(target);
 
-    IStream* sin = mk_string_istream(mv_string(string), &ra);
+    IStream* sin = mk_string_istream(string, &ra);
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
@@ -103,28 +103,40 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     throw_error(final_point, mv_cstr_doc("Startup compiled definition not exepcted to exit!", &ra));
 }
 
+void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, RegionAllocator* region) {
+    compile_str_toplevel(mv_string(string), module, target, final_point, final_pi_point, region);
+}
+
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
-    SymbolArray path = mk_symbol_array(len, a);
+    PathSegmentArray path = mk_path_segment_array(len, a);
     va_list args;
     va_start(args, len);
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
-        push_symbol(string_to_symbol(mv_string(name)), &path);
+        PathSegment segment = {
+            .type = SegName,
+            .name = string_to_name(mv_string(name)),
+        };
+        push_path_segment(segment, &path);
     }
     push_import_clause((ImportClause) {
-            .type = Import,
+            .type = ImportSimple,
             .path = path,
         },
         arr);
 }
 
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
-    SymbolArray path = mk_symbol_array(len, a);
+    PathSegmentArray path = mk_path_segment_array(len, a);
     va_list args;
     va_start(args, len);
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
-        push_symbol(string_to_symbol(mv_string(name)), &path);
+        PathSegment segment = {
+            .type = SegName,
+            .name = string_to_name(mv_string(name)),
+        };
+        push_path_segment(segment, &path);
     }
     va_end(args);
     push_import_clause((ImportClause) {
@@ -132,4 +144,35 @@ void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
             .path = path,
         },
         arr);
+}
+
+void add_import_flags(ImportClauseArray* arr, Allocator* a, IFlags flags, size_t len, ...) {
+    PathSegmentArray path = mk_path_segment_array(len, a);
+    va_list args;
+    va_start(args, len);
+    for (size_t i = 0; i < len; i++) {
+        PathSegment segment = va_arg(args, PathSegment);
+        push_path_segment(segment, &path);
+    }
+    va_end(args);
+    push_import_clause((ImportClause) {
+            .type = ImportComplex,
+            .path = path,
+            .import_instances = (flags & ImportInstances ? true : false),
+            .import_types = (flags & ImportTypes ? true : false),
+        },
+        arr);
+}
+
+PathSegment seg_name(const char* name) {
+    return (PathSegment) {
+        .type = SegName,
+        .name = string_to_name(mv_string(name)),
+    };
+}
+
+PathSegment seg_wild() {
+    return (PathSegment) {
+        .type = SegWildcard,
+    };
 }

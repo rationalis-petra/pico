@@ -7,13 +7,17 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("platform")),
+        .name = string_to_name(mv_string("platform")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
@@ -40,6 +44,4 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
     add_hedron_module(ass, module, subregion); // Dependencies: window
     release_subregion(subregion);
 #endif
-
-    add_module(string_to_symbol(mv_string("platform")), module, base);
 }

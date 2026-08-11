@@ -9,8 +9,6 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
-#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
-#define TEST_TYPE_FAIL(str) test_typecheck_fail(str, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
@@ -24,21 +22,24 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(8, a),
+        .clauses = mk_import_clause_array(4, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 2, "lang", "relic");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_name(mv_string("typecheck-test-module")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
@@ -79,7 +80,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType* expected = mk_prim_type(&pregion, Int_64);
-        TEST_TYPE("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
+        TEST_TYPE("(seq [let! lst (list.init 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
         set_std_current_allocator(current_old);
     }
 
@@ -178,7 +179,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     delete_env(env, a);
-    delete_module(module);
+    remove_module(base, string_to_name(mv_string("typecheck-test-module")));
     delete_assembler(ass);
     release_executable_allocator(exalloc);
 }

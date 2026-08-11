@@ -12,9 +12,9 @@
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/core/kernel.h"
+#include "pico/stdlib/core/foreign.h"
 #include "pico/stdlib/meta/meta.h"
-#include "pico/stdlib/foreign.h"
 
 // forward declarations
 void mark_recur(SynRef syn, Symbol self, TypeCheckContext ctx);
@@ -29,19 +29,20 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     TypeEnv *t_env = mk_type_env(env, ctx.a);
     switch (top->type) {
     case TLDef: {
-        PiType* ty = env_lookup_tydecl(top->def.bind, env);
+        Symbol sym = {.name = top->def.bind, .did = 0};
+        PiType* ty = env_lookup_tydecl(sym, env);
         SynRef term = top->def.value;
 
         if (ctx.logger) {
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
             PtrArray nodes = mk_ptr_array(4, ctx.a);
             push_ptr(mv_cstr_doc("                    TYPECHECK FOR:", ctx.a), &nodes);
-            push_ptr(mv_str_doc(view_symbol_string(top->def.bind), ctx.a), &nodes);
+            push_ptr(mv_str_doc(view_symbol_string(sym), ctx.a), &nodes);
             log_doc(mv_hsep_doc(nodes, ctx.a), ctx.logger);
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
         }
 
-        mark_recur(term, top->def.bind, ctx);
+        mark_recur(term, sym, ctx);
         if (ty) {
             type_check_expr(term, *ty, t_env, ctx);
         } else {
@@ -74,7 +75,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     case TLImport: {
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
-            ImportClauseStatus status = import_clause_valid(env, clause);
+            ImportClauseStatus status = import_clause_valid(env, clause, ctx.a);
             if (status.type != ICValid) {
                 type_error_invalid_import(clause, status.bad_symbol, status.type != ICNotExists, top->import.range, ctx);
             }
@@ -234,7 +235,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
         
     } else {
-        // If we can't easily traverse into the structure/type, ten 
+        // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
         PiType* inferred = get_type(ref, ctx.tape);
         UnifyResult out = unify(type, inferred, uctx);
@@ -327,6 +328,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             .sort = TProc,
             .proc.implicits = mk_addr_list(untyped.procedure.implicits.len, ctx.pia),
             .proc.args = mk_addr_list(untyped.procedure.args.len, ctx.pia),
+            .proc.ret = mk_uvar(ctx.pia),
         };
         set_type(ref, proc_ty, ctx.tape);;
 
@@ -356,34 +358,31 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg.key, aty, env);
             push_addr(aty, &proc_ty->proc.args);
         }
-
         if (untyped.procedure.is_recursive) {
-            proc_ty->proc.ret = mk_uvar(ctx.pia);
             type_var(untyped.procedure.recursive_sym, proc_ty, env);
         }
+
         type_infer_i(untyped.procedure.body, env, ctx); 
         pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
 
         if (untyped.procedure.is_recursive) {
             pop_type(env);
-            UnifyContext uctx = (UnifyContext) {
-                .a = ctx.a,
-                .pia = ctx.pia,
-                .current_module = type_env_module(env),
-                .logger = ctx.logger,
-            };
-            PiType* expected = get_type(untyped.procedure.body, ctx.tape);
-            UnifyResult out = unify(expected, proc_ty->proc.ret, uctx);
-            UnifyReason reason = {
-                .type = URCheck,
-                .check.range = get_range(ref, ctx.tape).term,
-                .check.expected = expected,
-                .check.actual = proc_ty->proc.ret,
-            };
-            check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
-        } else {
-            proc_ty->proc.ret = get_type(untyped.procedure.body, ctx.tape);
         }
+        UnifyContext uctx = (UnifyContext) {
+            .a = ctx.a,
+            .pia = ctx.pia,
+            .current_module = type_env_module(env),
+            .logger = ctx.logger,
+        };
+        PiType* expected = get_type(untyped.procedure.body, ctx.tape);
+        UnifyResult out = unify(expected, proc_ty->proc.ret, uctx);
+        UnifyReason reason = {
+            .type = URCheck,
+            .check.range = get_range(ref, ctx.tape).term,
+            .check.expected = expected,
+            .check.actual = proc_ty->proc.ret,
+        };
+        check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
         break;
     }
     case SAll: {
@@ -1056,6 +1055,11 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         } else if (source_type.sort == TTraitInstance) {
             // search for field
             PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.instance.implicit_fields.len; i++) {
+                if (symbol_eq(source_type.instance.implicit_fields.data[i].key, untyped.projector.field)) {
+                    ret_ty = source_type.instance.implicit_fields.data[i].val;
+                }
+            }
             for (size_t i = 0; i < source_type.instance.fields.len; i++) {
                 if (symbol_eq(source_type.instance.fields.data[i].key, untyped.projector.field)) {
                     ret_ty = source_type.instance.fields.data[i].val;
@@ -1128,12 +1132,23 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_error_instance_wrong_nfields(get_range(ref, ctx.tape).term, ty->instance.fields.len, untyped.instance.fields.len, ctx);
         }
 
-        for (size_t i = 0; i < ty->instance.fields.len; i++) {
-            SynRef* field_syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
-            if (field_syn) {
+        for (size_t i = 0; i < ty->instance.implicit_fields.len; i++) {
+            SynRef* syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
+            if (syn) {
                 PiType* field_ty = ty->instance.fields.data[i].val;
                 Range tysrc = get_range(untyped.instance.constraint, ctx.tape).term;
-                type_check_i(*field_syn, field_ty, tysrc, env, ctx);
+                type_check_i(*syn, field_ty, tysrc, env, ctx);
+            } else {
+                // Create an implicit field & try to instantiate
+                type_error_instance_missing_field(get_range(ref, ctx.tape).term, ty->instance.fields.data[i].key, ctx);
+            }
+        }
+        for (size_t i = 0; i < ty->instance.fields.len; i++) {
+            SynRef* syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
+            if (syn) {
+                PiType* field_ty = ty->instance.fields.data[i].val;
+                Range tysrc = get_range(untyped.instance.constraint, ctx.tape).term;
+                type_check_i(*syn, field_ty, tysrc, env, ctx);
             } else {
                 type_error_instance_missing_field(get_range(ref, ctx.tape).term, ty->instance.fields.data[i].key, ctx);
             }
@@ -1356,7 +1371,6 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < untyped.sequence.elements.len; i++) {
             SeqElt* elt = untyped.sequence.elements.data[i];
             if (elt->is_binding) {
-                //PiType* type = mk_uvar(a);
                 type_infer_i(elt->expr, env, ctx);
                 type_var (elt->symbol, get_type(elt->expr, ctx.tape), env);
                 num_binds++;
@@ -1692,6 +1706,13 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg, aty, env);
         }
 
+        PiType* cty = call_alloc(sizeof(PiType), ctx.pia);
+        *cty = (PiType) {.sort = TConstraint, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped.trait.implicit_fields.len; i++) {
+            SynRef field = untyped.trait.implicit_fields.data[i].val;
+            type_check_i(field, cty, (Range){}, env, ctx);
+        }
+
         for (size_t i = 0; i < untyped.trait.fields.len; i++) {
             SynRef s = untyped.trait.fields.data[i].val;
             type_check_i(s, aty, (Range){}, env, ctx);
@@ -1839,7 +1860,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def(untyped.to_describe.data[i], entry.module);
+                // TODO: ensure did == 0 (or make non-symbol)
+                ModuleEntry* mentry = get_def_external(untyped.to_describe.data[i].name, entry.module);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.module = mentry->value;
@@ -2189,6 +2211,41 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         PiType* type = get_type(ref, ctx.tape);
+        if (syn.instance.implicit_fields.len != 0) {
+            err.message = mv_cstr_doc("Expecting implicit fields in trait to not be instantiated.", ctx.a);
+            throw_pi_error(ctx.point, err);
+        }
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            Symbol field_name = type->instance.implicit_fields.data[i].key;
+            PiType* field_ty = type->instance.implicit_fields.data[i].val;
+            if (field_ty->sort != TTraitInstance) {
+                err.message = mv_cstr_doc("Implicit fields must have type trait instance!", ctx.a);
+                throw_pi_error(ctx.point, err);
+            }
+            InstanceEntry e = type_instance_lookup(field_ty->instance.instance_of, field_ty->instance.args, env);
+            switch (e.type) {
+            case IEAbsSymbol: {
+                SynRef new_impl = new_syntax(ctx.tape);
+                set_syntax(new_impl,
+                           (Syntax){
+                               .type = SAbsVariable,
+                               .abvar = e.abvar,
+                           },
+                           ctx.tape);
+                set_type(new_impl, field_ty, ctx.tape);
+                sym_syn_insert(field_name, new_impl, &syn.instance.implicit_fields);
+                set_syntax(ref, syn, ctx.tape);
+                break;
+            }
+            case IENotFound:
+                type_error_instance_not_found(ref, field_ty, ctx);
+            case IEAmbiguous:
+                type_error_ambiguous_instance(ref, field_ty, e.ambiguous_sources, ctx);
+            default:
+                panic(mv_string("Invalid instance entry type!"));
+            }
+        }
+
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             SynRef* field_syn = (SynRef*)sym_syn_lookup(type->instance.fields.data[i].key, syn.instance.fields);
             if (field_syn) {
@@ -2517,8 +2574,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.instance.constraint, env, ctx);
 
         for (size_t i = 0; i < typed.instance.implicits.len; i++) {
-            SynRef syn = typed.instance.fields.data[i].val;
-            squash_types(syn, env, ctx);
+            SynRef* ref = typed.instance.implicits.data[i].val;
+            if (ref) {
+                squash_types(*ref, env, ctx);
+            }
         }
 
         for (size_t i = 0; i < typed.instance.fields.len; i++) {
@@ -2569,6 +2628,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.labels.entry, env, ctx);
         for (size_t i = 0; i < typed.labels.terms.len; i++) {
             SynLabelBranch* branch = typed.labels.terms.data[i].val;
+            for (size_t j = 0; j < branch->args.len; j++) {
+                PiType* type = branch->args.data[i].val;
+                squash_type(type, uctx);
+            }
             squash_types(branch->body, env, ctx);
         }
         break;
@@ -2699,14 +2762,14 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.opaque_type.body, env, ctx);
         break;
     case STraitType:
+        for (size_t i = 0; i < typed.trait.implicit_fields.len; i++) {
+            squash_types(typed.trait.implicit_fields.data[i].val, env, ctx);
+        }
         for (size_t i = 0; i < typed.trait.fields.len; i++) {
             squash_types(typed.trait.fields.data[i].val, env, ctx);
         }
         break;
     case SCheckedType: {
-        // TODO: it seems like *sometimes* we want for this to be allowed as a
-        //   uvar (notably when calling eval_type), but otherwise don't want
-        //   to throw an error here.
         squash_type(typed.type_val, uctx);
         break;
     }

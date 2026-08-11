@@ -87,17 +87,28 @@
                 } else {                                                \
                     map->capacity *= 2;                                 \
                     map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
-                } \
+                }                                                       \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \
             map->len++;                                                 \
         }                                                               \
+    }                                                                   \
+                                                                        \
+    void fprefix##_remove(key_t key, void(*delete_val)(val_t val, void* param), void* param, tprefix##AMap* map) { \
+        size_t idx;                                                     \
+        if (fprefix##_find(&idx, key, *map)) {                          \
+            delete_val(map->data[idx].val, param);                      \
+            map->len--;                                                 \
+            if (idx + 1 != map->len) {                                  \
+                map->data[idx] = map->data[map->len];                   \
+            }                                                           \
+        }                                                               \
     }
 
 #define AMAP_CMP_IMPL(key_t, val_t, cmpfun, fprefix, tprefix)           \
     tprefix##AMap mk_ ## fprefix ## _amap(size_t capacity, Allocator* a) { \
-        return (tprefix##AMap) {                                    \
+        return (tprefix##AMap) {                                        \
             .capacity = capacity,                                       \
             .len = 0,                                                   \
             .data = mem_alloc(capacity * sizeof(tprefix##Cell), a),     \
@@ -177,11 +188,22 @@
                 } else {                                                \
                     map->capacity *= 2;                                 \
                     map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
-                } \
+                }                                                       \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \
             map->len++;                                                 \
+        }                                                               \
+        }                                                               \
+                                                                        \
+    void fprefix##_remove(key_t key, void(*delete_val)(val_t val, void* param), void* param, tprefix##AMap* map) { \
+        size_t idx;                                                     \
+        if (fprefix##_find(&idx, key, *map)) {                          \
+            delete_val(map->data[idx].val, param);                      \
+            map->len--;                                                 \
+            if (idx + 1 != map->len) {                                  \
+                map->data[idx] = map->data[map->len];                   \
+            }                                                           \
         }                                                               \
     }
 

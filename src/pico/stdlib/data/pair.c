@@ -11,21 +11,23 @@ void add_pair_module(Target target, Module *data, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
-    add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "extra");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "meta");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pair")),
+        .name = string_to_name(mv_string("pair")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -42,7 +44,4 @@ void add_pair_module(Target target, Module *data, RegionAllocator* region) {
     const char *mk_pair_fn =
         "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])";
     compile_toplevel(mk_pair_fn, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("pair")), module);
-    if (r.type == Err) panic(r.error_message);
 }

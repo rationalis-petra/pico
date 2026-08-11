@@ -8,8 +8,8 @@
 #define PICO_LIST_HEADER_TYPE(type, tprefix)    \
     typedef struct tprefix##PiList {            \
         type* data;                             \
-        size_t len;                             \
         size_t size;                            \
+        size_t len;                             \
         PiAllocator gpa;                        \
     } tprefix##PiList;                          \
 

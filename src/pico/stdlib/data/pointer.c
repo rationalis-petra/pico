@@ -11,21 +11,25 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(3, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
     add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 1, "platform");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pointer")),
+        .name = string_to_name(mv_string("pointer")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -66,11 +70,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(local_fn, module,target,  &point, &pi_point, region);
 
     const char *delete_fn = 
-        "(def delete all [A] proc [(ptr (Ptr A))] \n"
-        "  (memory.free (unname ptr)))";
+        "(def delete-ptr instance [A] {(del (Delete A))} (Delete (Ptr A))\n"
+        "  [.delete proc [ptr] seq (del.delete (get ptr)) (memory.free (unname ptr))])";
     compile_toplevel(delete_fn, module,target,  &point, &pi_point, region);
-
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("pointer")), module);
-    if (r.type == Err) panic(r.error_message);
 }

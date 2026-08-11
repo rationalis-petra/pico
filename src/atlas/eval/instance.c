@@ -8,7 +8,7 @@
 
 #include "data/stream.h"
 
-#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/name_ptr_amap.h"
 #include "pico/values/modular.h"
 
 #include "pico/binding/environment.h"
@@ -27,7 +27,7 @@ struct AtlasInstance {
     Package* project_package;
     PtrArray packages;
 
-    SymPtrAMap targets;
+    NamePtrAMap targets;
     bool project_set;
     Project project;
 
@@ -35,11 +35,11 @@ struct AtlasInstance {
 };
 
 typedef struct {
-    Symbol name;
+    Name name;
     String path;
     StringOption filename;
-    SymbolOption entrypoint;
-    SymbolArray target_dependencies;
+    NameOption entrypoint;
+    NameArray target_dependencies;
     StringArray file_dependencies;
     Module* module;
 } AtlasTarget;
@@ -48,7 +48,7 @@ AtlasInstance* make_atlas_instance(Allocator* a) {
     AtlasInstance* instance = mem_alloc(sizeof(AtlasInstance), a);
     *instance = (AtlasInstance) {
         .packages = mk_ptr_array(4, a),
-        .targets = mk_sym_ptr_amap(32, a),
+        .targets = mk_name_ptr_amap(32, a),
         .project_set = false,
         .gpa = a,
     };
@@ -67,7 +67,7 @@ void delete_atlas_instance(AtlasInstance* instance) {
             delete_string(target->file_dependencies.data[i], a);
         }
         sdelete_string_array(target->file_dependencies);
-        sdelete_symbol_array(target->target_dependencies);
+        sdelete_name_array(target->target_dependencies);
         mem_free(target, a);
     }
 
@@ -75,7 +75,7 @@ void delete_atlas_instance(AtlasInstance* instance) {
         delete_package(instance->project_package);
     }
 
-    sdelete_sym_ptr_amap(instance->targets);
+    sdelete_name_ptr_amap(instance->targets);
     mem_free(instance, a);
 }
 
@@ -83,7 +83,7 @@ static Module* atlas_load_target(AtlasInstance* instance, Package* package, Atla
 
 void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, AtErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
-    Symbol sym = string_to_symbol(target_name);
+    Name name = string_to_name(target_name);
 
     if (!instance->project_set) {
         AtlasError err = {
@@ -93,9 +93,9 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
     }
 
     size_t tidx;
-    if (sym_ptr_find(&tidx, sym, instance->targets)) {
+    if (name_ptr_find(&tidx, name, instance->targets)) {
         AtlasTarget* target = instance->targets.data[tidx].val;
-        SymbolOption entry = target->entrypoint;
+        NameOption entry = target->entrypoint;
         if (entry.type == None) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
@@ -114,16 +114,16 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         if (instance->project_package) {
             package = instance->project_package;
         } else {
-            package = mk_package(instance->project.package.name.name, pico_alloc);
+            package = mk_package(instance->project.package.name, pico_alloc);
             set_instance_package(instance, package);
         }
 
         // Then, add all dependencies
-        SymbolArray deps = instance->project.package.dependencies;
+        NameArray deps = instance->project.package.dependencies;
         PtrArray avail = instance->packages;
         for (size_t i = 0; i < deps.len; i++) {
             bool found_dep = false;
-            Name dep_name = deps.data[i].name;
+            Name dep_name = deps.data[i];
             for (size_t j = 0; j < avail.len; j++) {
                 Package* avail_package = avail.data[j];
                 Name pkg_name = package_name(avail_package);
@@ -148,11 +148,11 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
@@ -172,7 +172,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             {
                 PtrArray ep_nodes = mk_ptr_array(5, &ra);
                 push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
                 push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
                 push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
             }
@@ -198,7 +198,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
 
 void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* region, AtErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
-    Symbol sym = string_to_symbol(target_name);
+    Name name = string_to_name(target_name);
 
     if (!instance->project_set) {
         AtlasError err = {
@@ -208,9 +208,9 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
     }
 
     size_t tidx;
-    if (sym_ptr_find(&tidx, sym, instance->targets)) {
+    if (name_ptr_find(&tidx, name, instance->targets)) {
         AtlasTarget* target = instance->targets.data[tidx].val;
-        SymbolOption entry = target->entrypoint;
+        NameOption entry = target->entrypoint;
         if (entry.type == None) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
@@ -229,16 +229,16 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         if (instance->project_package) {
             package = instance->project_package;
         } else {
-            package = mk_package(instance->project.package.name.name, pico_alloc);
+            package = mk_package(instance->project.package.name, pico_alloc);
             set_instance_package(instance, package);
         }
 
         // Then, add all dependencies
-        SymbolArray deps = instance->project.package.dependencies;
+        NameArray deps = instance->project.package.dependencies;
         PtrArray avail = instance->packages;
         for (size_t i = 0; i < deps.len; i++) {
             bool found_dep = false;
-            Name dep_name = deps.data[i].name;
+            Name dep_name = deps.data[i];
             for (size_t j = 0; j < avail.len; j++) {
                 Package* avail_package = avail.data[j];
                 Name pkg_name = package_name(avail_package);
@@ -263,11 +263,11 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
@@ -320,7 +320,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
             {
                 PtrArray ep_nodes = mk_ptr_array(5, &ra);
                 push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
                 push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
                 push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
             }
@@ -412,12 +412,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
-    module = mk_module(*header, package, NULL);
-    if (parent) {
-        add_module_def(parent, header->name, module);
-    } else {
-        add_module(header->name, module, package);
-    }
+    module = mk_module(*header, package, parent);
 
     old_module = get_std_current_module();
     set_std_current_module(module);
@@ -598,13 +593,13 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
     // First, load all dependencies
     for (size_t i = 0; i < target->target_dependencies.len; i++) {
         size_t tidx;
-        Symbol dep_sym = target->target_dependencies.data[i];
-        if (sym_ptr_find(&tidx, dep_sym, instance->targets)) {
+        Name dep_name = target->target_dependencies.data[i];
+        if (name_ptr_find(&tidx, dep_name, instance->targets)) {
             atlas_load_target(instance, package, instance->targets.data[tidx].val, region, point);
         } else {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_symbol_string(dep_sym), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
             AtlasError err = {
                 .message = mv_cat_doc(nodes, &ra),
@@ -627,7 +622,6 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
             },
         };
         out = mk_module(header, package, NULL);
-        add_module(target->name, out, package);
         for (size_t i = 0; i < target->file_dependencies.len; i++) {
             atlas_load_file(target->file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
         }
@@ -669,8 +663,8 @@ void add_library(Library library, String path, AtlasInstance* instance) {
         .name = library.name,
         .path = path,
         .filename = filename,
-        .entrypoint = (SymbolOption) {.type = None},
-        .target_dependencies = scopy_symbol_array(library.dependencies, instance->gpa),
+        .entrypoint = (NameOption) {.type = None},
+        .target_dependencies = scopy_name_array(library.dependencies, instance->gpa),
         .file_dependencies = mk_string_array(library.submodules.len, instance->gpa),
         .module = NULL,
     };
@@ -684,7 +678,7 @@ void add_library(Library library, String path, AtlasInstance* instance) {
         push_string(submodule_path, &target->file_dependencies);
     }
     
-    sym_ptr_insert(library.name, target, &instance->targets);
+    name_ptr_insert(library.name, target, &instance->targets);
 }
 
 void add_executable(Executable executable, String path, AtlasInstance* instance) {
@@ -698,11 +692,11 @@ void add_executable(Executable executable, String path, AtlasInstance* instance)
           .val = string_ncat(instance->gpa, 4,
                                path, mv_string("/"), executable.filename, mv_string(".rl")),
         },
-        .entrypoint = (SymbolOption) {.type = Some, .value = executable.entry_point },
-        .target_dependencies = scopy_symbol_array(executable.dependencies, instance->gpa),
+        .entrypoint = (NameOption) {.type = Some, .value = executable.entry_point },
+        .target_dependencies = scopy_name_array(executable.dependencies, instance->gpa),
         .file_dependencies = mk_string_array(0, instance->gpa),
         .module = NULL,
     };
-    sym_ptr_insert(executable.name, target, &instance->targets);
+    name_ptr_insert(executable.name, target, &instance->targets);
 }
 

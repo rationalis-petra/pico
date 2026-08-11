@@ -9,7 +9,7 @@
 typedef struct {
     Document* message;
     Module* module;
-    Symbol definition;
+    Name definition;
 } BuildError;
 
 typedef struct {

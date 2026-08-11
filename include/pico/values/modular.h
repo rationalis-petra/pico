@@ -2,12 +2,15 @@
 #define __PICO_VALUES_MODULAR_H
 
 #include "data/meta/array_header.h"
+#include "data/meta/amap_header.h"
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
 
+#include "pico/data/u64_name_amap.h"
 #include "pico/data/client/allocator.h"
 #include "pico/data/client/list.h"
+
 #include "pico/codegen/link_data.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
@@ -32,7 +35,7 @@ typedef struct {
     SymbolPiList over;
     AddrPiList dependencies;
     AddrPiList args;
-    Symbol src_sym;
+    Name src_sym;
     Module* src;
 } InstanceSrc;
 
@@ -77,11 +80,12 @@ Package* mk_package(Name name, PiAllocator pico_allocator);
 void delete_package(Package* package);
 
 void add_dependency(Package* package, Package* dep);
-Result add_module(Symbol symbol, Module* module, Package* package);
+Result add_module(Name name, Module* module, Package* package);
+Result remove_module(Package* package, Name symbol); 
 
 Name package_name(Package* package);
 Module* package_root_module(Package* package);
-Module* get_module(Symbol symbol, Package* package);
+Module* get_module(Name Name, Package* package);
 
 // Module Interface
 // -----------------------------------------------------------------------------
@@ -91,12 +95,17 @@ void delete_module(Module* module);
 /**
  * Add a value definition in to the module's namespace. Must be prepped (see above)
  */
-Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
+Result add_def(Module* module, Name name, PiType type, void* data, Segments segments, LinkData* links); 
 
 /**
  * Add a module definition in to the module's namespace. 
  */
-Result add_module_def(Module* module, Symbol symbol, Module* child);
+Result add_module_def(Module* module, Name name, Module* child);
+
+/**
+ * Remove a (module or value) definition from the module's namespace. 
+ */
+Result remove_def(Module* module, Name name); 
 
 /**
  *  Get the instantiation of an instance, given a set of types, and a set of
@@ -105,13 +114,13 @@ Result add_module_def(Module* module, Symbol symbol, Module* child);
  *  If there is a significant error (e.g. the symbol does not exist), then the
  *  function will return NULL.
  */
-void* get_instantiation(Module* module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray instances); 
+void* get_instantiation(Module* module, Name name, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray instances); 
 
 /**
  * Add a declaration into the module's namespace. New declarations will override
  * old ones.
  */
-Result add_decl(Module* module, Symbol symbol, ModuleDecl decl); 
+Result add_decl(Module* module, Name name, ModuleDecl decl); 
 
 /**
  * Add an import clause into a module's namespace
@@ -120,12 +129,38 @@ Result add_decl(Module* module, Symbol symbol, ModuleDecl decl);
  */
 void add_import_clause(ImportClause clause, Module* module);
 
-ModuleEntry* get_def(Symbol symbol, Module* module);
-SymbolArray get_exported_symbols(Module* module, Allocator* a);
-SymbolArray get_defined_symbols(Module* module, Allocator* a);
+/**
+ * Refresh the re-exported symbols in this module
+ */
+void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a);
+
+typedef struct {
+    NameArray names;
+    U64NameAMap renames;
+} NameSource;
+AMAP_HEADER(Module*, NameSource, name_source, NameSource)
+typedef struct {
+    NameArray self_exports;
+    NameSourceAMap re_exports;
+} ModuleExports;
+ModuleExports view_module_exports(Module* module);
+NameArray get_defined_symbols(Module* module, Allocator* a);
+
+/** Get a definition as an external module, i.e. 'getting' a non-exported
+    symbol will result in failure */
+ModuleEntry* get_def_external(Name name, Module* module);
+
+/** Get a definition as an internal module, i.e. 'getting' a non-exported
+    symbol will be ok */
+ModuleEntry* get_def_internal(Name Name, Module* module);
+
+/**
+ * The environment
+ */
+PtrArray get_exported_instances(Module* module, Allocator* a);
 PtrArray get_defined_instances(Module* module, Allocator* a);
 
-Symbol module_name(Module* module);
+Name module_name(Module* module);
 Package* get_package(Module* module);
 Module* get_parent(Module* module);
 Imports get_imports(Module* module);

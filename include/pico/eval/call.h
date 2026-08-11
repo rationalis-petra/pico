@@ -24,7 +24,7 @@ typedef struct EvalVal {
 } EvalVal;
 
 typedef struct EvalDef {
-    Symbol name;
+    Name name;
     PiType* type;
 } EvalDef;
 

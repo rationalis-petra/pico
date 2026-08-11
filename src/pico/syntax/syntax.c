@@ -373,7 +373,7 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     }
     case SApplication: {
         Document* head = pretty_syntax_internal(syntax.application.function, tape, ctx, a);
-        PtrArray nodes = mk_ptr_array(2, a);
+        PtrArray nodes = mk_ptr_array(1 + syntax.application.args.len, a);
         push_ptr(head, &nodes);
         PtrArray args = mk_ptr_array(syntax.application.args.len, a);
         for (size_t i = 0; i < syntax.application.args.len; i++) {
@@ -584,7 +584,7 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         push_ptr(pretty_syntax_internal(syntax.projector.val, tape, ctx, a), &nodes);
         push_ptr(mk_str_doc(mv_string("."), a), &nodes);
         push_ptr(mk_str_doc(symbol_to_string(syntax.projector.field, a), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mv_cat_doc(nodes, a);
         break;
     }
     case SInstance: {
@@ -899,9 +899,9 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
                 PtrArray let_nodes = mk_ptr_array(3, a);
                 push_ptr(mv_style_doc(former_style, mv_cstr_doc("let!", a), a), &let_nodes);
                 push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(elt->symbol, a), a), a), &let_nodes);
-                push_ptr(pretty_syntax_internal(elt->expr, tape, ctx, a), &let_nodes);
+                push_ptr(mv_nest_doc(2, pretty_syntax_internal(elt->expr, tape, ctx, a), a), &let_nodes);
 
-                push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), a), a), &seq_nodes);
+                push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(let_nodes, a), a), a), &seq_nodes);
             } else {
                 push_ptr(pretty_syntax_internal(elt->expr, tape, ctx, a), &seq_nodes);
             }
@@ -1252,7 +1252,7 @@ Document* pretty_syntax(SynRef syntax, SynTape tape, Allocator* a) {
 Document* pretty_def(Definition* def, SynTape tape, Allocator* a) {
     PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mv_str_doc(mk_string("def", a), a), &nodes);
-    push_ptr(mk_str_doc(symbol_to_string(def->bind, a), a), &nodes);
+    push_ptr(mk_str_doc(name_to_string(def->bind, a), a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_syntax(def->value, tape, a), a), &nodes);
     return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
 }
@@ -1260,7 +1260,7 @@ Document* pretty_def(Definition* def, SynTape tape, Allocator* a) {
 Document* pretty_decl(Declaration* decl, Allocator* a) {
     PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mv_str_doc(mk_string("declare", a), a), &nodes);
-    push_ptr(mk_str_doc(symbol_to_string(decl->bind, a), a), &nodes);
+    push_ptr(mk_str_doc(name_to_string(decl->bind, a), a), &nodes);
     for (size_t i = 0; i < decl->decls.len; i++) {
         ModuleDecl* dec = decl->decls.data[i];
         PtrArray prop_nodes = mk_ptr_array(2, a);

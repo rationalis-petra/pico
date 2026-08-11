@@ -13,6 +13,7 @@ void generate_pi_type(PiType* type, AddressEnv* env, Assembler* ass, Allocator* 
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_trait_offset_of(Regname dest, Symbol field, SymAddrPiAMap ifields, SymAddrPiAMap fields, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);

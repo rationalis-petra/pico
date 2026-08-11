@@ -21,19 +21,22 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
   Imports imports = (Imports) {
     .clauses = mk_import_clause_array(8, a),
   };
-  add_import_all(&imports.clauses, a, 1, "core");
+  add_import_all(&imports.clauses, a, 2, "lang", "relic");
   add_import_all(&imports.clauses, a, 1, "num");
-  add_import_all(&imports.clauses, a, 1, "extra");
   add_import_all(&imports.clauses, a, 1, "data");
   add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
+  ReExports re_exports = (ReExports) {
+      .clauses = mk_import_clause_array(0, a),
+  };
   Exports exports = (Exports) {
     .export_all = true,
     .clauses = mk_export_clause_array(0, a),
   };
   ModuleHeader header = (ModuleHeader) {
-    .name = string_to_symbol(mv_string("pipeline-test-module")),
+    .name = string_to_name(mv_string("pipeline-test-module")),
     .imports = imports,
+    .re_exports = re_exports,
     .exports = exports,
   };
   Module* module = mk_module(header, base, NULL);
@@ -61,9 +64,34 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("-1080");
   }
 
-  if (test_start(log, mv_string("parse-i64"))) {
-    RawTree expected = int_atom(-1080);
-    TEST_EQ("-1080");
+  if (test_start(log, mv_string("parse-char"))) {
+    RawTree expected = int_atom('x');
+    TEST_EQ("#x");
+  }
+
+  if (test_start(log, mv_string("parse-char-unicode"))) {
+    RawTree expected = int_atom(8592);
+    TEST_EQ("#←");
+  }
+
+  if (test_start(log, mv_string("parse-binary-num"))) {
+    RawTree expected = int_atom(6);
+    TEST_EQ("#b_110");
+  }
+
+  if (test_start(log, mv_string("parse-octal-num"))) {
+    RawTree expected = int_atom(97);
+    TEST_EQ("#o_141");
+  }
+
+  if (test_start(log, mv_string("parse-hex-simple"))) {
+    RawTree expected = int_atom(10);
+    TEST_EQ("#x_a");
+  }
+
+  if (test_start(log, mv_string("parse-hex-num"))) {
+    RawTree expected = int_atom(31);
+    TEST_EQ("#x_1f");
   }
 
   if (test_start(log, mv_string("parse-symbol"))) {
@@ -86,9 +114,14 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ(":");
   }
 
-  if (test_start(log, mv_string("parse-^-prefix"))) {
+  if (test_start(log, mv_string("parse-^-prefix-eos"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), symbol_atom("ref"));
     TEST_EQ("^ref");
+  }
+
+  if (test_start(log, mv_string("parse-^-prefix-no-eos"))) {
+    RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), symbol_atom("ref"));
+    TEST_EQ(" ^ref ");
   }
 
   if (test_start(log, mv_string("parse-^-in-place"))) {
@@ -96,9 +129,32 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(set ^ ref)");
   }
 
+  if (test_start(log, mv_string("parse-^-complex"))) {
+    RawTree rhs =
+      expr_branch(&pia, 2, symbol_atom("foo"), symbol_atom("bar"));
+    RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), rhs);
+    TEST_EQ("^(foo bar) ");
+  }
+
   if (test_start(log, mv_string("parse-.-prefix"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom("."), symbol_atom("ref"));
     TEST_EQ(".ref");
+  }
+
+  if (test_start(log, mv_string("parse-.-infix-complex-rhs"))) {
+    RawTree rhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), rhs, symbol_atom("foo"));
+    TEST_EQ("foo.(bar baz)");
+  }
+
+  if (test_start(log, mv_string("parse-.-infix-complex-lhs"))) {
+    RawTree lhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), symbol_atom("foo"), lhs);
+    TEST_EQ("(bar baz).foo");
   }
 
   if (test_start(log, mv_string("parse-:-prefix"))) {
@@ -124,5 +180,5 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(foo #,)");
   }
 
-  delete_module(module);
+  remove_module(base, string_to_name(mv_string("pipeline-test-module")));
 }

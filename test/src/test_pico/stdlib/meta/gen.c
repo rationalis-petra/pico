@@ -17,7 +17,7 @@ void run_pico_stdlib_meta_gen_tests(TestLog *log, Module* module, Environment* e
     if (test_start(log, mv_string("macro-id"))) {
         // We write it like this to avoid relying on the list module.
         // The list module is tested independently.
-        RUN("(def ID macro proc [x] (:right (load {gen.Syntax} (num-to-address (u64.+ (address-to-num x.data) (size-of gen.Syntax))))))");
+        RUN("(def ID macro proc [x] (:right (list.elt 1 x)))");
 
         int64_t expected = 177;
         TEST_EQ("(ID 177)");

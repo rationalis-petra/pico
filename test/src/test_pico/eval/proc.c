@@ -28,9 +28,9 @@ void run_pico_eval_proc_tests(TestLog *log, Module* module, Environment* env, Ta
         TEST_EQ("((proc [(s Quad)] s) (struct Quad [.x -5] [.y 10] [.z -676] [.p -897]))");
     }
     
-    if (test_start(log, mv_string("large-static-argument"))) {
+    if (test_start(log, mv_string("seq-with-return"))) {
         uint64_t expected = 4;
-        RUN("(def my-func proc [] seq [let! my-list (list.mk-list {I64} 4 4)] my-list)");
+        RUN("(def my-func proc [] seq [let! my-list (list.init {I64} 4 4)] my-list)");
 
         PiAllocator pia = convert_to_pallocator(&ra);
         PiAllocator old = set_std_current_allocator(pia);

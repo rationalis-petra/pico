@@ -103,23 +103,23 @@ _Noreturn void type_error_invalid_declaration(Symbol type, SynRef arg, TypeCheck
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void type_error_invalid_import(ImportClause clause, Symbol bad, bool exists, Range range, TypeCheckContext ctx) {
+_Noreturn void type_error_invalid_import(ImportClause clause, Name bad, bool exists, Range range, TypeCheckContext ctx) {
     PtrArray nodes = mk_ptr_array(5, ctx.a);
     push_ptr(mv_cstr_doc("The import clause", ctx.a), &nodes);
     push_ptr(mk_paren_doc("'", "'", pretty_import_clause(clause, ctx.a), ctx.a), &nodes);
     if (exists) {
         push_ptr(mv_cstr_doc("is malformed, as the you attemped to import from", ctx.a), &nodes);
-        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_symbol_string(bad), ctx.a), ctx.a), &nodes);
+        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_name_string(bad), ctx.a), ctx.a), &nodes);
         push_ptr(mv_cstr_doc("which is not a module.", ctx.a), &nodes);
     } else {
         push_ptr(mv_cstr_doc("is malformed, as the you attemped to import", ctx.a), &nodes);
-        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_symbol_string(bad), ctx.a), ctx.a), &nodes);
+        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_name_string(bad), ctx.a), ctx.a), &nodes);
         push_ptr(mv_cstr_doc("which does not exist.", ctx.a), &nodes);
     }
 
     PicoError err = {
         .range = range,
-        .message = mv_sep_doc(nodes, ctx.a),
+        .message = mv_hsep_doc(nodes, ctx.a),
     };
     throw_pi_error(ctx.point, err);
 }
@@ -133,7 +133,7 @@ _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef ref
     push_ptr(mv_cstr_doc("The argument", ctx.a), &nodes);
     push_ptr(mk_paren_doc("'", "'", 
                           mv_str_doc(view_symbol_string(arg.key), ctx.a), ctx.a), &nodes);
-    push_ptr(mv_cstr_doc("is beign used as an instance argument, i.e. between '{' and '}'."
+    push_ptr(mv_cstr_doc("is being used as an instance argument, i.e. between '{' and '}'."
                          " As such, it is expected to have a trait (instance) type, but"
                          " it instead has type:" , ctx.a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_type(get_type(ref, ctx.tape), default_ptp, ctx.a), ctx.a), &nodes);
@@ -515,7 +515,7 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef ref, TypeCheckC
     } else {
         push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj.projector.field), a), a), &nodes);
-        push_ptr(mv_cstr_doc(" however, this field cannot be accessed, as the source has type", a), &nodes);
+        push_ptr(mv_cstr_doc("however, this field cannot be accessed, as the source has type", a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type(get_type(proj.projector.val, ctx.tape), default_ptp, a), a),  &nodes);
         push_ptr(mv_cstr_doc("which does not allow field access.", a), &nodes);
     }
@@ -606,9 +606,9 @@ _Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstS
         InstanceSrc source = sources.data[i];
         PtrArray source_nodes = mk_ptr_array(4, a); 
         push_ptr(mv_cstr_doc("• Module:", a), &source_nodes);
-        push_ptr(mv_str_doc(symbol_to_string(module_name(source.src), a), a), &source_nodes);
+        push_ptr(mv_str_doc(name_to_string(module_name(source.src), a), a), &source_nodes);
         push_ptr(mv_cstr_doc("Definition:", a), &source_nodes);
-        push_ptr(mv_str_doc(symbol_to_string(source.src_sym, a), a), &source_nodes);
+        push_ptr(mv_str_doc(name_to_string(source.src_sym, a), a), &source_nodes);
 
         push_ptr(mv_nest_doc(2, mv_hsep_doc(source_nodes, a), a), &sources_nodes);
     }

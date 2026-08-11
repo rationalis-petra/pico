@@ -233,7 +233,12 @@ Location rref8(Regname name, int64_t offset, LocationSize sz) {
     };
 }
 
-Location rref32(Regname name, int32_t offset, LocationSize sz) {
+Location rref32(Regname name, int64_t offset, LocationSize sz) {
+#ifdef DEBUG_ASSERT
+  if (offset > INT32_MAX || offset < INT32_MIN) {
+      panic(mv_string("offset out of bounds"));
+  }
+#endif
     return (Location) {
         .type = Dest_Deref,
         .sz = sz,
@@ -241,6 +246,14 @@ Location rref32(Regname name, int32_t offset, LocationSize sz) {
         .disp_sz = 4,
         .disp_32 = offset,
     };
+}
+
+Location rrefa(Regname name, int64_t offset, LocationSize sz) {
+  if ((offset <= INT8_MAX) & (offset >= INT8_MIN)) {
+      return rref8(name, offset, sz);
+  } else {
+      return rref32(name, offset, sz);
+  }
 }
 
 Location sib(Regname base, Regname index, int64_t scale, LocationSize sz) {
@@ -307,6 +320,7 @@ Location imm8(int64_t immediate) {
       .immediate_8 = (int8_t)immediate,
     };
 }
+
 Location imm16(int16_t immediate) {
     return (Location) {
       .type = Dest_Immediate,
@@ -329,6 +343,17 @@ Location imm64(int64_t immediate) {
       .sz = sz_64,
       .immediate_64 = immediate,
     };
+}
+
+Location imma(int64_t immediate) {
+  /** TODO: add support for 16-bit immediates, with promotion if the
+      instruction requires it! */
+  if ((immediate <= INT8_MAX) & (immediate >= INT8_MIN)) {
+      return imm8(immediate);
+      panic(mv_string("immediate out of bounds"));
+  } else {
+      return imm32(immediate);
+  }
 }
 
 typedef enum EncOrder {

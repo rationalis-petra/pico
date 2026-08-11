@@ -1,6 +1,7 @@
 #include "platform/signals.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/helpers.h"
 #include "pico/stdlib/meta/meta.h"
 
 #include "test_pico/helper.h"
@@ -12,25 +13,28 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(3, a),
+        .clauses = mk_import_clause_array(12, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 1, "prelude");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "data", "pointer");
-    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
+    add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
+
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_name(mv_string("pipeline-test-module")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     ErrorPoint point;
@@ -90,6 +94,12 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
             suite_end(log);
             release_subregion(subregion);
         }
+        if (suite_start(log, mv_string("order"))) {
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_abs_order_tests(log, module, env, target, subregion);
+            suite_end(log);
+            release_subregion(subregion);
+        }
         suite_end(log);
     }
     if (suite_start(log, mv_string("data"))) {
@@ -122,6 +132,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
 
     set_std_current_module(old_current);
     delete_env(env, a);
-    delete_module(module);
+
+    remove_module(base, string_to_name(mv_string("pipeline-test-module")));
     delete_region_allocator(region);
 }

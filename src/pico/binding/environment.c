@@ -2,8 +2,29 @@
 
 #include "platform/signals.h"
 
-#include "pico/data/name_ptr_amap.h"
-#include "pico/data/u64_name_amap.h"
+/** 
+ * TODO: 
+ * LARGE REFACTOR: Currently, the environment as it pertains to globals
+ * makes use of the module interface. This means two things:
+ * 1. When we add multithreading + module-level locking, the environment will
+ *    not necessarily have access to what is locked/what is not, will need to
+ *    update the module interface and environment.
+ * 2. There is a LOT of redundant iteration, re-finding variables by name when
+ *    we could be using internal indexes.
+ * 
+ * SOLUTION:  
+ * Rewrite the parts of the environment that pertain to globals so that it is 
+ * instead part of the internals of the module interface. This will allow
+ * several improvements:
+ * - Simplify the module interface (several methods were added *purely* for the
+ *   environment
+ * - Performance enhancements
+ * 
+ * Note: 
+ * Like the builder, we may want to build a specific interface to modular
+ * which exposes more of the internals and/or create a separate *.c file
+ * under values/modular (instead of just having modular.c)
+ */
 
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
@@ -18,83 +39,239 @@ struct Environment {
 };
 
 // Helper function:
-Module* path_parent(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
-    Module* current = root;
-
-    // Don't go to the last part of the path!
-    for (size_t i = 0; i + 1 < path.len; i++) {
-        ModuleEntry* e = get_def(path.data[i], current);
-        if (e) {
-          if (e->is_module) {
-              current = e->value;
-          } else {
-              String message = string_ncat(ea, 4, mv_string("Module not found: "),
-                                           symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for module "),
-                                           symbol_to_string(module_name(mfor), ea));
-              throw_error(point, mv_str_doc(message, ea));
-          }
-        } else {
-              String message = string_ncat(ea, 4, mv_string("Module not found: "),
-                                           symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for module "),
-                                           symbol_to_string(module_name(mfor), ea));
-              throw_error(point, mv_str_doc(message, ea));
-        }
+void check_entry(ModuleEntry* entry, bool expect_module, Name name, Module* mfor, ErrorPoint* point, Allocator* a) {
+    if (!entry) {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("Module not found:"), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(name), a), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("while constructing environment for module"), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(mfor)), a), a), &nodes);
+        throw_error(point, mv_sep_doc(nodes, a));
     }
-    return current;
+    if (!entry->is_module && expect_module) {
+        String message = string_ncat(a, 4, mv_string("Symbol does not refer to a module: "),
+                                     name_to_string(name, a),
+                                     mv_string(" while constructing environment for module "),
+                                     name_to_string(module_name(mfor), a));
+        throw_error(point, mv_str_doc(message, a));
+    }
 }
 
-Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
-    Module* current = root;
+typedef struct {
+    bool all_modules;
+    PtrArray values;
+    U64Array names;
+} Origins; 
 
-    // Don't go to the last part of the path!
-    for (size_t i = 0; i < path.len; i++) {
-        ModuleEntry* e = get_def(path.data[i], current);
-        if (e) {
-          if (e->is_module) {
-              current = e->value;
-          } else {
-              String message = string_ncat(ea, 4, mv_string("Module not found: "),
-                                           symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for module "),
-                                           symbol_to_string(module_name(mfor), ea));
-              throw_error(point, mv_str_doc(message, ea));
-          }
-        } else {
-            String message = string_ncat(ea, 4, mv_string("Module not found: "),
-                                         symbol_to_string(path.data[i], ea),
-                                         mv_string(" while constructing environment for module "),
-                                         symbol_to_string(module_name(mfor), ea));
-            throw_error(point, mv_str_doc(message, ea));
-        }
+Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    PtrArray values = mk_ptr_array(1, a);
+    U64Array out_names = mk_u64_array(1, a);
+    Module* parent = get_parent(mfor);
+    bool all_modules = true;
+    /**
+     * The very first section of an import is important for two reasons:
+     * 1. The head cannot be a wildcard, e.g. (:all).foo is invalid, but
+     *    foo.(:all) is valid.
+     * 2. The head symbol may refer to a value either in the parent module
+     *    (preferred) or the root module, rather than just the prior value(s) in
+     *    the path.
+     * 3. The module importer can access non-exported definitions at ONLY this
+     *    (the top) level, i.e. all modlues in the root (package) and all
+     *    modules in the parent.
+     */
+
+#ifdef DEBUG_ASSERT
+    if (path.len < 1)
+        panic(mv_string("Expected import path to have len > 1. The abstract phase should prevent any import from reaching this point."));
+#endif
+    PathSegment segment = path.data[0];
+    if (segment.type == SegWildcard) {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("Import path cannot start with a wildcart (:all) path segment."), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("Error encountered while constructing environment for module"), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(mfor)), a), a), &nodes);
+        throw_error(point, mv_sep_doc(nodes, a));
     }
-    return current;
+
+    bool last_iteration = path.len == 1;
+    switch (segment.type) {
+    case SegName: {
+        ModuleEntry* entry = get_def_internal(segment.name, parent);
+        if (!entry) goto symbol_root_check;
+        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+        all_modules &= entry->is_module;
+        if (entry->is_module) {
+            refresh_re_exports(entry->value, point, a);
+        }
+        if (last_iteration && gather_names) {
+            push_ptr(parent, &values);
+            push_name(segment.name, &out_names);
+        } else {
+            push_ptr(entry->value, &values);
+        }
+        break;
+
+        symbol_root_check:
+        entry = get_def_internal(segment.name, root);
+        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+        all_modules &= entry->is_module;
+        if (entry->is_module) {
+            refresh_re_exports(entry->value, point, a);
+        }
+        if (last_iteration && gather_names) {
+            push_ptr(root, &values);
+            push_u64(segment.name, &out_names);
+        } else {
+            push_ptr(entry->value, &values);
+        }
+        break;
+    }
+    case SegNames: {
+        for (size_t k = 0; k < segment.names.len; k++) {
+            ModuleEntry* entry = get_def_internal(segment.names.data[k], parent);
+            if (!entry) goto symbols_root_check;
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+            all_modules &= entry->is_module;
+            if (entry->is_module) {
+                refresh_re_exports(entry->value, point, a);
+            }
+            if (last_iteration && gather_names) {
+                push_ptr(parent, &values);
+                push_u64(segment.names.data[k], &out_names);
+            } else {
+                push_ptr(entry->value, &values);
+            }
+            continue;
+
+        symbols_root_check:
+            entry = get_def_internal(segment.names.data[k], root);
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+            all_modules &= entry->is_module;
+            if (entry->is_module) {
+                refresh_re_exports(entry->value, point, a);
+            }
+            if (last_iteration && gather_names) {
+                push_ptr(root, &values);
+                push_u64(segment.names.data[k], &out_names);
+            } else {
+                push_ptr(entry->value, &values);
+            }
+        }
+        break;
+    }
+    default:
+        panic(mv_string("Invalid Path Segment encountered in  initialise_path_trace"));
+    }
+
+    return (Origins) {
+        .all_modules = all_modules,
+        .values = values,
+        .names = out_names,
+    };
 }
 
-ImportClauseStatus import_clause_valid(Environment *env, ImportClause clause) {
-    Module* current = package_root_module(get_package(env->base));
+Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    Origins initial = initialise_path_trace(path, gather_names, root, mfor, point, a);
+    PtrArray working_set = initial.values;
+    PtrArray next_set = mk_ptr_array(1, a);
+    U64Array out_names = initial.names;
 
-    for (size_t i = 0; i < clause.path.len; i++) {
-        ModuleEntry* e = get_def(clause.path.data[i], current);
-        if (e) {
-          if (e->is_module) {
-              current = e->value;
-          } else {
-            return (ImportClauseStatus) {
-                .type = ICNotModule,
-                .bad_symbol = clause.path.data[i],
-            };
-          }
-        } else {
-            return (ImportClauseStatus) {
-                .type = ICNotExists,
-                .bad_symbol = clause.path.data[i],
-            };
+    bool all_modules = initial.all_modules;
+    for (size_t i = 1; i < path.len; i++) {
+        next_set.len = 0;
+        PathSegment segment = path.data[i];
+        bool last_iteration = i + 1 == path.len;
+        for (size_t j = 0; j < working_set.len; j++) {
+            Module* module = working_set.data[j];
+            switch (segment.type) {
+            case SegName: {
+                ModuleEntry* entry = get_def_external(segment.name, module);
+                check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+                all_modules &= entry->is_module;
+                if (entry->is_module) {
+                    refresh_re_exports(entry->value, point, a);
+                }
+                if (last_iteration && gather_names) {
+                    push_ptr(module, &next_set);
+                    push_name(segment.name, &out_names);
+                } else {
+                    push_ptr(entry->value, &next_set);
+                }
+                break;
+            }
+            case SegNames: {
+                for (size_t k = 0; k < segment.names.len; k++) {
+                    ModuleEntry* entry = get_def_external(segment.names.data[k], module);
+                    check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+                    all_modules &= entry->is_module;
+                    if (entry->is_module) {
+                        refresh_re_exports(entry->value, point, a);
+                    }
+                    if (last_iteration && gather_names) {
+                        push_ptr(module, &next_set);
+                        push_name(segment.names.data[k], &out_names);
+                    } else {
+                        push_ptr(entry->value, &next_set);
+                    }
+                }
+                break;
+            }
+            case SegWildcard: {
+                ModuleExports exports = view_module_exports(module);
+                NameArray names = exports.self_exports;
+                for (size_t k = 0; k < names.len; k++) {
+                    ModuleEntry* entry = get_def_external(names.data[k], module);
+                    check_entry(entry, !last_iteration, names.data[k], mfor, point, a);
+                    all_modules &= entry->is_module;
+                    if (entry->is_module) {
+                        refresh_re_exports(entry->value, point, a);
+                    }
+                    if (last_iteration && gather_names) {
+                        push_ptr(module, &next_set);
+                        push_name(names.data[k], &out_names);
+                    } else {
+                        push_ptr(entry->value, &next_set);
+                    }
+                }
+                break;
+            }
+            }
         }
+        PtrArray tmp = working_set;
+        working_set = next_set;
+        next_set = tmp;
     }
-    return (ImportClauseStatus) {
-        .type = ICValid,
+    sdelete_ptr_array(next_set);
+
+    return (Origins) {
+        .all_modules = all_modules,
+        .values = working_set,
+        .names = out_names,
+    }; 
+}
+
+typedef struct {
+    PtrArray values;
+} Targets; 
+
+Targets get_targets(PathSegmentArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    Origins origins = path_trace_internal(path, false, root, mfor, point, a);
+    sdelete_u64_array(origins.names);
+    return (Targets) {
+        .values = origins.values,
+    };
+}
+
+typedef struct {
+    PtrArray values;
+    U64Array names;
+} ParentMap; 
+
+ParentMap get_origins(PathSegmentArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    Origins origins = path_trace_internal(path, true, root, mfor, point, a);
+    return (ParentMap) {
+        .values = origins.values,
+        .names = origins.names,
     };
 }
 
@@ -102,11 +279,11 @@ void refresh_env(Environment* env) {
     Module* module = env->base;
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_defined_symbols(module, env->gpa);
+    NameArray arr = get_defined_symbols(module, env->gpa);
     for (size_t i = 0; i < arr.len; i++ ) {
-        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+        name_ptr_insert(arr.data[i], module, &(env->symbol_origins));
     }
-    sdelete_symbol_array(arr);
+    sdelete_name_array(arr);
 
     // Get all implicits
     // TODO: We should flush old instances from the current module?
@@ -129,7 +306,7 @@ void refresh_env(Environment* env) {
         size_t replaces = p->len;
         for (size_t i = 0; i < p->len; i++) {
             InstanceSrc* other = p->data[i];
-            if (other->src == instance->src && symbol_eq(other->src_sym, instance->src_sym)) {
+            if (other->src == instance->src && other->src_sym == instance->src_sym) {
                 replaces = i;
             }
         }
@@ -149,6 +326,202 @@ Module* env_module(Environment *env) {
     return env->base;
 }
 
+void add_instances_from(PtrArray instances, Environment* env, Allocator* a) {
+    // Get all implicits
+    for (size_t j = 0; j < instances.len; j++) {
+        InstanceSrc* instance = instances.data[j];
+
+        PtrArray* arr = NULL;
+        PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+        if (p == NULL) {
+            arr = mem_alloc(sizeof(PtrArray), a);
+            *arr = mk_ptr_array(8, a);
+            // TODO: we know this isn't in the instances; could perhaps
+            // speed up the process?
+            name_ptr_insert(instance->id, arr, &env->instances);
+        } else {
+            arr = *p;
+        }
+
+        // Add this instance to the array
+        push_ptr(instance, arr);
+    }
+}
+
+typedef struct {
+    NamePtrAMap* origins;
+    U64NameAMap* rename;
+    Environment* env;
+} InternalImportData;
+
+void incorporate_import_clause_internal(ImportClause clause, InternalImportData data, Module* module, Module* root_module, ErrorPoint* point, Allocator* a) {
+    switch (clause.type) {
+    case ImportSimple: {
+        ParentMap parents = get_origins(clause.path, root_module, module, point, a);
+        for (size_t i = 0; i < parents.names.len; i++) {
+            name_ptr_insert(parents.names.data[i], parents.values.data[i], data.origins);
+        }
+        sdelete_ptr_array(parents.values);
+        sdelete_u64_array(parents.names);
+        break;
+    }
+    case ImportComplex: {
+        Targets targets = get_targets(clause.path, root_module, module, point, a);
+        if (clause.import_as) {
+            ParentMap parents = get_origins(clause.path, root_module, module, point, a);
+#ifdef DEBUG_ASSERT
+            if (parents.values.len != 1) {
+                panic(mv_string("When importing with :as, the abstraction phase should ensure that import clauses are singular."));
+            }
+#endif
+            Module* target = parents.values.data[0];
+            Name name = parents.names.data[0];
+            u64_name_insert(data.origins->len, name, data.rename);
+            name_ptr_insert(clause.to, target, data.origins);
+        }
+
+        for (size_t i = 0; i < targets.values.len; i++ ) {
+            Module* target = targets.values.data[i];
+            if (clause.import_instances | clause.import_types) {
+                ModuleExports exports = view_module_exports(target);
+                NameArray names = exports.self_exports;
+                // TODO: lookup here is probably n^2. Can we just...
+                // generate a list of exports instead?
+                for (size_t j = 0; j < names.len; j++) {
+                    ModuleEntry* entry = get_def_external(names.data[j], target);
+                    if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
+                        name_ptr_insert(names.data[j], target, data.origins);
+                    }
+                    if (clause.import_types & (entry->type.sort == TKind || entry->type.sort == TConstraint)) {
+                        name_ptr_insert(names.data[j], target, data.origins);
+                    }
+                }
+                for (size_t j = 0; j < exports.re_exports.len; j++) {
+                    NameSourceCell cell = exports.re_exports.data[i];
+                    Module* target = cell.key;
+
+                    PtrArray instances = get_exported_instances(target, a);
+                    PtrArray actual_instances = mk_ptr_array(clause.values.len, a);
+                    for (size_t k = 0; k < cell.val.names.len; k++) {
+                        Name name = cell.val.names.data[k];
+                        ModuleEntry* entry = get_def_external(name, target);
+
+                        for (size_t k = 0; k < instances.len; k++) {
+                            InstanceSrc* instance = instances.data[k];
+                            if (instance->src_sym == name) {
+                                push_ptr(instance, &actual_instances);
+                                instances.len--;
+                                instances.data[k] = instances.data[instances.len];
+                                k--;
+                            }
+                        }
+                        if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
+                            name_ptr_insert(name, target, data.origins);
+                        }
+                        if (clause.import_types & (entry->type.sort == TKind)) {
+                            name_ptr_insert(name, target, data.origins);
+                        }
+                    }
+                    if (data.env) {
+                        add_instances_from(actual_instances, data.env, a);
+                    }
+                    sdelete_ptr_array(actual_instances);
+                    sdelete_ptr_array(instances);
+                }
+                if (clause.import_instances && data.env) {
+                    PtrArray instances = get_exported_instances(target, a);
+                    add_instances_from(instances, data.env, a);
+                    sdelete_ptr_array(instances);
+                }
+            }
+            if (clause.import_values) {
+                PtrArray instances = get_exported_instances(target, a);
+                PtrArray actual_instances = mk_ptr_array(clause.values.len, a);
+
+                for (size_t j = 0; j < clause.values.len; j++) {
+                    // TODO: make sure is exported
+                    Name name = clause.values.data[j].from;
+
+                    for (size_t k = 0; k < instances.len; k++) {
+                        InstanceSrc* instance = instances.data[k];
+                        if (instance->src_sym == name) {
+                            push_ptr(instance, &actual_instances);
+                            instances.len--;
+                            instances.data[k] = instances.data[instances.len];
+                            k--;
+                        }
+                    }
+                    ModuleEntry* entry = get_def_external(name, target);
+                    check_entry(entry, false, name, module, point, a);
+                    if (clause.values.data[j].should_rename) {
+                        u64_name_insert(data.origins->len, name, data.rename);
+                        name_ptr_insert(clause.values.data[j].to, target, data.origins);
+                    } else {
+                        name_ptr_insert(name, target, data.origins);
+                    }
+                }
+
+                if (data.env) {
+                    add_instances_from(actual_instances, data.env, a);
+                }
+                sdelete_ptr_array(actual_instances);
+                sdelete_ptr_array(instances);
+            }
+        }
+        sdelete_ptr_array(targets.values);
+        break;
+    }
+    case ImportAll: {
+        // Find the package
+        Targets targets = get_targets(clause.path, root_module, module, point, a);
+
+        for (size_t i = 0; i < targets.values.len; i++ ) {
+            Module* target = targets.values.data[i];
+            ModuleExports exports = view_module_exports(target);
+            NameArray names = exports.self_exports;
+            for (size_t j = 0; j < names.len; j++ ) {
+                name_ptr_insert(names.data[j], target, data.origins);
+            }
+            for (size_t j = 0; j < exports.re_exports.len; j++) {
+                NameSourceCell cell = exports.re_exports.data[j];
+                Module* module = cell.key;
+                for (size_t k = 0; k < cell.val.names.len; k++) {
+                    name_ptr_insert(cell.val.names.data[k], module, data.origins);
+                }
+            }
+            if (data.env) {
+                PtrArray instances = get_exported_instances(target, a);
+                add_instances_from(instances, data.env, a);
+                sdelete_ptr_array(instances);
+            }
+        }
+        sdelete_ptr_array(targets.values);
+        break;
+    }
+    default:
+        panic(mv_string("Unrecognized import form in env_from_module"));
+    }
+}
+
+void incorporate_import_clause(ImportClause clause, ImportData data, Module* module, ErrorPoint* point, Allocator* a) {
+    Package* package = get_package(module);
+    Module* root = package_root_module(package);
+    InternalImportData i_data = {
+        .origins = data.origins,
+        .rename = data.rename,
+    };
+    incorporate_import_clause_internal(clause, i_data, module, root, point, a);
+}
+
+
+PtrArray get_import_sources(ImportClause clause, Module* module, ErrorPoint* point, Allocator* a) {
+    Package* package = get_package(module);
+    Module* root = package_root_module(package);
+    Origins origins = path_trace_internal(clause.path, false, root, module, point, a);
+    sdelete_u64_array(origins.names);
+    return origins.values;
+}
+
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     *env = (Environment) {
@@ -159,175 +532,127 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         .gpa = a,
     };
 
-    // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 
-    // cache results?
     Imports imports = get_imports(module);
     Package* package = get_package(module);
     Module* root_module = package_root_module(package);
 
-    // TODO: importing a specific sympol allows you to bypass which symbols
-    // are/aren't exported.
     for (size_t i = 0; i < imports.clauses.len; i++) {
-        // TODO (BUG): currently, we only search in the package, not the parent
-        // module's submodules!
         ImportClause clause = imports.clauses.data[i];
-        switch (clause.type) {
-        case Import: {
-            Symbol last_symbol = clause.path.data[clause.path.len - 1];
-            Module* parent = path_parent(clause.path, root_module, module, point, a);
-            name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
-            break;
-        }
-        case ImportAs: {
-            Symbol last_symbol = clause.path.data[clause.path.len - 1];
-            Module* parent = path_parent(clause.path, root_module, module, point, a);
-            u64_name_insert(env->symbol_origins.len, last_symbol.name, &env->symbol_renames);
-            name_ptr_insert(clause.rename.name, parent, &env->symbol_origins);
-            break;
-        }
-        case ImportMany: {
-            // Find the package
-            Module* importee = path_all(clause.path, root_module, module, point, a);
-            SymbolArray syms = clause.members;
-            for (size_t j = 0; j < syms.len; j++ ) {
-                name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
-            }
-            for (size_t j = 0; j < syms.len; j++ ) {
-                ModuleEntry* e = get_def(syms.data[j], importee);
-                if (!e) {
-                    PtrArray nodes = mk_ptr_array(4, a);
-                    push_ptr(mv_cstr_doc("Symbol '", a), &nodes);
-                    push_ptr(mk_str_doc(view_symbol_string(syms.data[j]), a), &nodes);
-                    push_ptr(mv_cstr_doc("' not found in module '", a), &nodes);
-                    push_ptr(mk_str_doc(view_symbol_string(module_name(importee)), a), &nodes);
-                    push_ptr(mv_cstr_doc("'.", a), &nodes);
-                    throw_error(point, mv_cat_doc(nodes, a));
-                }
-
-                if (e->type.sort == TTraitInstance) {
-                    PtrArray* arr = NULL;
-                    PtrArray** p = (PtrArray**)name_ptr_lookup(e->type.instance.instance_of, env->instances);
-                    if (p == NULL) {
-                        arr = mem_alloc(sizeof(PtrArray), a);
-                        *arr = mk_ptr_array(8, a);
-                        // TODO: we know this isn't in the instances; could perhaps
-                        // speed up the process?
-                        name_ptr_insert(e->type.instance.instance_of, arr, &env->instances);
-                    } else {
-                        arr = *p;
-                    }
-
-                    InstanceSrc* instance = mem_alloc(sizeof(InstanceSrc), a);
-                    *instance = (InstanceSrc) {
-                        .id = e->type.instance.instance_of,
-                        .args = e->type.instance.args,
-                        .src_sym = syms.data[j],
-                        .src = importee,
-                    };
-
-                    // Add this instance to the array
-                    push_ptr(instance, arr);
-                }
-            }
-
-            // Get all implicits
-            PtrArray instances = get_defined_instances(importee, a);
-            for (size_t j = 0; j < instances.len; j++) {
-                InstanceSrc* instance = instances.data[j];
-
-                PtrArray* arr = NULL;
-                PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
-                if (p == NULL) {
-                    arr = mem_alloc(sizeof(PtrArray), a);
-                    *arr = mk_ptr_array(8, a);
-                    // TODO: we know this isn't in the instances; could perhaps
-                    // speed up the process?
-                    name_ptr_insert(instance->id, arr, &env->instances);
-                } else {
-                    arr = *p;
-                }
-
-                // Add this instance to the array
-                push_ptr(instance, arr);
-            }
-
-            // We do not delete instance entries are they are now in
-            // the environment's instances - just delete the array.
-            sdelete_ptr_array(instances);
-
-            break;
-        }
-        case ImportAll: {
-            // Find the package
-            Module* importee = path_all(clause.path, root_module, module, point, a);
-            SymbolArray syms = get_exported_symbols(importee, a);
-            for (size_t j = 0; j < syms.len; j++ ) {
-                name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
-            }
-            sdelete_symbol_array(syms);
-
-            // Get all implicits
-            PtrArray instances = get_defined_instances(importee, a);
-            for (size_t j = 0; j < instances.len; j++) {
-                InstanceSrc* instance = instances.data[j];
-
-                PtrArray* arr = NULL;
-                PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
-                if (p == NULL) {
-                    arr = mem_alloc(sizeof(PtrArray), a);
-                    *arr = mk_ptr_array(8, a);
-                    // TODO: we know this isn't in the instances; could perhaps
-                    // speed up the process?
-                    name_ptr_insert(instance->id, arr, &env->instances);
-                } else {
-                    arr = *p;
-                }
-
-                // Add this instance to the array
-                push_ptr(instance, arr);
-            }
-
-            // We do not delete instance entries are they are now in
-            // the environment's instances - just delete the array.
-            sdelete_ptr_array(instances);
-
-            break;
-        }
-        default:
-            panic(mv_string("Unrecognized import form in env_from_module"));
-        }
+        InternalImportData data = {
+            .origins = &env->symbol_origins,
+            .rename = &env->symbol_renames,
+            .env = env,
+        };
+        incorporate_import_clause_internal(clause, data, module, root_module, point, a);
     }
 
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_defined_symbols(module, a);
+    NameArray arr = get_defined_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
-        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+        name_ptr_insert(arr.data[i], module, &(env->symbol_origins));
     }
-    sdelete_symbol_array(arr);
+    sdelete_name_array(arr);
 
     // Get all implicits
     PtrArray instances = get_defined_instances(module, a);
-    for (size_t i = 0; i < instances.len; i++ ) {
-        InstanceSrc* instance = instances.data[i];
-        PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
-        PtrArray* p;
-        if (res) {
-            p = *res;
-        } else {
-            p = mem_alloc(sizeof(PtrArray), a);
-            *p = mk_ptr_array(8, a);
-            // TODO: we know this isn't in the instances; could perhaps
-            // speed up the process?
-            name_ptr_insert(instance->id, p, &env->instances);
-        }
-
-        // Add this instance to the array
-        push_ptr(instance, p);
-    }
+    add_instances_from(instances, env, a);
     sdelete_ptr_array(instances);
 
     return env;
+}
+
+ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Allocator* a) {
+    PathSegmentArray path = clause.path;
+    Package* package = get_package(env->base);
+    Module* root = package_root_module(package);
+
+    PtrArray working_set = mk_ptr_array(1, a);
+    PtrArray next_set = mk_ptr_array(1, a);
+    push_ptr(root, &working_set);
+
+    for (size_t i = 0; i < path.len; i++) {
+        next_set.len = 0;
+        PathSegment segment = path.data[i];
+        bool last_iteration = i + 1 == path.len;
+        for (size_t j = 0; j < working_set.len; j++) {
+            Module* module = working_set.data[j];
+            switch (segment.type) {
+            case SegName: {
+                ModuleEntry* entry = get_def_external(segment.name, module);
+                if (entry == NULL) {
+                    return (ImportClauseStatus) {
+                        .type = ICNotExists,
+                        .bad_symbol = segment.name,
+                    };
+                }
+                if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
+                    return (ImportClauseStatus) {
+                        .type = ICNotModule,
+                        .bad_symbol = segment.name,
+                    };
+                }
+                push_ptr(entry->value, &next_set);
+                break;
+            }
+            case SegNames: {
+                for (size_t k = 0; k < segment.names.len; k++) {
+                    ModuleEntry* entry = get_def_external(segment.names.data[k], module);
+                    if (entry == NULL) {
+                        return (ImportClauseStatus) {
+                            .type = ICNotExists,
+                            .bad_symbol = segment.names.data[k],
+                        };
+                    }
+                    if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
+                        return (ImportClauseStatus) {
+                            .type = ICNotModule,
+                            .bad_symbol = segment.names.data[k],
+                        };
+                    }
+                    push_ptr(entry->value, &next_set);
+                }
+                break;
+            }
+            case SegWildcard: {
+                ModuleExports exports = view_module_exports(module);
+                NameArray names = exports.self_exports;;
+                for (size_t k = 0; k < names.len; k++) {
+                    ModuleEntry* entry = get_def_external(names.data[k], module);
+                    if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
+                        return (ImportClauseStatus) {
+                            .type = ICNotModule,
+                            .bad_symbol = names.data[k],
+                        };
+                    }
+                    push_ptr(entry->value, &next_set);
+                }
+                break;
+            }
+            }
+        }
+        PtrArray tmp = working_set;
+        working_set = next_set;
+        next_set = tmp;
+    }
+
+    if (clause.type == ImportComplex && clause.import_values) {
+        for (size_t i = 0; i < working_set.len; i++) {
+            Module* target = working_set.data[i];
+            for (size_t j = 0; j < clause.values.len; j++) {
+                ImportValue value = clause.values.data[j];
+                ModuleEntry* entry = get_def_external(value.from, target);
+                if (!entry) {
+                    return (ImportClauseStatus) {
+                        .type = ICNotExists,
+                        .bad_symbol = value.from,
+                    };
+                }
+            }
+        }
+    }
+
+    return (ImportClauseStatus) {.type = ICValid,};
 }
 
 void delete_env(Environment* env, Allocator* a) {
@@ -357,7 +682,11 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
         if (rename) {
             sym.name = *rename;
         };
-        ModuleEntry* mentry = get_def(sym, module); 
+        ModuleEntry *mentry = sym.did == 0
+            ? (module == env->base ? get_def_internal(sym.name, module)
+                                   : get_def_external(sym.name, module))
+            // only did == 0 cound as package names/symbols
+            : NULL; 
         if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
@@ -378,7 +707,7 @@ PiType* env_lookup_tydecl(Symbol sym, Environment* env) {
 
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
-        ModuleEntry* mentry = get_def(sym, *module); 
+        ModuleEntry* mentry = sym.did == 0 ? get_def_internal(sym.name, *module) : NULL; 
         if (mentry != NULL) {
             if (mentry->declarations) {
                 PtrArray decls = *mentry->declarations;

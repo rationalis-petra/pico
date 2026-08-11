@@ -38,7 +38,7 @@ void run_pico_tests(TestLog* log, Allocator* a) {
     };
     *target.data_aux = mk_u8_array(256, a);
 
-    Module* module = get_module(string_to_symbol(mv_string("user")), base);
+    Module* module = get_module(string_to_name(mv_string("user")), base);
 
     set_std_current_module(module);
     set_current_package(base);

@@ -34,7 +34,7 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
 
     if (test_start(log, mv_string("unsigned-div-diverror"))) {
         uint8_t expected = 3;
-        TEST_EQ("(u8./ (narrow 42991 U8) 64)");
+        TEST_EQ("(u8./ (narrow U8 42991) 64)");
     }
 
     if (test_start(log, mv_string("unsigned-divide"))) {

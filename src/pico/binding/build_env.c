@@ -32,7 +32,7 @@ PathEntry path_env_lookup(Symbol sym, PathEnv* env) {
     Module* parent = env_module(env->env);
     do {
         module = parent;
-        push_u64(module_name(module).name, &path);
+        push_name(module_name(module), &path);
     } while ((parent = get_parent(module)) != NULL);
     Package* package = get_package(module);
     push_u64(package_name(package), &path);
