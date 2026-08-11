@@ -20,7 +20,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("list-capacity"))) {
         int64_t expected = 10;
-        TEST_EQ("list-1.capacity");
+        TEST_EQ("list-1.data.len");
     }
 
     if (test_start(log, mv_string("elt-matches-eset"))) {
@@ -33,7 +33,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         int64_t expected = -2;
         TEST_EQ("(seq [let! mlist list.list 1 -2 3 -4]\n"
                 "  [let! elt  list.elt 1 mlist]\n"
-                "    (free mlist.data)\n"
+                "    (list.de-init mlist)\n"
                 "    elt)");
     }
 

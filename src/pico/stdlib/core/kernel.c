@@ -13,6 +13,11 @@ PiType* get_ptr_type() {
     return ptr_type;
 }
 
+static PiType* slice_type;
+PiType* get_slice_type() {
+    return slice_type;
+}
+
 static PiType* list_type;
 PiType* get_list_type() {
     return list_type;
@@ -566,6 +571,25 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         e = get_def_internal(name, module);
         allocator_type = e->value;
 
+        // Slice Type 
+        // Make a ptr
+        type.kind.nargs = 1;
+        vars = mk_sym_list(1, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
+        type_val = 
+            mk_named_type(&pia, "Slice",
+                          mk_type_family(&pia,
+                                         vars,
+                                         mk_struct_type(&pia, 2,
+                                                        "addr", mk_prim_type(&pia, Address),
+                                                        "len", mk_prim_type(&pia, UInt_64))));
+        type_data = type_val;
+        name = string_to_name(mv_string("Slice"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
+
+        e = get_def_internal(name, module);
+        slice_type = e->value;
+
         // List Type 
         // Make a ptr
         type.kind.nargs = 1;
@@ -575,10 +599,9 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
             mk_named_type(&pia, "List",
                           mk_type_family(&pia,
                                          vars,
-                                         mk_struct_type(&pia, 4,
-                                                        "data", mk_prim_type(&pia, Address),
+                                         mk_struct_type(&pia, 3,
+                                                        "data", mk_app_type(&pia, slice_type, mk_var_type(&pia, "A")),
                                                         "len", mk_prim_type(&pia, UInt_64),
-                                                        "capacity", mk_prim_type(&pia, UInt_64),
                                                         "gpa", copy_pi_type_p(allocator_type, &pia))));
         type_data = type_val;
         name = string_to_name(mv_string("List"));

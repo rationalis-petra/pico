@@ -53,14 +53,14 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     const char* slice_ty_def = "(def Slice Named Slice Family [Type] Struct [.addr Address] [.len U64])";
     compile_toplevel(slice_ty_def, module, target, &point, &pi_point, region);
 
-    const char* slice_null_fn = "(def null all [A] (name (Slice A) struct [.addr (num-to-address 0)] [.len 0]))";
+    const char* slice_null_fn = "(def null all [A] (name (Slice A) struct [.addr (num-to-address 0)] [.len (is U64 0)]))";
     compile_toplevel(slice_null_fn, module, target, &point, &pi_point, region);
 
-    const char* slice_new_fn = "(def new all [A] proc [len] (name (Slice A) struct [.addr (memory.alloc (u64.* len (size-of A)))] [.len len]))";
+    const char* slice_new_fn = "(def new all [A] proc [(len U64)] (name (Slice A) struct [.addr (memory.alloc (u64.* len (size-of A)))] [.len len]))";
     compile_toplevel(slice_new_fn, module, target, &point, &pi_point, region);
 
-    const char* slice_delte_fn = "(def delete all [A] proc [(slice (Slice A))] "
-                               "  (memory.free slice.addr))";
+    const char* slice_delte_fn = "(def de-init all [A] proc [(slice (Slice A))] "
+                                 "  (memory.free slice.addr))";
     compile_toplevel(slice_delte_fn, module, target, &point, &pi_point, region);
 
     const char *slice_elt_fn = "(def elt all [A] proc [(i U64) (slice (Slice A))] seq\n"

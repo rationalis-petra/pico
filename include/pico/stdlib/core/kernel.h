@@ -6,6 +6,7 @@
 #include "pico/values/modular.h"
 
 PiType* get_ptr_type();
+PiType* get_slice_type();
 PiType* get_list_type();
 PiType* get_maybe_type();
 PiType* get_pair_type();

@@ -235,7 +235,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
         
     } else {
-        // If we can't easily traverse into the structure/type, ten 
+        // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
         PiType* inferred = get_type(ref, ctx.tape);
         UnifyResult out = unify(type, inferred, uctx);
@@ -1371,7 +1371,6 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < untyped.sequence.elements.len; i++) {
             SeqElt* elt = untyped.sequence.elements.data[i];
             if (elt->is_binding) {
-                //PiType* type = mk_uvar(a);
                 type_infer_i(elt->expr, env, ctx);
                 type_var (elt->symbol, get_type(elt->expr, ctx.tape), env);
                 num_binds++;

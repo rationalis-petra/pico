@@ -16,6 +16,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
+    add_import(&imports.clauses, &ra, 2, "data", "slice");
 
     add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
                      2, seg_name("num"), seg_wild());
@@ -52,9 +53,8 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     // TODO (FEAT): add/implement the following:
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
-        "  [.data Address]\n"
+        "  [.data (slice.Slice A)]\n"
         "  [.len U64]\n"
-        "  [.capacity U64]\n"
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, region);
 
@@ -63,39 +63,32 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "(def init all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
-        "    [.capacity capacity]\n"
-        "    [.len len]\n"
-        "    [.data (alloc (u64.* (size-of A) capacity))]))";
+        "    [.len len ]\n"
+        "    [.data slice.new capacity]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, region);
 
     const char *mk_null_list_fn = 
-        "(def null-list all [A] proc []\n"
+        "(def null all [A] proc []\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
-        "    [.capacity 0]\n"
         "    [.len 0]\n"
-        "    [.data (num-to-address 0)]))";
+        "    [.data (slice.null)]))";
     compile_toplevel(mk_null_list_fn, module, target, &point, &pi_point, region);
     
-    // TODO (BUG): use list allocator
     const char *mk_deinit_fn = 
         "(def de-init all [A] proc [(list (List A))]\n"
         "  (bind [current-allocator list.gpa]"
-        "    (free list.data)))";
+        "    (slice.de-init list.data)))";
     compile_toplevel(mk_deinit_fn, module, target, &point, &pi_point, region);
 
     const char *elt_fn =
-        "(def elt all [A] proc [idx (arr (List A))]\n"
-        "  (load {A} (num-to-address (u64.+ (u64.* idx (size-of A))\n"
-        "                                   (address-to-num arr.data)))))";
+        "(def elt all [A] proc [idx (lst (List A))]\n"
+        "  (slice.elt {A} idx lst.data))";
     compile_toplevel(elt_fn, module, target, &point, &pi_point, region);
 
     const char *eset_fn = 
-        "(def eset all [A] proc [idx (val A) (arr (List A))]\n"
-        "  (store {A}\n"
-        "    (num-to-address (u64.+ (u64.* idx (size-of A))\n"
-        "                           (address-to-num arr.data)))\n"
-        "    val))";
+        "(def eset all [A] proc [idx (val A) (lst (List A))]\n"
+        "  (slice.eset idx val lst.data))";
     compile_toplevel(eset_fn, module, target, &point, &pi_point, region);
 
     const char *each_fn =
@@ -161,7 +154,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     const char *list_push_fn =
         "(def push all [A] proc [(val A) (l (Ptr (List A)))] \n"
         "  let [lst (get l)]\n"
-        "    (if (u64.< lst.len lst.capacity)\n"
+        "    (if (u64.< lst.len lst.data.len)\n"
         "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented: grow on list push\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
