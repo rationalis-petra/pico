@@ -24,6 +24,14 @@ static PiType* key_ty;
 PICO_LIST_HEADER(WinMessage, msg, WinMessage);
 PICO_LIST_COMMON_IMPL(WinMessage, msg, WinMessage);
 
+void build_init_window_system_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia));
+
+    convert_c_fn(pl_init_window_system, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, pia);
+}
+
 void build_create_window_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 3, "name", mk_string_ctype(pia),
                                        "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),

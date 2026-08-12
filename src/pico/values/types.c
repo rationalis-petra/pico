@@ -1332,10 +1332,14 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
                 if (res != Ok) return res;
                 align = align > var_align ? align : var_align;
 
-                total = pi_size_align(total, var_align);
                 size_t field_size;
                 res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
+
+                // For empty fields, DO NOT modify total
+                if (field_size == 0) continue;
+
+                total = pi_size_align(total, var_align);
                 total += field_size;
             }
 

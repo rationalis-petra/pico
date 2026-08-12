@@ -41,10 +41,4 @@ void add_result_module(Target target, Module *data, RegionAllocator* region) {
 
     const char* str_type = "(def Result Named Result Family [Value Error] Enum [:ok Value] [:error Error])";
     compile_toplevel(str_type, module, target, &point, &pi_point, region);
-
-    /* const char* str_type = "(def String Named String Struct [.memsize U64] [.bytes Address])"; */
-    /* compile_toplevel(str_type, module, target, &point, &pi_point, a); */
-    // 
-    /* const char* null_fn = "(def String Named String Struct [.memsize U64] [.bytes Address])"; */
-    /* compile_toplevel(null_fn, module, target, &point, &pi_point, a); */
 }

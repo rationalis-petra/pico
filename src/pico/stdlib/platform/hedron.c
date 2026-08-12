@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
+#include "platform/memory/std_allocator.h"
 
 #include "components/pretty/string_printer.h"
 
@@ -85,6 +86,21 @@ void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* 
     convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
 }
 #endif
+
+Result_t relic_init_hedron() {
+    Allocator* stdalloc = get_std_allocator();
+    return init_hedron(stdalloc) ? Err : Ok;
+}
+
+void build_init_hedron_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia));
+    convert_c_fn(relic_init_hedron, &fn_ctype, type, ass, a, point); 
+}
+
+void build_deinit_hedron_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
+    convert_c_fn(teardown_hedron, &fn_ctype, type, ass, a, point); 
+}
 
 void build_num_swapchain_images_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia),
@@ -963,6 +979,22 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 #endif
+
+    typep = mk_proc_type(pia, 0, mk_app_type(pia, get_result_type(), mk_prim_type(pia, Unit), mk_prim_type(pia, Unit)));
+    build_init_hedron_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("init"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
+    build_deinit_hedron_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("de-init"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, UInt_32));
     build_num_swapchain_images_fn(typep, ass, pia, &ra, &point);

@@ -116,6 +116,7 @@ CType mk_enum_ctype(PiAllocator* a, CPrimInt store, size_t nfields, ...);
 CType mk_union_ctype(PiAllocator* a, size_t nfields, ...);
 
 // Ctypes used within our data/* libraries 
+CType mk_result_ctype(PiAllocator* a);
 CType mk_string_ctype(PiAllocator* a);
 CType mk_allocator_ctype(PiAllocator* a);
 CType mk_list_ctype(PiAllocator* a);
