@@ -1,5 +1,6 @@
 #include "platform/signals.h"
 #include "platform/window/window.h"
+#include "platform/memory/std_allocator.h"
 
 #include "components/pretty/string_printer.h"
 
@@ -24,10 +25,23 @@ static PiType* key_ty;
 PICO_LIST_HEADER(WinMessage, msg, WinMessage);
 PICO_LIST_COMMON_IMPL(WinMessage, msg, WinMessage);
 
+Result_t relic_init_window_system() {
+    Allocator* stdalloc = get_std_allocator();
+    return pl_init_window_system(stdalloc) ? Err : Ok;
+}
+
 void build_init_window_system_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia));
 
-    convert_c_fn(pl_init_window_system, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_init_window_system, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_deinit_window_system_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
+
+    convert_c_fn(pl_teardown_window_system, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, pia);
 }
@@ -269,6 +283,22 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
     e = get_def_internal(name, module);
     window_message_ty = e->value;
+
+    typep = mk_proc_type(pia, 0, mk_app_type(pia, get_result_type(), mk_prim_type(pia, Unit), mk_prim_type(pia, Unit)));
+    build_init_window_system_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("init"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
+    build_deinit_window_system_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("de-init"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     typep = mk_proc_type(pia, 3, mk_string_type(pia), mk_prim_type(pia, Int_32), mk_prim_type(pia, Int_32), copy_pi_type_p(window_ty, pia));
     build_create_window_fn(typep, ass, pia, &ra, &point);
