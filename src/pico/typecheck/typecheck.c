@@ -1618,7 +1618,6 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
-        set_type(ref, t, ctx.tape);;
         for (size_t i = 0; i < untyped.sealed_type.implicits.len; i++) {
             SynRef implicit = untyped.sealed_type.implicits.data[i];
             type_check_i(implicit, t, (Range){}, env, ctx);
@@ -1669,8 +1668,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         PiType* type = get_type(untyped.named_type.body, ctx.tape);
         set_type(ref, type, ctx.tape);;
         if (type->sort != TKind) {
-            err.message = mv_cstr_doc("Named expects types and families as arguments!", a);
-            throw_pi_error(point, err);
+            type_error_named_must_have_type(ref, ctx); 
         }
         break;
     }

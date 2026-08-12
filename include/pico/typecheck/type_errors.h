@@ -96,6 +96,7 @@ _Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstS
 
 // Type Formers
 _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext ctx);
+_Noreturn void type_error_named_must_have_type(SynRef named, TypeCheckContext ctx);
 
 
 // ---------------------------------------------------------------------- 

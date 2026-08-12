@@ -32,6 +32,9 @@ void add_abs_module(Target target, Package* base, RegionAllocator* region) {
     add_order_module(target, module, subregion);
     reset_subregion(subregion);
 
+    add_sequence_module(target, module, subregion);
+    reset_subregion(subregion);
+
     add_show_module(target, module, subregion);
     release_subregion(subregion);
     add_lifetime_module(target, module, subregion);

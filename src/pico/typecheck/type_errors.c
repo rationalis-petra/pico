@@ -636,6 +636,25 @@ _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext 
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_named_must_have_type(SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+
+    Syntax named = get_syntax(ref, ctx.tape);
+    PiType* bad = get_type(named.named_type.body, ctx.tape);
+
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Attempting to creade a named type, however, the value that is being named", a), &nodes);
+    push_ptr(mv_cstr_doc("is not a Type or Type Family, but instead has type:", a), &nodes);
+    push_ptr(pretty_type(bad, default_ptp, ctx.a), &nodes);
+
+
+    PicoError err = {
+        .range = get_range(named.named_type.body, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // ---------------------------------------------------------------------- 
 //
 //                              Unifictaion  

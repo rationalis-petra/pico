@@ -9,9 +9,14 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
+/**
+ * TODO: Typechecking Tests To Add
+ * ================================
+ *  - Check that all types are checked as types (with appropriate kind) (named, sealed, prim etc.)
+ * 
+ */
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
-    // Setup
     Allocator gpa = ra_to_gpa(region);
     Allocator* a = &gpa;
 
