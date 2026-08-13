@@ -61,6 +61,11 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         "  p)";
     compile_toplevel(new_fn, module,target,  &point, &pi_point, region);
 
+    const char *de_init_fn = 
+        "(def de-init all [A] proc [(p (Ptr A))]\n"
+        "  (memory.free (unname p)))\n";
+    compile_toplevel(de_init_fn, module,target,  &point, &pi_point, region);
+
     const char *local_fn =
         "(def local all [A] proc [(v A)] \n"
         "      [preserve-dyn-memory] seq\n"

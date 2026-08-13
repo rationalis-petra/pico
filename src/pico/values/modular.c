@@ -278,6 +278,34 @@ void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a) {
   sdelete_u64_name_amap(rename);
 }
 
+CheckExportResult check_exports(Module* module, Allocator* a) {
+    ExportClauseArray exports = module->header.exports.clauses;
+    NameArray arr = {};
+    for (size_t i = 0; i < exports.len; i++) {
+        ExportClause clause = exports.data[i];
+        switch (clause.type) {
+        case ExportAll:
+            break;
+        case ExportName:
+        case ExportNameAs: {
+            ModuleEntryInternal* entry = entry_lookup(clause.name, module->entries);
+            if (!entry) {
+                if (arr.data == NULL) {
+                    arr = mk_name_array(8, a);
+                }
+                push_name(clause.name, &arr);
+            }
+            break;
+        }
+        }
+    }
+    if (arr.data == NULL) {
+        return (CheckExportResult) {.result = Ok};
+    } else {
+        return (CheckExportResult) {.result = Err, .not_implemented = arr};
+    }
+}
+
 /** TODO: Update with internal/external variants */
 Module* get_module(Name name, Package* package) {
     ModuleEntry* entry = get_def_internal(name, package->root_module);
