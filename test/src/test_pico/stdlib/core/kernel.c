@@ -6,7 +6,7 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
+void run_pico_stdlib_kernel_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_allocator = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_allocator;
@@ -588,7 +588,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [_ 127])");
     }
 
-
     if (test_start(log, mv_string("enum-match-smaller-tag"))) {
         int32_t expected = 12389;
         RUN("(def SmallTag Enum 32 [:left U32] [:right U32])");
@@ -597,6 +596,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [[:right e] e])");
     }
 
+    // If we instantiate a Family (like Either or Result) with Unit, then we
+    // need to know that the match can handle 0-size values correctly
+    RUN("(def if-make-maybe proc [b] if b :none (:some 64))");
+    if (test_start(log, mv_string("if-match-proc-some"))) {
+        int32_t expected = 9723;
+        RUN("(def SmallTag Enum [:left Unit] [:right U32])");
+        TEST_EQ("(match (SmallTag:left :unit)\n"
+                "  [[:left l] 9723]"
+                "  [[:right e] e])");
+    }
 
     // -----------------------------------------------------
     // 

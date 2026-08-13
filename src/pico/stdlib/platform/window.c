@@ -31,7 +31,7 @@ Result_t relic_init_window_system() {
 }
 
 void build_init_window_system_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia, (CType){.sort = CSVoid}, (CType){.sort = CSVoid}));
 
     convert_c_fn(relic_init_window_system, &fn_ctype, type, ass, a, point); 
 

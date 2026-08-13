@@ -608,8 +608,8 @@ CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
     };
 }
 
-CType mk_result_ctype(PiAllocator* pia) {
-    CType value = mk_union_ctype(pia, 2, "val", (CType){.sort = CSVoid}, "err", (CType){.sort = CSVoid});
+CType mk_result_ctype(PiAllocator* pia, CType val, CType err) {
+    CType value = mk_union_ctype(pia, 2, "val", val, "err", err);
     return mk_struct_ctype(pia, 2,
                            "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                            "value", value);

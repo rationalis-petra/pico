@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "data/string.h"
 #include "pico/data/client/meta/list_header.h"
 
 PICO_LIST_HEADER(void*, addr, Addr)
@@ -11,5 +12,7 @@ PICO_LIST_HEADER(uint8_t, U8, U8)
     
 PICO_LIST_HEADER(uint64_t, U64, U64)
 typedef U64PiList NamePiList;
+
+PICO_LIST_HEADER(String, String, String)
 
 #endif

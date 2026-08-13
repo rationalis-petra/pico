@@ -93,7 +93,7 @@ Result_t relic_init_hedron() {
 }
 
 void build_init_hedron_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia, (CType){.sort = CSVoid}, (CType){.sort = CSVoid}));
     convert_c_fn(relic_init_hedron, &fn_ctype, type, ass, a, point); 
 }
 

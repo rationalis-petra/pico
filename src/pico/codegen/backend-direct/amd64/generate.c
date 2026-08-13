@@ -1889,6 +1889,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             for (size_t i = 0; i < syn.variant.args.len; i++) {
                 size_t field_size = pi_size_of(*(PiType*)args.data[i]);
                 size_t field_align = pi_align_of(*(PiType*)args.data[i]);
+                if (field_size == 0) continue;
 
                 dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
                 src_stack_offset -= pi_stack_align(field_size);

@@ -30,7 +30,6 @@ void add_sequence_module(Target target, Module *abs, RegionAllocator* region) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        //panic(doc_to_str(pi_point.error.message, 120, a));
         panic(mv_string("pico error in pico/stdlib/abs/sequence.c"));
     }
 
@@ -53,7 +52,7 @@ void add_sequence_module(Target target, Module *abs, RegionAllocator* region) {
     compile_toplevel(iterator_vtable, module, target, &point, &pi_point, region);
 
     const char* iterator_type = 
-        "(def Iterator Named Iterator Sealed [I A] Struct\n"
+        "(def Iterator Named Iterator Family [A] Sealed [I] Struct\n"
         "  [.vtable (IteratorVTable I A)]\n"
         "  [.state I])\n" ;
     compile_toplevel(iterator_type, module, target, &point, &pi_point, region);
