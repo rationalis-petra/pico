@@ -2489,7 +2489,10 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     case TConstraint:
         return false;
     case TUVar:
-        panic(mv_string("not implemented is_variable_for for uvar"));
+        // We expect this to be called in only one circumstance: when squashing
+        // types is determining whether to substitute. 
+        // TODO: when the uvars no longer have substitutions, make this panic!
+        return false;
 
     default:
         panic(mv_string("not implemented is_variable_for for this sort"));

@@ -5,8 +5,6 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/data/client/allocator.h"
-#include "pico/data/client/meta/list_header.h"
-#include "pico/data/client/meta/list_impl.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/core/kernel.h"
@@ -21,9 +19,6 @@ static PiType* keystate_ty;
 static PiType* keymap_ty;
 static PiType* raw_key_ty;
 static PiType* key_ty;
-
-PICO_LIST_HEADER(WinMessage, msg, WinMessage);
-PICO_LIST_COMMON_IMPL(WinMessage, msg, WinMessage);
 
 Result_t relic_init_window_system() {
     Allocator* stdalloc = get_std_allocator();
@@ -131,20 +126,14 @@ void build_get_key_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator*
 }
 
 
-WinMessagePiList relic_poll_events(PlWindow* window) {
+WinMessageSlice relic_poll_events(PlWindow* window) {
     PiAllocator pia = get_std_current_allocator();
     Allocator a = convert_to_callocator(&pia);
-    WinMessageArray arr = pl_poll_events(window, &a);
-    return (WinMessagePiList) {
-        .data = arr.data,
-        .len = arr.len,
-        .size = arr.size,
-        .gpa = pia,
-    };
+    return pl_poll_events(window, &a);
 }
 
 void build_poll_events_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_list_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
 
     convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 
@@ -324,7 +313,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_list_type(), window_message_ty));
+    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_slice_type(), window_message_ty));
     build_poll_events_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);

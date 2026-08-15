@@ -29,10 +29,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
-    add_import_all(&imports.clauses, a, 2, "lang", "relic");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
+    add_import_all(&imports.clauses, a, 2, "core", "kernel");
+    add_import_all(&imports.clauses, a, 2, "core", "prim");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),
@@ -82,32 +80,39 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
+        RUN("(def Ptr Named Ptr Family [A] Address)");
+        RUN("(def pinit all [A] (name (Ptr A) (address.num-to-address 0)))");
+        RUN("(def pset all [A] proc [(p Ptr A) (x A)] :unit)");
+        RUN("(def pget all [A] proc [(x Ptr A)] (address.load {A} (unname x)))");
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType* expected = mk_prim_type(&pregion, Int_64);
-        TEST_TYPE("(seq [let! lst (list.init 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
+        TEST_TYPE("(seq [let! ptr (pinit)] (pset ptr 10) (pget ptr))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Default struct from field constraints"))) {
+        RUN("(def i64-fn proc [(x I64) (y I64)] x)");
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType *expected =
             mk_proc_type(&pregion, 1,
                          mk_struct_type(&pregion, 2, "x", mk_prim_type(&pregion, Int_64),
                                         "y", mk_prim_type(&pregion, Int_64)), mk_prim_type(&pregion, Int_64));
-        TEST_TYPE("(proc [point] (i64.+ point.x point.y))");
+        TEST_TYPE("(proc [point] (i64-fn point.x point.y))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
+        // We deduce that Right A has A = address (from use of address-to-num)
+        // We deduce that Left V  has V = U64 (as must be same return type as right)
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType *expected =
             mk_proc_type(&pregion, 1,
                          mk_enum_type(&pregion, 2, "left", 1, mk_prim_type(&pregion, UInt_64),
                                       "right", 1, mk_prim_type(&pregion, Address)), mk_prim_type(&pregion, UInt_64));
-        TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
+        TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address.address-to-num x)])");
         set_std_current_allocator(current_old);
     }
 
@@ -135,7 +140,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
                                         mk_enum_type(&pregion, 2,
                                                      "left", 1, mk_prim_type(&pregion, Int_64),
                                                      "right", 1, mk_prim_type(&pregion, Address)));
-        TEST_TYPE("(proc [which] if which (:left 10) (:right (alloc 8)))") ;
+        TEST_TYPE("(proc [which] if which (:left 10) (:right (address.num-to-address 8)))") ;
         set_std_current_allocator(current_old);
     }
 
@@ -181,6 +186,10 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         RUN("(def DF Distinct DF F32)");
         RUN("(def id-df proc [(df DF)] df)");
         TEST_TYPE_FAIL("(id-df 3.5)");
+    }
+
+    if (test_start(log, mv_string("unsolved-var-errors"))) {
+        TEST_TYPE_FAIL("(def vec2 all [A] proc [x y] name (Vec2 A) array {2} [x y])");
     }
 
     delete_env(env, a);

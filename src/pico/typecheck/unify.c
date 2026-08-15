@@ -10,18 +10,83 @@
 #include "pico/typecheck/type_errors.h"
 #include "pico/typecheck/unify.h"
 
-// Handling of named types
-// Unification destructively modifies uvars 
-// Thus, simply, e.g. copying and then renaming types won't work.
-// A rename-map has to deal with shadowing variables, e.g.
-// (Name x (Name x x)) ?= (Name x (Name y x))
-// For this reason, we need a solution satisfying
-// • Does not copy or modify named types
-// • Takes care of naming and shadowing
-// The solution is an array (stack) of lhs & rhs symbols 
-// 
-// lhs_symbol
-// rhs_symbol
+/**
+ *
+ * Unification Refactor Plan
+ * ====================================
+ * Currently, the unifier/typechecker is very much in a state of 'this is not
+ * sound, but it *mostly* works unless you push it. There is a plan for a
+ * refactor to improve soundness and speed of the typechecker, roughly outlined
+ * as follows:
+ * 1. Currently, UVars store 'substitutions', lists of [name ↦ type]
+ *   substitutions, to make up for the fact that we don't keep track of scope
+ *   properly. These should be removed, and instead, just rely on type-scoping
+ *   information during the 'squash' phase instaed.
+ * 
+ * 2. During typechecking, instead of unifying in-place, produce a parallel
+ *    syntax tree 'a problem' that keeps track of both type-scope, and all
+ *    unification constraints. This problem is then 'solved' before moving 
+ *    the solution into the syntax tree (this replaces the squashing phase).
+ * 
+ * 3. Once the problem/solution architecture is set-up, rework types to be much
+ *    more efficient memory-wise:
+ *    - UVars should be slimmed down to 32-bit indices into a pool/array (rather
+ *      than full fat pointers).
+ *    - Types Pointers should similarly be replaced with opaque references into
+ *      some contextually relevant pool.
+ *    - Instead of being full types, primitives should be encoded directly into
+ *      the indices.
+ * 
+ * 4. At this point, the main thing to work on will be general correctness. Look
+ *    into Higher-Order unification and possibly consult how Caledon structured
+ *    its' type-checker. See if there is a way to report an easy error message
+ *    when backtracking *would* normally be necessary. This may allow
+ *    efficiency/speed improvemints, at the cost of only a little extra
+ *    explicitness in the (Relic) code.
+ * 
+ * 5. At current, typechecking is by far the slowest step. Investigate whether
+ *    it still is via profiling, and if so, look into more optimisations (I
+ *    recall there being like, 1 paper for speeding up HM type inference that
+ *    the creator of Elm mentioned on the 'Software Unscripted' podcast).
+ */
+
+/**
+ *
+ * Unification
+ * ============
+ * The unifier presented here is a relatively simple extension of a regular
+ * HM-style unifier. Types whose values are unknown are initialized to a blank
+ * UVar, where a UVar stores the type it is substituted for in an internal field
+ * named `subst`. During unification, uvars are mutated in-place to handle the
+ * new values. 
+ * 
+ * Implementation Details
+ * -----------------------
+ * Handling Occurs
+ * ---------------
+ * There are several legitimate scenarios where we might want to unify a uvar,
+ * say α with, e.g. (struct [.x (Ptr α)] [.y I64]). In this case, doing the
+ * substitution blindly would give α = (struct [.x (Ptr α)] [.y I64]). Then,
+ * during the `squash` step (eliminating uvars), we would encounter an infinite
+ * loop, as we constantly go down into the definition of α. To prevent this,
+ * before substitution, (α, T) we first check if T contains α. The function
+ * occurs(α, T) returns true if T contains α. 
+ * 
+ * 
+ * Handling Scope
+ * --------------
+ * Handling of named types
+ * Unification destructively modifies uvars 
+ * Thus, simply, e.g. copying and then renaming types won't work.
+ * A rename-map has to deal with shadowing variables, e.g.
+ * (Name x (Name x x)) ?= (Name x (Name y x))
+ * For this reason, we need a solution satisfying
+ * • Does not copy or modify named types
+ * • Takes care of naming and shadowing
+ * 
+ * The solution is an array (stack) of lhs & rhs symbols 
+ * lhs_symbol rhs_symbol
+ */
 
 typedef enum {
     NoDefault, Integral, Floating, Struct, Enum
@@ -79,6 +144,8 @@ typedef SymPair SymbolPair;
 
 PiType* trace_uvar(PiType* uvar);
 Dimension* trace_dim(Dimension* uvar);
+
+bool occurs(UVarType* var, PiType *lhs);
 
 // Unify two types such they are equal. Assumes they have the same sort
 static UnifyResult unify_eq(PiType *lhs, PiType *rhs,
@@ -551,7 +618,10 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         //   having to specify the name.
         PiType* unwrapped = unname_type(type, ctx.current_module, ctx.pia, a);
         // TODO (BUG): what about if the named type has arugments???
-        // TODO (BUG): add occurs check
+        // TODO (BUG): Enable occurs check/work in proper higher-order
+        //             unification support.
+        if (occurs(uvar, type)) 
+            return (UnifyResult){.type = UOk};
 
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
@@ -825,6 +895,115 @@ Dimension* trace_dim(Dimension* uvar) {
     return uvar;
 }
 
+bool occurs(UVarType* var, PiType *type) {
+    switch (type->sort) {
+    case TPrim:
+        return false;
+    case TProc: {
+        for (size_t i = 0; i < type->proc.implicits.len; i++) {
+            if (occurs(var, type->proc.implicits.data[i])) return true;
+        }
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            if (occurs(var, type->proc.args.data[i])) return true;
+        }
+        return occurs(var, type->proc.ret);
+    }
+    case TArray: {
+        return occurs(var, type->array.element);
+    }
+    case TStruct: {
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            if (occurs(var, type->structure.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+    case TEnum: {
+        for (size_t i = 0; i < type->enumeration.variants.len; i++) {
+            AddrPiList types = *(AddrPiList*)type->enumeration.variants.data[i].val;
+            for (size_t j = 0; j < types.len; j++) {
+                if (occurs(var, types.data[j])) return true;
+            }
+        }
+        return false;
+    }
+    case TReset: {
+        if (occurs(var, type->reset.in)) return true;
+        if (occurs(var, type->reset.out)) return true;
+        return false;
+    }
+    case TDynamic: {
+        return occurs(var, type->dynamic);
+    }
+    case TVar:
+        return false;
+    case TAll: 
+    case TFam: {
+        return occurs(var, type->binder.body);
+    }
+    case TSealed: {
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            if (occurs(var, type->sealed.implicits.data[i])) return true;
+        }
+        return occurs(var, type->sealed.body);
+    }
+    case TNamed: {
+        if (occurs(var, type->named.type)) return true;
+        if (type->named.args) {
+            for (size_t i = 0; i < type->named.args->len; i++) {
+                if (occurs(var, type->named.args->data[i])) return true;
+            }
+        }
+        return false;
+    }
+    case TDistinct: {
+        if (occurs(var, type->distinct.type)) return true;
+        if (type->distinct.args) {
+            for (size_t i = 0; i < type->distinct.args->len; i++) {
+                if (occurs(var, type->distinct.args->data[i])) return true;
+            }
+        }
+        return false;
+    }
+    case TTrait: {
+        for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
+            if (occurs(var, type->trait.implicit_fields.data[i].val)) return true;
+        }
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
+            if (occurs(var, type->trait.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type->instance.args.len; i++) {
+            if (occurs(var, type->instance.args.data[i])) return true;
+        }
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            if (occurs(var, type->instance.implicit_fields.data[i].val)) return true;
+        }
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            if (occurs(var, type->instance.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+
+    case TCType: return false;
+    case TKind: return false;
+    case TConstraint: return false;
+    // Special sort: unification variable
+    case TUVar: {
+        UVarType* uvar = type->uvar;
+        if (var == uvar) return true;
+        // Be conservative: also check substitutions
+        if (uvar->subst) {
+            if (occurs(var, uvar->subst)) return true;
+        } 
+        return false;
+    }
+    default: 
+        panic(mv_string("squash_type received invalid type!"));
+    }
+}
+
 void squash_type(PiType* type, UnifyContext ctx) {
     Allocator* a = ctx.a;
     PiAllocator* pia = ctx.pia;
@@ -999,34 +1178,25 @@ void squash_type(PiType* type, UnifyContext ctx) {
                 push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
             }
             log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
+            end_section(ctx.logger);
         }
 
         // Now, process any outstanding substitutions:
+        SymbolArray vars = mk_symbol_array(uvar->substitutions.len, a);
         for (size_t i = 0; i < uvar->substitutions.len; i++) {
             SymPtrAssoc* binds = uvar->substitutions.data[i];
-
-            if (ctx.logger) {
-                PtrArray docs = mk_ptr_array(2, ctx.a);
-                push_ptr(mv_str_doc(mv_string("variable-subst: "), ctx.a), &docs);
-                push_ptr(pretty_uvar_type(uvar, ctx.a), &docs);
-                for (size_t j = 0; j < binds->len; j++) {
-                    PtrArray bind_docs = mk_ptr_array(2, ctx.a);
-                    push_ptr(mk_str_doc(view_symbol_string(binds->data[j].key), a), &bind_docs);
-                    push_ptr(mk_str_doc(mv_string("/"), a), &bind_docs);
-                    push_ptr(pretty_type(binds->data[j].val, default_ptp, a), &bind_docs);
-                    push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(bind_docs, a), a), a), &docs);
-                }
-                push_ptr(mv_str_doc(mv_string("->"), ctx.a), &docs);
-                push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
-                log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
-            }
             for (size_t j = 0; j < binds->len; j++) {
-                squash_type(binds->data[j].val, ctx);
+                push_symbol(binds->data[j].key, &vars);
             }
-            *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
         }
-
-        if (ctx.logger) end_section(ctx.logger);
+        if (is_variable_for(type, vars)) {
+            for (size_t i = 0; i < uvar->substitutions.len; i++) {
+                SymPtrAssoc* binds = uvar->substitutions.data[i];
+                // TODO: ensure substitutions are squashed?
+                *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
+                squash_type(type, ctx);
+            }
+        }
         break;
     }
     default: 

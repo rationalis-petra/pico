@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include "platform/signals.h"
+#include "data/stringify.h"
 
 #include "components/pretty/string_printer.h"
 
@@ -45,16 +46,7 @@ static void build_unary_fn(Assembler* ass,  UnaryOp op, LocationSize sz, Allocat
     build_nullary_op(Ret, ass, a, point);
 }
 
-static void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-    build_binary_op(Xor, reg(RAX, sz_64), imm8(1), ass, a, point);
-    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-    build_nullary_op(Ret, ass, a, point);
-}
-
-void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
+static void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
 
@@ -88,7 +80,7 @@ void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSi
     build_nullary_op(Ret, ass, a, point);
 }
 
-void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+static void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -103,7 +95,101 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_nullary_op(Ret, ass, a, point);
 }
 
-void add_integral_module(LocationSize sz, bool is_signed,
+
+String relic_u64_to_string(uint64_t u64) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_u64(u64, &a);
+}
+
+String relic_u32_to_string(uint32_t u32) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_u32(u32, &a);
+}
+
+String relic_u16_to_string(uint16_t u16) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_u16(u16, &a);
+}
+
+String relic_u8_to_string(uint8_t u8) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_u8(u8, &a);
+}
+
+String relic_i64_to_string(int64_t i64) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_i64(i64, &a);
+}
+
+String relic_i32_to_string(int32_t i32) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_i32(i32, &a);
+}
+
+String relic_i16_to_string(int16_t i16) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_i16(i16, &a);
+}
+
+String relic_i8_to_string(int8_t i8) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_u8(i8, &a);
+}
+
+static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType argty;
+    void* cfn;
+    switch (prim) {
+    case UInt_64:
+        argty = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
+        cfn = relic_u64_to_string;
+        break;
+    case Int_64:
+        argty = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed});
+        cfn = relic_i64_to_string;
+        break;
+    case UInt_32:
+        argty = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned});
+        cfn = relic_u32_to_string;
+        break;
+    case Int_32:
+        argty = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Signed});
+        cfn = relic_i32_to_string;
+        break;
+    case UInt_16:
+        argty = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unsigned});
+        cfn = relic_u16_to_string;
+        break;
+    case Int_16:
+        argty = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
+        cfn = relic_i16_to_string;
+        break;
+    case UInt_8:
+        argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
+        cfn = relic_u8_to_string;
+        break;
+    case Int_8:
+        argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Signed});
+        cfn = relic_i8_to_string;
+        break;
+    default:
+        panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
+    }
+
+    CType c_type = mk_fn_ctype(pia, 1, "num", argty, mk_string_ctype(pia));
+
+    convert_c_fn(cfn, &c_type, type, ass, a, point); 
+}
+
+void add_prim_integral_module(LocationSize sz, bool is_signed,
                          Assembler *ass, Target target, Module *num,
                          RegionAllocator* region) {
     Allocator a = ra_to_gpa(region);
@@ -124,15 +210,6 @@ void add_integral_module(LocationSize sz, bool is_signed,
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(8, &a),
     };
-    add_import_all(&imports.clauses, &a, 2, "lang", "relic");
-    add_import_all(&imports.clauses, &a, 1, "core");
-    add_import_all(&imports.clauses, &a, 2, "abs", "equality");
-    add_import_all(&imports.clauses, &a, 2, "abs", "order");
-    add_import_all(&imports.clauses, &a, 2, "abs", "numeric");
-    add_import_all(&imports.clauses, &a, 2, "abs", "show");
-    add_import_all(&imports.clauses, &a, 2, "abs", "lifetime");
-
-    add_import_all(&imports.clauses, &a, 3, "core", "prim", lower_names[is_signed][sz]);
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &a),
     };
@@ -164,6 +241,21 @@ void add_integral_module(LocationSize sz, bool is_signed,
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, &a)};
     Segments prepped;
 
+    PiType type = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
+
+    Segments null_segments = (Segments) {
+        .code = mk_u8_array(0, &a),
+        .data = mk_u8_array(0, &a),
+    };
+
+    PiType type_val = (PiType) {.sort = TPrim, .prim = prim};
+    PiType* type_data = &type_val;
+    name = string_to_name(name_upper);
+    add_def(module, name, type, &type_data, null_segments, NULL);
+
     if (sz > sz_16) {
         typep = mk_unop_type(pia, prim, prim);
         build_unary_fn(ass, BSwap, sz, &a, &point);
@@ -173,6 +265,35 @@ void add_integral_module(LocationSize sz, bool is_signed,
         add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
     }
+
+    build_binary_fn(ass, Add, sz, &a, &point);
+    typep = mk_binop_type(pia, prim, prim, prim);
+    name = string_to_name(mv_string("+"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_fn(ass, Sub, sz, &a, &point);
+    name = string_to_name(mv_string("-"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fn(ass, is_signed ? IMul : Mul, RAX, sz, &a, &point);
+    name = string_to_name(mv_string("*"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, RAX, sz, &a, &point);
+    name = string_to_name(mv_string("/"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     build_binary_fn(ass, And, sz, &a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
@@ -261,128 +382,11 @@ void add_integral_module(LocationSize sz, bool is_signed,
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiErrorPoint pi_point;
-    if (catch_error(pi_point)) {
-        panic(mv_string("pico error in pico/stdlib/abs/order.c"));
-    }
-
-    String show_instance = string_ncat(&a, 5,
-                mv_string("(def show-"),
-                name_lower,
-                mv_string(" instance (Show "),
-                name_upper,
-                mv_string(")  \n  [.show to-string])"));
-    compile_str_toplevel(show_instance, module, target, &point, &pi_point, region);
-
-    String eq_instance = string_ncat(&a, 5, 
-                mv_string("(def eq-"),
-                name_lower,
-                mv_string(" instance (Eq "),
-                name_upper,
-                mv_string(")  [.= =] [.!= !=])"));
-    compile_str_toplevel(eq_instance, module, target, &point, &pi_point, region);
-
-    String ord_instance = string_ncat(&a, 5, 
-                mv_string("(def ord-"),
-                name_lower,
-                mv_string(" instance (Ord "),
-                name_upper,
-                mv_string(")  [.< <] [.<= <=] [.> >] [.>= >=])"));
-    compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
-
-    String num_instance = string_ncat(&a, 5, 
-                mv_string("(def num-"),
-                name_lower,
-                mv_string(" instance (Num "),
-                name_upper,
-                mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0] [.one 1])"));
-    compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
-
-    /** TODO: add a tag/compiler attribute to designate this as a no-op copy */
-    String copy_instance = string_ncat(&a, 5, 
-                mv_string("(def copy-"),
-                name_lower,
-                mv_string(" instance (Copy "),
-                name_upper,
-                mv_string(")  [.copy proc [x] x])"));
-    compile_str_toplevel(copy_instance, module, target, &point, &pi_point, region);
-
-    /** TODO: add a tag/compiler attribute to designate this as a no-op delete */
-    String delete_instance = string_ncat(&a, 5, 
-                mv_string("(def delete-"),
-                name_lower,
-                mv_string(" instance (Delete "),
-                name_upper,
-                mv_string(")  [.delete proc [x] :unit])"));
-    compile_str_toplevel(delete_instance, module, target, &point, &pi_point, region);
-}
-
-void add_bool_module(Assembler *ass, Target target, Module *num, RegionAllocator* region) {
-    Allocator ra = ra_to_gpa(region);
-    Allocator* a = &ra;
-    PiAllocator pico_allocator = convert_to_pallocator(a);
-    PiAllocator* pia = &pico_allocator;
-
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
-    };
-    Exports exports = (Exports) {
-        .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
-    };
-    ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(mv_string("bool")),
-        .imports = imports,
-        .exports = exports,
-    };
-    Module* module = mk_module(header, get_package(num), num);
-    Name name;
-
-    PiType* typep;
-    ErrorPoint point;
-    if (catch_error(point)) {
-        panic(doc_to_str(point.error_message, 120, a));
-    }
-
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
-    Segments prepped;
-
-    typep = mk_binop_type(pia, Bool, Bool, Bool);
-
-    build_comp_fn(ass, SetE, sz_8, a, &point);
-    name = string_to_name(mv_string("="));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_comp_fn(ass, SetNE, sz_8, a, &point);
-    name = string_to_name(mv_string("!="));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_binary_fn(ass, And, sz_8, a, &point);
-    name = string_to_name(mv_string("and"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_binary_fn(ass, Or, sz_8, a, &point);
-    name = string_to_name(mv_string("or"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_unop_type(pia, Bool, Bool);
-    build_not_fn(ass, a, &point);
-    name = string_to_name(mv_string("not"));
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
+    build_to_string_fn(typep, prim, ass, pia, &a, &point);
+    name = string_to_name(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }
-

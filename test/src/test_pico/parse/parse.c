@@ -16,40 +16,12 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
   Allocator* a = &gpa;
   PiAllocator pia = convert_to_pallocator(a);
 
-  Package* base = get_base_package();
-
-  Imports imports = (Imports) {
-    .clauses = mk_import_clause_array(8, a),
-  };
-  add_import_all(&imports.clauses, a, 2, "lang", "relic");
-  add_import_all(&imports.clauses, a, 1, "num");
-  add_import_all(&imports.clauses, a, 1, "data");
-  add_import_all(&imports.clauses, a, 2, "platform", "memory");
-
-  ReExports re_exports = (ReExports) {
-      .clauses = mk_import_clause_array(0, a),
-  };
-  Exports exports = (Exports) {
-    .export_all = true,
-    .clauses = mk_export_clause_array(0, a),
-  };
-  ModuleHeader header = (ModuleHeader) {
-    .name = string_to_name(mv_string("pipeline-test-module")),
-    .imports = imports,
-    .re_exports = re_exports,
-    .exports = exports,
-  };
-  Module* module = mk_module(header, base, NULL);
-
   ErrorPoint point;
   if (catch_error(point)) {
     panic(mv_string("Error in tests: test_pico/typecheck.c"));
   }
 
-  Environment* env = env_from_module(module, &point, a);
-  delete_module_header(header);
   TestContext context = (TestContext) {
-    .env = env,
     .region = region,
     .log = log,
   };
@@ -179,6 +151,4 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
       expr_branch(&pia, 2, symbol_atom("foo"), int_atom(','));
     TEST_EQ("(foo #,)");
   }
-
-  remove_module(base, string_to_name(mv_string("pipeline-test-module")));
 }

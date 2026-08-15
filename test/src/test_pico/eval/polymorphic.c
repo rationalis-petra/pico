@@ -328,7 +328,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("array-polymorphic-multi-element-access"))) {
         RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 5;
-        TEST_EQ("((all [A] proc {(n (Num A))} [(a (Array [4] A))] (n.+ (aelt 2 a) (aelt 1 a))) my-array)");
+        TEST_EQ("((all [A] proc [(add Proc [A A] A) (a (Array [4] A))] (add (aelt 2 a) (aelt 1 a))) u8.+ my-array)");
     }
 
     // -----------------------------------------------------
@@ -446,23 +446,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    void* mem = mem_alloc(128, &ra);
-    PiAllocator old = get_std_current_allocator();
-    void* start;
-    {
-        Allocator sta = mk_static_allocator(mem, 128);
-        start = mem_alloc(8, &sta);
-    }
-
     if (test_start(log, mv_string("test-multi-poly-call"))) {
         // Test to ensure that polymorphic calls preserve the stack for a future call
-        Allocator sta = mk_static_allocator(mem, 128);
-        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = -67;
 
-        set_std_current_allocator(psta);
-        RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
-        TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+        RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (address.store {A} addr x))");
+        TEST_EQ("(seq [let! addr (dyn-alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr) (address.load {I64} addr))");
     }
 
     if (test_start(log, mv_string("poly-proc-in-proc"))) {
@@ -472,16 +461,16 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("double-poly-call"))) {
         RUN(
-        "(def svtest proc [(start U64) (end U64) (string String)] seq \n"
-        "  [let! start-byte (local start)]\n"
-        "  [let! index (local 5)]\n"
-        "  (= start (get index))"
+        "(def svtest proc [(start U64) (end U64) (string (Struct [.x I64] [.y I64]))] seq \n"
+        "  [let! start-byte (dyn-alloc (size-of U64))]\n"
+        "  (address.store start-byte start)\n"
+        "  [let! index (dyn-alloc (size-of U64))]\n"
+        "  (address.store index 5)\n"
+        "  (u64.= start (address.load index))"
         "  \n"
         "  string)");
 
-        uint64_t expected = 4;
-        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 \"test\").len)");
+        int64_t expected[2] = {3, 4};
+        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 (struct [.x 3] [.y 4])))");
     }
-
-    set_std_current_allocator(old);
 }

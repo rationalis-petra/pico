@@ -229,6 +229,7 @@ void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a) {
       StampedModule sm = {.module = module, .timestamp = module->timestamp};
       push_stamped_module(sm, &targets);
     }
+    sdelete_ptr_array(sources);
 
     ImportData data = {
       .origins = &origins,

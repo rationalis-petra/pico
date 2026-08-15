@@ -14,21 +14,23 @@
 #include "test_pico/pico.h"
 
 
-static Package* base = NULL;
+static int initialized = 0;
 void run_pico_tests(TestLog* log, Allocator* a) {
     Allocator* stdalloc = get_std_allocator();
     Allocator exec = mk_executable_allocator(stdalloc);
     RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
 
-    if (!base) {
+    Package* base = get_base_package();
+    if (initialized == 0) {
         RegionAllocator* subregion = make_subregion(region); 
         Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
         PiAllocator module_allocator = convert_to_pallocator(stdalloc);
 
-        base = base_package(ass_base, stdalloc, &module_allocator, subregion);
+        base = base_package_core_only(ass_base, stdalloc, &module_allocator, subregion);
 
         delete_assembler(ass_base);
         release_subregion(subregion);
+        initialized++;
     }
 
     Target target = (Target) {
@@ -64,6 +66,17 @@ void run_pico_tests(TestLog* log, Allocator* a) {
         suite_end(log);
     }
 
+    if (initialized <= 1) {
+        RegionAllocator* subregion = make_subregion(region); 
+        Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
+        PiAllocator module_allocator = convert_to_pallocator(stdalloc);
+
+        base_package_fillout_stdlib(base, ass_base, stdalloc, &module_allocator, subregion);
+
+        delete_assembler(ass_base);
+        release_subregion(subregion);
+        initialized++;
+    }
     if (suite_start(log, mv_string("stdlib"))) {
         run_pico_stdlib_tests(log, target, stdalloc);
         suite_end(log);

@@ -119,6 +119,7 @@ CType mk_union_ctype(PiAllocator* a, size_t nfields, ...);
 CType mk_result_ctype(PiAllocator* a, CType val, CType err);
 CType mk_string_ctype(PiAllocator* a);
 CType mk_allocator_ctype(PiAllocator* a);
+CType mk_slice_ctype(PiAllocator* a);
 CType mk_list_ctype(PiAllocator* a);
 
 void init_ctypes();

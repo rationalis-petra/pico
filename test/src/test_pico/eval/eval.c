@@ -17,15 +17,10 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(8, a),
     };
-    add_import_all(&imports.clauses, a, 1, "prelude");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "data", "pointer");
+    add_import_all(&imports.clauses, a, 2, "core", "kernel");
+    add_import_all(&imports.clauses, a, 2, "core", "prim");
+    add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "platform");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
-
-    add_import_flags(&imports.clauses, a, ImportTypes | ImportInstances,
-                     2, seg_name("data"), seg_wild());
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),
