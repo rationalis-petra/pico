@@ -2569,6 +2569,34 @@ PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...) {
     return proc;
 }
 
+PiType* mk_proc_impl_type(PiAllocator* pia, size_t nimpls, size_t nargs, ...) {
+    va_list args;
+    va_start(args, nargs);
+    
+    AddrPiList ty_impls = mk_addr_list(nimpls, pia);
+    for (size_t i = 0; i < nimpls ; i++) {
+        PiType* arg = va_arg(args, PiType*);
+        push_addr(arg, &ty_impls);
+    }
+    AddrPiList ty_args = mk_addr_list(nimpls, pia);
+    for (size_t i = 0; i < nargs ; i++) {
+        PiType* arg = va_arg(args, PiType*);
+        push_addr(arg, &ty_args);
+    }
+
+    PiType* ret = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* proc = call_alloc(sizeof(PiType), pia);
+    *proc = (PiType) {
+        .sort = TProc,
+        .proc.implicits = ty_impls,
+        .proc.args = ty_args,
+        .proc.ret = ret
+    };
+    return proc;
+}
+
 PiType* mk_struct_packed_type(PiAllocator* pia, bool packed, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);

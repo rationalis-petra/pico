@@ -34,6 +34,22 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(Proc [I64 I64] I64)");
     }
 
+    if (test_start(log, mv_string("proc-implicits"))) {
+        RUN("(def Hab Trait Hab [A] [.val A])");
+        PiType *type;
+        GET_TYPE(type, "Hab");
+
+        PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
+        PiType* instance = mk_app_type (pia, type, mk_prim_type(pia, Int_64));
+        PiType *expected = mk_proc_impl_type(
+            pia, 1, 2,
+            instance,
+            mk_prim_type(pia, Int_64),
+            mk_prim_type(pia, Int_64),
+            mk_prim_type(pia, Int_64));
+        TEST_EQ("(Proc {(Hab I64)} [I64 I64] I64)");
+    }
+
     //  Array
     // -----------------------------------------------------
     if (test_start(log, mv_string("1d-array-no-backet"))) {

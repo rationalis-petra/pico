@@ -383,6 +383,7 @@ typedef struct {
 
 typedef struct {
     SynArray args;
+    SynArray implicits;
     SynRef return_type;
 } SynProcType;
 

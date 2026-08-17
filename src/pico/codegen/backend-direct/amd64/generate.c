@@ -2976,9 +2976,28 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     }
     case SProcType: {
         // Generate proc type: start by malloc'ing size for args
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.proc_type.args.len * ADDRESS_SIZE), ass, a, point);
+        size_t args_size = (syn.proc_type.implicits.len + syn.proc_type.args.len) * ADDRESS_SIZE;
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(args_size), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
+        for (size_t i = 0; i < syn.proc_type.implicits.len; i++) {
+            SynRef impl = syn.proc_type.implicits.data[i];
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(impl, env, ictx);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 1
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+        }
         for (size_t i = 0; i < syn.proc_type.args.len; i++) {
             SynRef arg = syn.proc_type.args.data[i];
 
@@ -3007,7 +3026,9 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
         // Finally, generate function call to make type
-        gen_mk_proc_ty(reg(RAX, sz_64), imm32(syn.proc_type.args.len), reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
+        gen_mk_proc_ty(reg(RAX, sz_64), imm32(syn.proc_type.implicits.len),
+                       imm32(syn.proc_type.args.len),
+                       reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 

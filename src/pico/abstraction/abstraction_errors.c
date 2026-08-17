@@ -140,14 +140,38 @@ _Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, Abstracti
 
 // Array
 // -----
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, bool has_implicit, AbstractionICtx ctx) {
     Document* message;
+    if (raw.branch.nodes.len == 2) {
+        message = mv_cstr_doc("Proc type has an argument list, but is missing a return type.", ctx.gpa);
+    } else if (raw.branch.nodes.len == 2 && has_implicit) {
+        message = mv_cstr_doc("Proc type has an implicit argument list, but is missing an argument list and return type.", ctx.gpa);
+    } else {
+        message = mv_cstr_doc("Proc type is missing a return type.", ctx.gpa);
+    }
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void proc_tyformer_bad_arglist(RawTree raw, bool is_implicit, AbstractionICtx ctx) {
+    Document* message;
+    if (is_implicit) {
+        PtrArray nodes = mk_ptr_array(4, ctx.gpa);
+        push_ptr(mv_cstr_doc("Proc type has a malformed argument list - expecting [ArgTy1 ArgTy2 ...].", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("for regular arguments, or {ImplTy1 ImplTy2 ...} for implicit arugments. ", ctx.gpa), &nodes);
+        message = mv_sep_doc(nodes, ctx.gpa);
+    } else {
+        message = mv_cstr_doc("Proc type has a malformed argument list - expecting [ArgTy1 ArgTy2 ...].", ctx.gpa);
+    }
     if (raw.branch.nodes.len > 3) {
         message = mv_cstr_doc("Proc type has received too many terms - expect to receive only an argument list and return type.", ctx.gpa);
     } else if (raw.branch.nodes.len == 2) {
         message = mv_cstr_doc("Proc type missing return argument.", ctx.gpa);
     } else {
-        message = mv_cstr_doc("Proc type missing both argument list and return argument.", ctx.gpa);
     }
     
     PicoError err = {

@@ -168,6 +168,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE_FAIL("(Family [] Address)");
     }
 
+
+    if (test_start(log, mv_string("implicit-must-be-instance"))) {
+        TEST_TYPE_FAIL("(Proc {I64} [I64] I64)");
+    }
+
     if (test_start(log, mv_string("cannot-apply-non-family-types"))) {
         TEST_TYPE_FAIL("(U8)");
     }

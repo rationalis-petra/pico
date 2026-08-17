@@ -1527,17 +1527,27 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         panic(mv_string("Unsupported operation: inferring type of module"));
     }
     case SProcType: {
+        PiType* c = call_alloc(sizeof(PiType), ctx.pia);
+        *c = (PiType){.sort = TConstraint, .kind.nargs = 0};
+        set_type(ref, c, ctx.tape);;
+
+        for (size_t i = 0; i < untyped.proc_type.implicits.len; i++) {
+            SynRef syn = untyped.proc_type.implicits.data[i];
+            Range range = get_range(syn, ctx.tape).term;
+            type_check_i(syn, c, range, env, ctx);
+        }
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         set_type(ref, t, ctx.tape);;
-
         for (size_t i = 0; i < untyped.proc_type.args.len; i++) {
             SynRef syn = untyped.proc_type.args.data[i];
-            type_check_i(syn, t, (Range){}, env, ctx);
+            Range range = get_range(syn, ctx.tape).term;
+            type_check_i(syn, t, range, env, ctx);
         }
 
         SynRef ret = untyped.proc_type.return_type;
-        type_check_i(ret, t, (Range){}, env, ctx);
+        Range range = get_range(ref, ctx.tape).term;
+        type_check_i(ret, t, range, env, ctx);
         break;
     }
     case SArrayType: {
@@ -2702,6 +2712,9 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.size, env, ctx);
         break;
     case SProcType: {
+        for (size_t i = 0; i < typed.proc_type.implicits.len; i++) {
+            squash_types(typed.proc_type.implicits.data[i], env, ctx);
+        }
         for (size_t i = 0; i < typed.proc_type.args.len; i++) {
             squash_types(typed.proc_type.args.data[i], env, ctx);
         }

@@ -913,6 +913,12 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     case SProcType: {
         PtrArray head_nodes = mk_ptr_array(4, a) ;
         push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Proc", a), a), a), &head_nodes);
+
+        PtrArray impl_nodes = mk_ptr_array(syntax.proc_type.implicits.len, a);
+        for (size_t i = 0; i < syntax.proc_type.implicits.len ; i++)  {
+            push_ptr(pretty_syntax_internal(syntax.proc_type.args.data[i], tape, ctx, a), &impl_nodes);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &head_nodes);
         
         PtrArray arg_nodes = mk_ptr_array(syntax.proc_type.args.len, a);
         for (size_t i = 0; i < syntax.proc_type.args.len ; i++)  {

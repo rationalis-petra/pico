@@ -39,7 +39,8 @@ _Noreturn void struct_duplicate_fieldname(RawTree raw, Symbol fname, Abstraction
 //   Type Formers
 // ------------------------------------------------------------
 
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, bool has_implicit, AbstractionICtx ctx);
+_Noreturn void proc_tyformer_bad_arglist(RawTree raw, bool is_implicit, AbstractionICtx ctx);
 
 _Noreturn void array_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 _Noreturn void array_tyformer_incorrect_dimformat(RawTree raw, AbstractionICtx ctx);

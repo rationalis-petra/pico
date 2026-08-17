@@ -93,7 +93,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     }
 
     // -------------------------------------------------------------------------
-    // Analysis
+    //  Analysis
     // -------------------------------------------------------------------------
     SynTape tape = mk_syn_tape(&ra, 128);
     AbstractionCtx ab_ctx = {
@@ -115,7 +115,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
 
     // -------------------------------------------------------------------------
-    // Evaluation
+    //  Evaluation
     // -------------------------------------------------------------------------
     EvalCtx ev_ctx = {
         .tape = tape, .target = target, .links = links, .module = module, .a = &ra, .point = &point
@@ -504,6 +504,31 @@ void run_toplevel(const char *string, Module *module, TestContext context) {
     run_toplevel_internal(string, module, context.env, callbacks, NULL,
                           context.log, context.target, subregion);
     release_subregion(subregion);
+}
+
+
+void get_pi_type(PiType* type, void* val, void* data, TestLog* log) {
+    PiType** tptr = data;
+    if (type->sort != TKind) {
+        //panic(mv_string(""));
+    }
+    PiType** type_val = val;
+    *tptr = *type_val;
+}
+
+PiType* run_type_expr(const char *string, Module *module, TestContext context) {
+    PiType* pi_type_out = NULL;
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = get_pi_type,
+        .on_pi_error = log_pi_error,
+        .on_error = log_error,
+        .on_exit = log_exit,
+    };
+    RegionAllocator* subregion = make_subregion(context.region);
+    run_toplevel_internal(string, module, context.env, callbacks, &pi_type_out,
+                          context.log, context.target, subregion);
+    release_subregion(subregion);
+    return pi_type_out;
 }
 
 void build_module_internal(const char *string, Module *parent, Callbacks callbacks, TestContext context) {

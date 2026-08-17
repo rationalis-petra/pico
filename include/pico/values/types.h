@@ -308,6 +308,8 @@ PiType* mk_array_type(PiAllocator* pia, size_t ndims, ...);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
+// Sample usage: mk_proc_type(a, 1, 2, impl_ty, arg_1_ty, arg_2_ty, ret_ty)
+PiType* mk_proc_impl_type(PiAllocator* pia, size_t nimpls, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 PiType* mk_struct_packed_type(PiAllocator* pia, bool packed, size_t nfields, ...);

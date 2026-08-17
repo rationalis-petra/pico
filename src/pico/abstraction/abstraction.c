@@ -1924,29 +1924,61 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FProcType: {
-        if (raw.branch.nodes.len != 3) {
-            proc_tyformer_incorrect_numterms(raw, ctx);
+        if (raw.branch.nodes.len < 3) {
+            proc_tyformer_incorrect_numterms(raw, false, ctx);
         }
 
-        RawTree raw_args = raw.branch.nodes.data[1];
-        if (raw_args.type != RawBranch) {
-            err.range = raw.branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Procedure argument list should be list.", a);
-            throw_pi_error(ctx.point, err);
+        SynArray implicits = {};
+        SynArray args = {};
+        size_t ret_ty_index = 2;
+        RawTree raw_impl = raw.branch.nodes.data[1];
+        RawTree raw_args = raw.branch.nodes.data[2];
+        if (raw_impl.type != RawBranch || raw_impl.branch.hint == HExpression) {
+            proc_tyformer_bad_arglist(raw, true, ctx);
         }
+        if (raw_impl.branch.hint == HImplicit) {
+            ret_ty_index = 3;
+            goto on_impl;
+        } else {
+            raw_args = raw_impl;
+            goto on_args;
+        }
+
+        on_impl: {
+            implicits = mk_syn_array(raw_impl.branch.nodes.len, a);
+
+            for (size_t i = 0; i < raw_impl.branch.nodes.len; i++) {
+                SynRef arg_ty = abstract_expr_i(raw_impl.branch.nodes.data[i], ctx);
+                push_syn(arg_ty, &implicits);
+            }
+        }
+
+        on_args: {
+            if (raw_args.type != RawBranch || raw_args.branch.hint != HSpecial) {
+                proc_tyformer_bad_arglist(raw, false, ctx);
+            }
         
-        SynArray arg_types = mk_syn_array(raw_args.branch.nodes.len, a);
+            args = mk_syn_array(raw_args.branch.nodes.len, a);
 
-        for (size_t i = 0; i < raw_args.branch.nodes.len; i++) {
-            SynRef arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], ctx);
-            push_syn(arg_ty, &arg_types);
+            for (size_t i = 0; i < raw_args.branch.nodes.len; i++) {
+                SynRef arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], ctx);
+                push_syn(arg_ty, &args);
+            }
         }
 
-        SynRef return_type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        if (raw.branch.nodes.len < ret_ty_index + 1) {
+            proc_tyformer_incorrect_numterms(raw, ret_ty_index == 3, ctx);
+        }
+
+        RawTree *raw_ret = (raw.branch.nodes.len == ret_ty_index + 1)
+            ? &raw.branch.nodes.data[ret_ty_index]
+            : raw_slice(&raw, ret_ty_index, ctx.pia);
+        SynRef return_type = abstract_expr_i(*raw_ret, ctx);
 
         Syntax syn = {
             .type = SProcType,
-            .proc_type.args = arg_types,
+            .proc_type.implicits = implicits,
+            .proc_type.args = args,
             .proc_type.return_type = return_type,
         };
         SynRef res = new_syntax(ctx.tape);

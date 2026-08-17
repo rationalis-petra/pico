@@ -478,13 +478,18 @@ void gen_mk_struct_ty(Location dest, Location nfields,  Location data, bool pack
     }
 }
 
-void* mk_proc_ty(size_t len, void** data, void* ret) {
+void* mk_proc_ty(size_t ilen, size_t len, void* data, void* ret) {
     PiAllocator pia = get_std_temp_allocator();
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TProc,
-        .proc.args.data = data,
+        .proc.implicits.data = data,
+        .proc.implicits.len = ilen,
+        .proc.implicits.size = ilen,
+        .proc.implicits.gpa = pia,
+
+        .proc.args.data = data + (ilen * sizeof(PiType*)),
         .proc.args.len = len,
         .proc.args.size = len,
         .proc.args.gpa = pia,
@@ -493,15 +498,17 @@ void* mk_proc_ty(size_t len, void** data, void* ret) {
     return ty;
 }
 
-void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_proc_ty(Location dest, Location nimplicits, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
-    build_binary_op(Mov, reg(RDI, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), data, ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), ret, ass, a, point);
-#elif ABI == WIN_64
-    build_binary_op(Mov, reg(RCX, sz_64), nfields, ass, a, point);
+    build_binary_op(Mov, reg(RDI, sz_64), nimplicits, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), nfields, ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), ret, ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), ret, ass, a, point);
+#elif ABI == WIN_64
+    build_binary_op(Mov, reg(RCX, sz_64), nimplicits, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), nfields, ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(R9, sz_64), ret, ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
