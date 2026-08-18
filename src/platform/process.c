@@ -147,8 +147,9 @@ Result_t kill_process(Process process) {
     if (TerminateProcess(process.handle, 0)) {
         // TODO: possible error codes?
         return Ok;
-    } else {}
+    } else {
         return Err;
+    }
 }
 
 #endif
