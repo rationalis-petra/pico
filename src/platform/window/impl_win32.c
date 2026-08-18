@@ -140,7 +140,7 @@ bool pl_window_should_close(PlWindow *window) {
     return window->should_close;
 }
 
-WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
+WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
     MSG msg;
         while (PeekMessage(&msg, window->impl,  0, 0, PM_REMOVE))  {
         TranslateMessage(&msg);
@@ -148,7 +148,7 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     }
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
-    return out;
+    return (WinMessageSlice){.data = out.data, .len = out.len};
 }
 
 // Key handling: 

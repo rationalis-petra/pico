@@ -7,7 +7,7 @@
 
 #include "pico/data/string_array.h"
 
-typedef struct {uint64_t id;} Process;
+typedef struct {union {uint64_t id; void* handle;};} Process;
 
 // TODO: see https://www.man7.org/linux/man-pages/man3/posix_spawn.3.html
 //       for errors... what about if cannot find the file?
