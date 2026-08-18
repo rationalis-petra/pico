@@ -184,6 +184,28 @@ InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
     if (!instances) {
         return (InstanceEntry) {.type = IENotFound,};
     }
+    // Start with the local environment 
+    // TODO: determine semantics of if multiple results are found??
+    for (size_t i = 1; i <= env->locals.len; i++) {
+        Local local = env->locals.data[env->locals.len - i].val;
+        if (local.sort != LVar || local.type->sort != TTraitInstance) continue;
+        TraitInstance instance = local.type->instance;
+        if (instance.instance_of != id) continue;
+        bool eql = true;
+        for (size_t i = 0 ; i < args.len; i++) {
+            eql &= pi_type_eql(instance.args.data[i], args.data[i], env->gpa);
+        }
+        if (eql) {
+            // TODO: just returning 'key' may be bad because shadowing...
+            //       e.g. proc {(t I A)} [...] (let [t 3] foo 7) 
+            //       may become proc {(t I A)} [...] (let [t 3] foo {t} 7) , but
+            //       we want 't' to bind the OUTER t, not the inner t...
+            return (InstanceEntry) {
+                .type = IESymbol,
+                .var = env->locals.data[env->locals.len - i].key,
+            };
+        }
+    }
 
     InstanceEntry out = {.type = IENotFound,};
     InstSrcArray sources = mk_inst_src_array(1, env->gpa);

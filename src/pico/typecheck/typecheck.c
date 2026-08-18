@@ -1972,13 +1972,16 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
     // Terms & term formers
     case SProcedure: {
+        PiType* ty = get_type(ref, ctx.tape);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
             SymPtrCell arg = syn.procedure.implicits.data[i];
-            type_var(arg.key, arg.val, env);
+            PiType* type = ty->proc.implicits.data[i];
+            type_var(arg.key, type, env);
         }
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
             SymPtrCell arg = syn.procedure.args.data[i];
-            type_var(arg.key, arg.val, env);
+            PiType* type = ty->proc.args.data[i];
+            type_var(arg.key, type, env);
         }
         post_unify(syn.procedure.body, env, ctx);
         pop_types(env, syn.procedure.args.len + syn.procedure.implicits.len);
@@ -2022,6 +2025,19 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
                 InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
                 switch (e.type) {
+                case IESymbol: {
+                    SynRef new_impl = new_syntax(ctx.tape);
+                    set_syntax(new_impl,
+                               (Syntax){
+                                   .type = SVariable,
+                                   .variable = e.var,
+                               },
+                               ctx.tape);
+                    set_type(new_impl, arg_ty, ctx.tape);
+                    push_syn(new_impl, &syn.application.implicits);
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
                 case IEAbsSymbol: {
                     SynRef new_impl = new_syntax(ctx.tape);
                     set_syntax(new_impl,
@@ -2083,6 +2099,19 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
             switch (e.type) {
+            case IESymbol: {
+              SynRef new_impl = new_syntax(ctx.tape);
+              set_syntax(new_impl,
+                         (Syntax){
+                           .type = SVariable,
+                           .variable = e.var,
+                         },
+                         ctx.tape);
+              set_type(new_impl, arg_ty, ctx.tape);
+              push_syn(new_impl, &syn.all_application.implicits);
+              set_syntax(ref, syn, ctx.tape);
+              break;
+            }
             case IEAbsSymbol: {
                 SynRef new_impl = new_syntax(ctx.tape);//mem_alloc(sizeof(Syntax), ctx.a);
                 set_syntax(new_impl,

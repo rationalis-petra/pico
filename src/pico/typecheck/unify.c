@@ -20,8 +20,8 @@
  * as follows:
  * 1. Currently, UVars store 'substitutions', lists of [name ↦ type]
  *   substitutions, to make up for the fact that we don't keep track of scope
- *   properly. These should be removed, and instead, just rely on type-scoping
- *   information during the 'squash' phase instaed.
+ *   properly. These should be removed (DONE), and instead, just rely on type-scoping
+ *   information during the 'squash' phase instaed (TODO).
  * 
  * 2. During typechecking, instead of unifying in-place, produce a parallel
  *    syntax tree 'a problem' that keeps track of both type-scope, and all
@@ -123,7 +123,6 @@ struct UVarType {
     PiType* subst;
     ConstraintPiList constraints;
     UVarDefault default_behaviour;
-    AddrPiList substitutions;
 };
 
 typedef struct {
@@ -723,10 +722,6 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         }
     }
     
-    for (size_t i = 0; i < uvar->substitutions.len; i++) {
-        SymPtrAssoc* subst = uvar->substitutions.data[i];
-        type = pi_type_subst(type, *subst, ctx.logger, ctx.pia, ctx.a);
-    }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
 }
@@ -737,26 +732,12 @@ UVarType* copy_uvar(UVarType* uvar, PiAllocator* pia) {
         .subst = uvar->subst,
         .constraints = scopy_constraint_list(uvar->constraints, pia),
         .default_behaviour = uvar->default_behaviour,
-        .substitutions = scopy_addr_list(uvar->substitutions, pia),
     };
     return new;
 }
 
 PiType* try_get_uvar(UVarType *uvar) {
     return uvar->subst;
-}
-
-void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a) {
-    // NOTE: We shallow copy here due to the allocation guarantees made 
-    //       by the typecheck (caller) function.
-
-    // Eliminate all substitutions that are severed
-    // Note: we start by copying the binds because deletion is destructive
-    if (binds.len > 0) {
-        SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
-        *subst = scopy_sym_ptr_assoc(binds, a);
-        push_addr(subst, &uvar->substitutions);
-    }
 }
 
 bool has_unification_vars_p(PiType type) {
@@ -1180,23 +1161,6 @@ void squash_type(PiType* type, UnifyContext ctx) {
             log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
             end_section(ctx.logger);
         }
-
-        // Now, process any outstanding substitutions:
-        SymbolArray vars = mk_symbol_array(uvar->substitutions.len, a);
-        for (size_t i = 0; i < uvar->substitutions.len; i++) {
-            SymPtrAssoc* binds = uvar->substitutions.data[i];
-            for (size_t j = 0; j < binds->len; j++) {
-                push_symbol(binds->data[j].key, &vars);
-            }
-        }
-        if (is_variable_for(type, vars)) {
-            for (size_t i = 0; i < uvar->substitutions.len; i++) {
-                SymPtrAssoc* binds = uvar->substitutions.data[i];
-                // TODO: ensure substitutions are squashed?
-                *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
-                squash_type(type, ctx);
-            }
-        }
         break;
     }
     default: 
@@ -1213,7 +1177,6 @@ PiType* mk_uvar(PiAllocator* pia) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = NoDefault,
-        .substitutions = mk_addr_list(1, pia),
     };
     
     return uvar;
@@ -1228,7 +1191,6 @@ PiType* mk_uvar_integral(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Integral,
-        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {
@@ -1249,7 +1211,6 @@ PiType* mk_uvar_floating(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Floating,
-        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {

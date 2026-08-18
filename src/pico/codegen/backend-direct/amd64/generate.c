@@ -329,8 +329,8 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
       }
       /** 2.3: Implicit Ags */
       for (size_t i = 0; i < data.implicits.len; i++) {
-        build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)data.implicits.data[i]), target, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), target, a, point);
+          build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)data.implicits.data[i]), target, a, point);
+          build_unary_op(Push, reg(RAX, sz_64), target, a, point);
       }
 
       /** 2.4: Regular Ags */
@@ -959,7 +959,9 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             
             generate_i(arg, env, ictx);
 
-            // TODO: (simblification) aren't implicits always non-variable?
+            // TODO: (simplification) aren't implicits always non-variable, as
+            // they MUST be TraitInstance, which have fixed size?
+
             // The argument is variable for for the callee
             if (is_variable_for(paramty, ctype_vars)) {
                 // Is it also variable in our context?
@@ -1473,8 +1475,43 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             //
             // -----------------------------------------------------------------
 
-            if (is_variable_in(get_type(syn.projector.val, ictx.tape), env)) {
-                panic(mv_string("not (yet) projecting out of variable structs."));
+            if (is_variable_in(source_type, env)) {
+                bool is_variable = is_variable_in(type, env);
+                size_t out_sz = is_variable
+                    ? ADDRESS_SIZE
+                    : pi_stack_size_of(*type);
+                if (is_variable) {
+                    generate_stack_size_of(RAX, type, env, ass, a, point);
+                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+                    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+                    data_stack_grow(env, ADDRESS_SIZE);
+                } else {
+                    build_binary_op(Sub, reg(RSP, sz_64), imma(out_sz), ass, a, point);
+                    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+                    data_stack_grow(env, out_sz + ADDRESS_SIZE);
+                }
+
+                generate_i(syn.projector.val, env, ictx);
+                generate_offset_of(RAX, syn.projector.field, source_type->structure.fields, env, ass, a, point);
+                build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                if (is_variable) {
+                    generate_size_of(RAX, type, env, ass, a, point);
+                    build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
+                    generate_poly_move(reg(R10, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imm8(0x8), ass, a, point);
+                    data_stack_shrink(env, ADDRESS_SIZE);
+                } else {
+                    // TODO: replace with LEA
+                    build_binary_op(Mov, reg(R10, sz_64), reg(RSP, sz_64), ass, a, point);
+                    build_binary_op(Add, reg(R10, sz_64), imm8(0x10), ass, a, point);
+                    generate_monomorphic_copy(R10, VSTACK_HEAD, out_sz, ass, a, point);
+                    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imm8(0x10), ass, a, point);
+                    data_stack_shrink(env, 2 * ADDRESS_SIZE);
+                }
             } else {
                 size_t out_sz = pi_stack_size_of(*type);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);

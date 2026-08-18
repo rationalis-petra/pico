@@ -54,7 +54,7 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
 
     const char* real_trait = 
         "(def Real Trait Real [A]"
-        "  {.Num Num A}"
+        "  {.num Num A}"
         "  [.sin Proc [A] A]"
         "  [.cos Proc [A] A])";
     compile_toplevel(real_trait, module, target, &point, &pi_point, region);

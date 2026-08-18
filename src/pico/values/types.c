@@ -1835,21 +1835,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
 
     case TUVar:
-        add_subst(body->uvar, subst, a);
-        if (logger) {
-            PtrArray docs = mk_ptr_array(2, a);
-            push_ptr(mv_str_doc(mv_string("adding subst to"), a), &docs);
-            push_ptr(pretty_type(body, default_ptp, a), &docs);
-            push_ptr(mv_str_doc(mv_string(":"), a), &docs);
-            PtrArray subst_nodes = mk_ptr_array(subst.len, a);
-            for (size_t i = 0; i < subst.len; i++) {
-                push_ptr(mk_str_doc(view_symbol_string(subst.data[i].key), a), &docs);
-                push_ptr(mv_str_doc(mv_string("->"), a), &docs);
-                push_ptr(pretty_type(subst.data[i].val, default_ptp, a), &docs);
-            }
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(subst_nodes, a), a), &docs);
-            log_doc(mv_sep_doc(docs, a), logger);
-        }
+        // TODO: should determine what needs to be done here as part of unify.c refactor.
+        //       if unify.c no longer has a comment at the top detailing a
+        //       refactor plan, this comment can safely be deleted.
         break;
 
     // Kinds (higher kinds not supported)
@@ -2133,6 +2121,8 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             if (symbol_eq(array->data[i].r_name, rhs->var))
                 return false;
         }
+        // Neither are renamed, so we can just compare directly 
+        if (symbol_eq(lhs->var, rhs->var)) return true;
         return false;
     case TAll:
         if (lhs->binder.vars.len != rhs->binder.vars.len)

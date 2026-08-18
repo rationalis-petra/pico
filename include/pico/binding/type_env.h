@@ -27,6 +27,7 @@ typedef struct {
 
 typedef enum {
     IEAbsSymbol,
+    IESymbol,
     IENotFound,
     IEAmbiguous,
 } InstanceEntry_t;
@@ -35,6 +36,7 @@ typedef struct {
     InstanceEntry_t type;
     union {
         AbsVariable abvar;
+        Symbol var;
         // If ambiguous, return names/modules defining values.
         InstSrcArray ambiguous_sources;
     };

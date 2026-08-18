@@ -286,6 +286,31 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] nas.z) {Unit})");
     }
 
+    if (test_start(log, mv_string("struct-poly-project"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        int64_t expected = 7;
+        TEST_EQ("((all [A] proc [(x Con A)] x.v) (struct (Con I64) [.v 7]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-project-small"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        bool expected = true;
+        TEST_EQ("((all [A] proc [(x Con A)] x.v) (struct (Con Bool) [.v :true]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-with-call"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        bool expected = true;
+        RUN("(def id all [A] proc [(x A)] x)");
+        TEST_EQ("((all [A] proc [(x Con A)] (id x.v)) (struct (Con Bool) [.v :true]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-with-mono-access"))) {
+        RUN("(def Extra Family [A] Struct [.v A] [.y I64])");
+        int64_t expected = 3;
+        TEST_EQ("((all [A] proc [(x Extra A)] x.y) (struct (Extra Bool) [.v :true] [.y 3]))");
+    }
+
     // -----------------------------------------------------
     // 
     //      Array

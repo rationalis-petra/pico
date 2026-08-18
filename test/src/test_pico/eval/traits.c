@@ -110,7 +110,6 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(poly-eq :false :true)");
     }
 
-    /*
     if (test_start(log, mv_string("instance-inferred-for-local-variables"))) {
         RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
         RUN("(def eql-bool instance (Eql Bool)"
@@ -124,5 +123,4 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         bool expected = false;
         TEST_EQ("(id-eq (struct [.v :false]) (struct [.v :true]))");
     }
-    */
 }
