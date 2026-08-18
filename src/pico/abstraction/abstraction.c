@@ -1330,13 +1330,11 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        if (index < raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Let expression multiple bodies!", a);
-            throw_pi_error(ctx.point, err);
-        }
+        RawTree* raw_body = (raw.branch.nodes.len == index + 1)
+            ? &raw.branch.nodes.data[index]
+            : raw_slice(&raw, index, ctx.pia);
 
-        SynRef body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
+        SynRef body = abstract_expr_i(*raw_body, ctx);
         shadow_pop(bindings.len, ctx.env);
 
         Syntax syn = {

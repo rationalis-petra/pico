@@ -290,12 +290,20 @@ void add_integral_module(LocationSize sz, bool is_signed,
                 mv_string(")  [.< <] [.<= <=] [.> >] [.>= >=])"));
     compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
 
+    String ring_instance = string_ncat(&a, 5, 
+                mv_string("(def ring-"),
+                name_lower,
+                mv_string(" instance (Ring "),
+                name_upper,
+                mv_string(")  [.+ +] [.- -] [.* *] [.zero 0] [.one 1])"));
+    compile_str_toplevel(ring_instance, module, target, &point, &pi_point, region);
+
     String num_instance = string_ncat(&a, 5, 
                 mv_string("(def num-"),
                 name_lower,
                 mv_string(" instance (Num "),
                 name_upper,
-                mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0] [.one 1])"));
+                mv_string(") [./ /])"));
     compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
 
     /** TODO: add a tag/compiler attribute to designate this as a no-op copy */

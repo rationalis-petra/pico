@@ -109,7 +109,9 @@ void type_infer_expr(SynRef untyped, TypeEnv* env, TypeCheckContext ctx) {
 }
 
 void type_check_expr(SynRef untyped, PiType type, TypeEnv* env, TypeCheckContext ctx) {
-    type_check_i (untyped, &type, (Range){}, env, ctx);
+    PiType* owned_type = mem_alloc(sizeof(type), ctx.a);
+    *owned_type = copy_pi_type(type, ctx.pia);
+    type_check_i(untyped, owned_type, (Range){}, env, ctx);
     squash_types(untyped, env, ctx);
 }
 
@@ -195,6 +197,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
                 set_type(*aty, kind0, ctx.tape);
                 untyped.procedure.implicits.data[i].val = aty;
             }
+            type_var(cell.key, ann, env);
         }
         for (size_t i = 0; i < type->proc.args.len; i++) {
             PiType* ann = type->proc.args.data[i];
@@ -221,19 +224,37 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
                 set_type(*aty, kind0, ctx.tape);
                 untyped.procedure.args.data[i].val = aty;
             }
+            type_var(cell.key, ann, env);
+        }
+        if (untyped.procedure.is_recursive) {
+            type_var(untyped.procedure.recursive_sym, type, env);
         }
 
-        type_infer_i(ref, env, ctx);
-        PiType* inferred = get_type(ref, ctx.tape);
-        UnifyResult out = unify(type, inferred, uctx);
-        UnifyReason reason = {
-          .type = URCheck,
-          .check.range = get_range(untyped.procedure.body, ctx.tape).term,
-          .check.expected = type->proc.ret,
-          .check.actual = get_type(untyped.procedure.body, ctx.tape),
-        };
-        check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
+        set_type(ref, type, ctx.tape);
+        type_check_i(untyped.procedure.body, type->proc.ret, tysrc, env, ctx);
+        pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
+        if (untyped.procedure.is_recursive) {
+            pop_type(env);
+        }
         
+    } else if (type->sort == TAll && untyped.type == SAll) {
+        if (untyped.all.args.len != type->binder.vars.len) {
+            type_error_all_incorrect_num_vars(ref, type, ctx);
+        }
+
+        for (size_t i = 0; i < untyped.all.args.len; i++) {
+            Symbol arg = untyped.all.args.data[i];
+
+            PiType* arg_ty = mem_alloc(sizeof(PiType), ctx.a);
+            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+
+            type_qvar(arg, arg_ty, env);
+        }
+
+        set_type(ref, type, ctx.tape);
+        type_check_i(untyped.all.body, type->binder.body, tysrc, env, ctx); 
+        pop_types(env, untyped.all.args.len);
+
     } else {
         // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
@@ -412,6 +433,10 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             .current_module = type_env_module(env),
             .logger = ctx.logger,
         };
+
+        // TODO: This seems to be here so (let [fn all [A] ...]) works correctly
+        //       with substitution... We will want to change this when doing the
+        //       unification refactor (see unify.c)
         squash_type(all_ty, uctx);
         break;
     }

@@ -3290,8 +3290,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case STraitType: {
         // Generate trait type: first bind relevant variables
         address_bind_type(syn.trait.name, env);
-        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
-            address_bind_type(syn.bind_type.bindings.data[i], env);
+        for (size_t i = 0; i < syn.trait.vars.len; i++) {
+            address_bind_type(syn.trait.vars.data[i], env);
         }
 
         // First, malloc enough data for the array:

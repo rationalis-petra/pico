@@ -181,6 +181,24 @@ _Noreturn void type_error_proc_incorrect_num_args(SynRef ref, PiType *type,
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_all_incorrect_num_vars(SynRef ref, PiType *type,
+                                                  TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+    Syntax proc = get_syntax(ref, ctx.tape);
+
+    push_ptr(mv_cstr_doc("The all procedure here was previously inferred or declared to have", a), &nodes);
+    push_ptr(pretty_u64(type->binder.vars.len, a), &nodes);
+    push_ptr(mv_cstr_doc("type arguments, but it actually has", a), &nodes);
+    push_ptr(pretty_u64(proc.all.args.len, a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // Application
 //---------------------------------------------------------------------- 
 

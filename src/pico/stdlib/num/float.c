@@ -113,11 +113,27 @@ void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num,
     compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
     */
 
+    String ring_instance = string_ncat(a, 5, 
+                mv_string("(def ring-"),
+                name_lower,
+                mv_string(" instance (Ring "),
+                name_upper,
+                mv_string(")  [.+ +] [.- -] [.* *] [.zero 0.0] [.one 1.0])"));
+    compile_str_toplevel(ring_instance, module, target, &point, &pi_point, region);
+
     String num_instance = string_ncat(a, 5, 
                 mv_string("(def num-"),
                 name_lower,
                 mv_string(" instance (Num "),
                 name_upper,
-                mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0.0] [.one 1.0])"));
+                mv_string(") [./ /])"));
     compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
+
+    String real_instance = string_ncat(a, 5, 
+                mv_string("(def real-"),
+                name_lower,
+                mv_string(" instance (Real "),
+                name_upper,
+                mv_string(") [.sin sin] [.cos cos])"));
+    compile_str_toplevel(real_instance, module, target, &point, &pi_point, region);
 }

@@ -47,6 +47,9 @@ _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef pro
 _Noreturn void type_error_proc_incorrect_num_implicits(SynRef proc, PiType* type, TypeCheckContext ctx);
 _Noreturn void type_error_proc_incorrect_num_args(SynRef proc, PiType* type, TypeCheckContext ctx);
 
+// All
+_Noreturn void type_error_all_incorrect_num_vars(SynRef all, PiType* type, TypeCheckContext ctx);
+
 // Application and All Application
 typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
 

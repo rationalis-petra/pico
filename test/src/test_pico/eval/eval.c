@@ -65,6 +65,13 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("trait"))) {
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_trait_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
+        suite_end(log);
+    }
+
     if (suite_start(log, mv_string("modular"))) {
         RegionAllocator* subregion = make_subregion(region);
         run_pico_eval_modular_tests(log, module, env, target, subregion);
