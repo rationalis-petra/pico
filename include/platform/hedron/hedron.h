@@ -2,6 +2,7 @@
 #define __PLATFORM_HEDRON_HEDRON_H
 
 #include "data/option.h"
+#include "data/slice.h"
 #include "platform/memory/allocator.h"
 
 #include "pico/data/client/list.h"
@@ -36,7 +37,7 @@ void destroy_window_surface(HedronSurface*);
 
 uint32_t num_swapchain_images(HedronSurface*);
 
-HedronShaderModule* create_shader_module(U8PiList code);
+HedronShaderModule* create_shader_module(U8Slice code);
 void destroy_shader_module(HedronShaderModule* module);
 
 
@@ -115,17 +116,17 @@ typedef struct HedronDescriptorSet HedronDescriptorSet;
 typedef struct HedronDescriptorSetLayout HedronDescriptorSetLayout;
 typedef struct HedronDescriptorPool HedronDescriptorPool;
 
-PICO_LIST_HEADER_TYPE(HedronDescriptorPoolSize, HedronDescriptorPoolSize);
-PICO_LIST_HEADER_TYPE(DescriptorBinding, DescriptorBinding);
+SLICE_TYPE(HedronDescriptorPoolSize, HedronDescriptorPoolSize);
+SLICE_TYPE(DescriptorBinding, DescriptorBinding);
 
-HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList binddesc);
+HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingSlice binddesc);
 void destroy_descriptor_set_layout(HedronDescriptorSetLayout* layout);
 
-HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets);
+HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizeSlice sizes, uint32_t max_sets);
 void destroy_descriptor_pool(HedronDescriptorPool* pool);
 
 // Descriptor sets are allocated from the descriptor pool, so don't need to be deallocated
-AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* descriptor_set_layout, HedronDescriptorPool* pool);
+PtrSlice alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* descriptor_set_layout, HedronDescriptorPool* pool);
 
 typedef struct {
     HedronBuffer* buffer;
@@ -144,8 +145,8 @@ typedef enum : uint64_t {
     ImageInfo,
 } HedronDescriptorWriteType;
 
-PICO_LIST_HEADER_TYPE(HedronDescriptorBufferInfo, HedronDescriptorBufferInfo);
-PICO_LIST_HEADER_TYPE(HedronDescriptorImageInfo, HedronDescriptorImageInfo);
+SLICE_TYPE(HedronDescriptorBufferInfo, HedronDescriptorBufferInfo);
+SLICE_TYPE(HedronDescriptorImageInfo, HedronDescriptorImageInfo);
 
 typedef struct {
     HedronDescriptorSet* descriptor_set;
@@ -153,8 +154,8 @@ typedef struct {
 
     HedronDescriptorWriteType write_type;
     union {
-        HedronDescriptorBufferInfoPiList buffer_writes;
-        HedronDescriptorImageInfoPiList image_writes;
+        HedronDescriptorBufferInfoSlice buffer_writes;
+        HedronDescriptorImageInfoSlice image_writes;
     };
 } HedronWriteDescriptorSet;
 
@@ -162,10 +163,10 @@ typedef struct {
     HedronDescriptorBufferInfo buffer_info;
 } HedronCopyDescriptorSet;
 
-PICO_LIST_HEADER_TYPE(HedronWriteDescriptorSet, HedronWriteDescriptorSet);
-PICO_LIST_HEADER_TYPE(HedronCopyDescriptorSet, HedronCopyDescriptorSet);
+SLICE_TYPE(HedronWriteDescriptorSet, HedronWriteDescriptorSet);
+SLICE_TYPE(HedronCopyDescriptorSet, HedronCopyDescriptorSet);
 
-void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies);
+void update_descriptor_sets(HedronWriteDescriptorSetSlice writes, HedronCopyDescriptorSetSlice copies);
 
 // ----------------------------------------------------------------------------
 // 
@@ -195,18 +196,18 @@ typedef struct {
     uint32_t size;
 } PushConstantRange;
 
-PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
-PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
-PICO_LIST_HEADER_TYPE(PushConstantRange, PushConstantRange)
+SLICE_TYPE(BindingDescription, BindingDescription)
+SLICE_TYPE(AttributeDescription, AttributeDescription)
+SLICE_TYPE(PushConstantRange, PushConstantRange)
 
 typedef struct {
     /** TODO: determine which values can become Maybes? or have an
         empty/defalud structure? */
-    AddrPiList descriptor_set_layouts;
-    BindingDescriptionPiList bdesc;
-    AttributeDescriptionPiList adesc;
-    PushConstantRangePiList push_const_ranges;
-    AddrPiList shaders;
+    PtrSlice descriptor_set_layouts;
+    BindingDescriptionSlice bdesc;
+    AttributeDescriptionSlice adesc;
+    PushConstantRangeSlice push_const_ranges;
+    PtrSlice shaders;
     HedronSurface* surface;
 } PipelineInfo;
 
@@ -269,7 +270,7 @@ typedef struct {
 } SemaphoreStagePair;
 
 
-PICO_LIST_HEADER_TYPE(SemaphoreStagePair, SemaphoreStagePair);
+SLICE_TYPE(SemaphoreStagePair, SemaphoreStagePair);
 
 typedef enum : uint64_t {
     BUNone,
@@ -290,9 +291,9 @@ typedef struct {
     HedronImage* image;
 } ImageMemoryBarrier;
 
-PICO_LIST_HEADER_TYPE(MemoryBarrier, MemoryBarrier);
-PICO_LIST_HEADER_TYPE(BufferMemoryBarrier, BufferMemoryBarrier);
-PICO_LIST_HEADER_TYPE(ImageMemoryBarrier, ImageMemoryBarrier);
+SLICE_TYPE(MemoryBarrier, MemoryBarrier);
+SLICE_TYPE(BufferMemoryBarrier, BufferMemoryBarrier);
+SLICE_TYPE(ImageMemoryBarrier, ImageMemoryBarrier);
 
 HedronCommandPool* create_command_pool();
 void destroy_command_pool(HedronCommandPool* pool);
@@ -303,7 +304,7 @@ HedronCommandBuffer* create_command_buffer(HedronCommandPool* pool);
 void free_command_buffer(HedronCommandPool* pool, HedronCommandBuffer* buffer);
 
 // Command buffer usage
-void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals);
+void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairSlice wait, PtrSlice signals);
 void queue_present(HedronSurface* surface, HedronSemaphore* wait, uint32_t image_index);
 void queue_wait_idle();
 
@@ -319,9 +320,9 @@ void command_end_render_pass(HedronCommandBuffer* commands);
 void command_pipeline_barrier(HedronCommandBuffer *commands,
                               PipelineStage source_stage,
                               PipelineStage dest_stage,
-                              MemoryBarrierPiList memory_barriers,
-                              BufferMemoryBarrierPiList buffer_memory_barriers,
-                              ImageMemoryBarrierPiList image_memory_barriers);
+                              MemoryBarrierSlice memory_barriers,
+                              BufferMemoryBarrierSlice buffer_memory_barriers,
+                              ImageMemoryBarrierSlice image_memory_barriers);
 
 // Data transfer
 void command_copy_buffer_to_image(HedronCommandBuffer* commands, HedronBuffer* buffer, HedronImage* image, uint32_t width, uint32_t height);
@@ -332,7 +333,7 @@ void command_push_constants(HedronCommandBuffer* buffer, HedronPipeline *pipelin
 void command_bind_descriptor_set(HedronCommandBuffer* commands, HedronPipeline* pipeline, HedronDescriptorSet* descriptor_set);
 void command_bind_pipeline(HedronCommandBuffer* commands, HedronPipeline* pipeline);
 void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer);
-void command_bind_vertex_buffers(HedronCommandBuffer* commands, AddrPiList buffers);
+void command_bind_vertex_buffers(HedronCommandBuffer* commands, PtrSlice buffers);
 
 void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format);
 

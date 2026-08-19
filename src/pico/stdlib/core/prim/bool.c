@@ -95,6 +95,21 @@ void add_prim_bool_module(Assembler *ass, Target target, Module *num, RegionAllo
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
 
+    PiType type;
+    PiType type_val;
+    PiType* type_data = &type_val;
+    type.sort = TPrim;
+    type.prim = TFormer;
+
+    Segments null_segments = (Segments) {
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
+    };
+
+    type_val = (PiType) {.sort = TPrim, .prim = Bool};
+    name = string_to_name(mv_string("Bool"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
+
     typep = mk_binop_type(pia, Bool, Bool, Bool);
 
     build_comp_fn(ass, SetE, sz_8, a, &point);

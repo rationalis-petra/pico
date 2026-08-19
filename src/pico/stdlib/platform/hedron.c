@@ -109,7 +109,7 @@ void build_num_swapchain_images_fn(PiType* type, Assembler* ass, PiAllocator* pi
 }
 
 void build_create_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "code", mk_list_ctype(pia), mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "code", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
     convert_c_fn(create_shader_module, &fn_ctype, type, ass, a, point); 
 }
 
@@ -120,11 +120,11 @@ void build_destroy_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* p
 
 void build_create_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType arg_ctype = mk_struct_ctype(pia, 6,
-                                 "resource_describe", mk_list_ctype(pia),
-                                 "binder_describe", mk_list_ctype(pia),
-                                 "attrib_describe", mk_list_ctype(pia),
-                                 "push_constants", mk_list_ctype(pia),
-                                 "shaders", mk_list_ctype(pia),
+                                 "resource_describe", mk_slice_ctype(pia),
+                                 "binder_describe", mk_slice_ctype(pia),
+                                 "attrib_describe", mk_slice_ctype(pia),
+                                 "push_constants", mk_slice_ctype(pia),
+                                 "shaders", mk_slice_ctype(pia),
                                  "surface", mk_voidptr_ctype(pia));
     CType fn_ctype = mk_fn_ctype(pia, 1, "info", arg_ctype, mk_voidptr_ctype(pia));
     convert_c_fn(create_pipeline, &fn_ctype, type, ass, a, point); 
@@ -276,7 +276,7 @@ void build_destroy_sampler_fn(PiType* type, Assembler* ass, PiAllocator* pia, Al
 // ----------------------------------
 
 void build_create_descriptor_set_layout(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "binding_descriptions", mk_list_ctype(pia), mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "binding_descriptions", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
     convert_c_fn(create_descriptor_set_layout, &fn_ctype, type, ass, a, point); 
 }
 
@@ -286,7 +286,7 @@ void build_destroy_descriptor_set_layout(PiType* type, Assembler* ass, PiAllocat
 }
 
 void build_create_descriptor_pool(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 2, "sizes", mk_list_ctype(pia), "max-sets", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 2, "sizes", mk_slice_ctype(pia), "max-sets", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), mk_voidptr_ctype(pia));
     convert_c_fn(create_descriptor_pool, &fn_ctype, type, ass, a, point); 
 }
 
@@ -300,14 +300,14 @@ void build_alloc_descriptor_sets(PiType* type, Assembler* ass, PiAllocator* pia,
                                  "set_count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
                                  "descriptor_set_layouts", mk_voidptr_ctype(pia),
                                  "pool", mk_voidptr_ctype(pia),
-                                 mk_list_ctype(pia));
+                                 mk_slice_ctype(pia));
     convert_c_fn(alloc_descriptor_sets, &fn_ctype, type, ass, a, point); 
 }
 
 void build_update_descriptor_sets(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
-                                 "writes", mk_list_ctype(pia),
-                                 "copies", mk_list_ctype(pia),
+                                 "writes", mk_slice_ctype(pia),
+                                 "copies", mk_slice_ctype(pia),
                                  (CType){.sort = CSVoid});
                                  
     convert_c_fn(update_descriptor_sets, &fn_ctype, type, ass, a, point); 
@@ -348,8 +348,8 @@ void build_queue_submit_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
                                        "ptr", mk_voidptr_ctype(pia));
     CType fn_ctype = mk_fn_ctype(pia, 4, "buffer", mk_voidptr_ctype(pia),
                                  "fence", ptr_option,
-                                 "wait", mk_list_ctype(pia),
-                                 "signal", mk_list_ctype(pia),
+                                 "wait", mk_slice_ctype(pia),
+                                 "signal", mk_slice_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(queue_submit, &fn_ctype, type, ass, a, point); 
 }
@@ -403,9 +403,9 @@ void build_command_pipeline_barrier_fn(PiType* type, Assembler* ass, PiAllocator
                                  "commands", mk_voidptr_ctype(pia), 
                                  "source_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}), 
                                  "dest_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}) ,
-                                 "memory_barriers", mk_list_ctype(pia), 
-                                 "buffer_memory_barriers", mk_list_ctype(pia), 
-                                 "image_memory_barriers", mk_list_ctype(pia), 
+                                 "memory_barriers", mk_slice_ctype(pia), 
+                                 "buffer_memory_barriers", mk_slice_ctype(pia), 
+                                 "image_memory_barriers", mk_slice_ctype(pia), 
                                  (CType){.sort = CSVoid});
     convert_c_fn(command_pipeline_barrier, &fn_ctype, type, ass, a, point); 
 }
@@ -456,7 +456,7 @@ void build_command_bind_vertex_buffer_fn(PiType* type, Assembler* ass, PiAllocat
 
 void build_command_bind_vertex_buffers_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2, "command_buffer", mk_voidptr_ctype(pia),
-                                 "buffers", mk_list_ctype(pia),
+                                 "buffers", mk_slice_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(command_bind_vertex_buffers, &fn_ctype, type, ass, a, point); 
 }
@@ -832,8 +832,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                            "descriptor-set", descriptor_set_ty,
                            "descriptor-type", descriptor_type_ty,
                            "info", mk_enum_type(pia, 2, 
-                                                "buffer-info", 1, mk_app_type(pia, get_list_type(), descriptor_buffer_info_ty),
-                                                "image-info", 1, mk_app_type(pia, get_list_type(), descriptor_image_info_ty)));
+                                                "buffer-info", 1, mk_app_type(pia, get_slice_type(), descriptor_buffer_info_ty),
+                                                "image-info", 1, mk_app_type(pia, get_slice_type(), descriptor_image_info_ty)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     name = string_to_name(mv_string("DescriptorWrite"));
     add_def(module, name, type, &typep, null_segments, NULL);
@@ -914,11 +914,11 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
 
 
     typep = mk_struct_type(pia, 6,
-                           "descriptor-set-layouts", mk_app_type(pia, get_list_type(), descriptor_set_layout_ty),
-                           "binding-descriptions", mk_app_type(pia, get_list_type(), binder_desc_ty),
-                           "attribute-descriptions", mk_app_type(pia, get_list_type(), attribute_desc_ty),
-                           "push-constant-ranges", mk_app_type(pia, get_list_type(), push_const_range_ty),
-                           "shaders", mk_app_type(pia, get_list_type(), shader_module_ty),
+                           "descriptor-set-layouts", mk_app_type(pia, get_slice_type(), descriptor_set_layout_ty),
+                           "binding-descriptions", mk_app_type(pia, get_slice_type(), binder_desc_ty),
+                           "attribute-descriptions", mk_app_type(pia, get_slice_type(), attribute_desc_ty),
+                           "push-constant-ranges", mk_app_type(pia, get_slice_type(), push_const_range_ty),
+                           "shaders", mk_app_type(pia, get_slice_type(), shader_module_ty),
                            "surface", surface_ty);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     name = string_to_name(mv_string("PipelineInfo"));
@@ -1093,7 +1093,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     // Descriptor Sets
     // ----------------------------------
-    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), descriptor_binding_ty), descriptor_set_layout_ty);
+    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_slice_type(), descriptor_binding_ty), descriptor_set_layout_ty);
     build_create_descriptor_set_layout(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-descriptor-set-layout"));
     fn_segments.code = get_instructions(ass);
@@ -1109,7 +1109,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, mk_app_type(pia, get_list_type(), descriptor_pool_size_ty), mk_prim_type(pia, UInt_32), descriptor_pool_ty);
+    typep = mk_proc_type(pia, 2, mk_app_type(pia, get_slice_type(), descriptor_pool_size_ty), mk_prim_type(pia, UInt_32), descriptor_pool_ty);
     build_create_descriptor_pool(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-descriptor-pool"));
     fn_segments.code = get_instructions(ass);
@@ -1129,7 +1129,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          mk_prim_type(pia, UInt_32),
                          descriptor_set_layout_ty,
                          descriptor_pool_ty,
-                         mk_app_type(pia, get_list_type(), descriptor_set_ty));
+                         mk_app_type(pia, get_slice_type(), descriptor_set_ty));
     build_alloc_descriptor_sets(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("alloc-descriptor-sets"));
     fn_segments.code = get_instructions(ass);
@@ -1138,8 +1138,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2,
-                         mk_app_type(pia, get_list_type(), descriptor_write_ty),
-                         mk_app_type(pia, get_list_type(), descriptor_copy_ty),
+                         mk_app_type(pia, get_slice_type(), descriptor_write_ty),
+                         mk_app_type(pia, get_slice_type(), descriptor_copy_ty),
                          mk_prim_type(pia, Unit));
     build_update_descriptor_sets(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("update-descriptor-sets"));
@@ -1148,7 +1148,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), mk_prim_type(pia, UInt_8)), shader_module_ty);
+    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_slice_type(), mk_prim_type(pia, UInt_8)), shader_module_ty);
     build_create_shader_module_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-shader-module"));
     fn_segments.code = get_instructions(ass);
@@ -1215,12 +1215,11 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals) {
     typep = mk_proc_type(pia, 4, 
                          command_buffer_ty,
                          mk_app_type(pia, get_maybe_type(), fence_ty),
-                         mk_app_type(pia, get_list_type(), mk_app_type(pia, get_pair_type(), semaphore_ty, pipeline_stage_ty)), 
-                         mk_app_type(pia, get_list_type(), semaphore_ty),
+                         mk_app_type(pia, get_slice_type(), mk_app_type(pia, get_pair_type(), semaphore_ty, pipeline_stage_ty)), 
+                         mk_app_type(pia, get_slice_type(), semaphore_ty),
                          mk_prim_type(pia, Unit));
     build_queue_submit_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("queue-submit"));
@@ -1293,9 +1292,9 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          command_buffer_ty,
                          pipeline_stage_ty,
                          pipeline_stage_ty,
-                         mk_app_type(pia, get_list_type(), memory_barrier_ty),
-                         mk_app_type(pia, get_list_type(), buffer_memory_barrier_ty),
-                         mk_app_type(pia, get_list_type(), image_memory_barrier_ty),
+                         mk_app_type(pia, get_slice_type(), memory_barrier_ty),
+                         mk_app_type(pia, get_slice_type(), buffer_memory_barrier_ty),
+                         mk_app_type(pia, get_slice_type(), image_memory_barrier_ty),
                          mk_prim_type(pia, Unit));
     build_command_pipeline_barrier_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("command-pipeline-barrier"));
@@ -1355,7 +1354,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, command_buffer_ty, mk_app_type(pia, get_list_type(), buffer_ty), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, command_buffer_ty, mk_app_type(pia, get_slice_type(), buffer_ty), mk_prim_type(pia, Unit));
     build_command_bind_vertex_buffers_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("command-bind-vertex-buffers"));
     fn_segments.code = get_instructions(ass);

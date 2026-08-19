@@ -177,52 +177,8 @@ void add_prim_address_module(Assembler* ass, Module* prim, RegionAllocator* regi
         .data = mk_u8_array(0, &ra),
     };
 
-    type_val = (PiType) {.sort = TPrim, .prim = Bool};
-    name = string_to_name(mv_string("Bool"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
     type_val = (PiType) {.sort = TPrim, .prim = Address};
     name = string_to_name(mv_string("Address"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Int_64};
-    name = string_to_name(mv_string("I64"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Int_32};
-    name = string_to_name(mv_string("I32"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Int_16};
-    name = string_to_name(mv_string("I16"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Int_8};
-    name = string_to_name(mv_string("I8"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = UInt_64};
-    name = string_to_name(mv_string("U64"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = UInt_32};
-    name = string_to_name(mv_string("U32"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = UInt_16};
-    name = string_to_name(mv_string("U16"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = UInt_8};
-    name = string_to_name(mv_string("U8"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Float_32};
-    name = string_to_name(mv_string("F32"));
-    add_def(module, name, type, &type_data, null_segments, NULL);
-
-    type_val = (PiType) {.sort = TPrim, .prim = Float_64};
-    name = string_to_name(mv_string("F64"));
     add_def(module, name, type, &type_data, null_segments, NULL);
 
     // Unit value

@@ -50,7 +50,6 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    // TODO (FEAT): add/implement the following:
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
         "  [.data (slice.Slice A)]\n"
@@ -58,7 +57,13 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, region);
 
-    // TODO (BUG): the array should set the allocator
+    // TODO: replace list.len with list.capacity, and have slice intrinsicly be
+    //        only those elements that were instantiated
+    const char *view_slice_fn = 
+        "(def view-slice all [A] proc [(lst List A)]\n"
+        "  (struct (Slice A) [.addr lst.data.addr] [.len lst.len]))";
+    compile_toplevel(view_slice_fn, module, target, &point, &pi_point, region);
+
     const char *mk_list_fn = 
         "(def init all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
@@ -172,9 +177,8 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
 
     /**
-     *  Implementations for Abstractions
+     *  Implementations for Abstractions: 
      */
-
     const char *list_eq =
         "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"
         "  [.= proc [(l1 (List A)) (l2 (List A))] \n"

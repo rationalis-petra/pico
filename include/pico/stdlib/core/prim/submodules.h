@@ -6,9 +6,10 @@
 #include "pico/codegen/codegen.h"
 #include "pico/values/modular.h"
 
-void add_prim_integral_module(LocationSize sz, bool is_signed, Assembler* ass, Target target, Module* num, RegionAllocator* a);
-void add_prim_float_module(PrimType prim, Assembler* ass, Target target, Module* num, RegionAllocator* a);
-void add_prim_bool_module(Assembler *ass, Target target, Module *num, RegionAllocator* a);
-void add_prim_address_module(Assembler *ass, Module *num, RegionAllocator* a);
+void add_prim_integral_module(LocationSize sz, bool is_signed, Assembler* ass, Target target, Module* prim, RegionAllocator* a);
+void add_prim_float_module(PrimType type, Assembler* ass, Target target, Module* prim, RegionAllocator* a);
+void add_prim_bool_module(Assembler *ass, Target target, Module* prim, RegionAllocator* a);
+void add_prim_address_module(Assembler *ass, Module* prim, RegionAllocator* a);
+void add_prim_array_module(Assembler *ass, Module* prim, RegionAllocator* a);
 
 #endif

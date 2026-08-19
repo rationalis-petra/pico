@@ -182,6 +182,6 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(str_eql, module, target, &point, &pi_point, region);
 
     const char *str_eq =
-        "(def string-= instance (Eq String) [.= string=] [.!= proc [l r] bool.not (string= l r)] )\n";
+        "(def string-eq instance (Eq String) [.= string=] [.!= proc [l r] bool.not (string= l r)] )\n";
     compile_toplevel(str_eq, module, target, &point, &pi_point, region);
 }
