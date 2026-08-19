@@ -123,4 +123,21 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         bool expected = false;
         TEST_EQ("(id-eq (struct [.v :false]) (struct [.v :true]))");
     }
+
+    if (test_start(log, mv_string("instance-parent-inferred-for-local-variables"))) {
+        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])");
+        RUN("(def Rod Trait Eql [A] {.eql Eql A} [.less Proc [A A] Bool])");
+        RUN("(def eql-bool instance (Eql Bool)"
+            "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))])");
+        // TODO: If we replace rod-bool here with eql-bool (meaning we redefine
+        //       the above line), then there is an error because we overwrite
+        //       the above line but also it is our own parent slot...
+        RUN("(def rod-bool instance (Rod Bool)"
+            "  [.less proc [a b] (bool.and (bool.not a) b)])");
+        RUN("(def poly-eq all [A] proc {(eql (Eql A))} [(x A) (y A)] (eql.eql x y))");
+        RUN("(def uses-eq all [A] proc {(rod (Rod A))} [(x A) (y A)] (poly-eq x y))");
+
+        bool expected = false;
+        TEST_EQ("(uses-eq :false :true)");
+    }
 }

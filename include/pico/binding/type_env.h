@@ -27,16 +27,21 @@ typedef struct {
 
 typedef enum {
     IEAbsSymbol,
-    IESymbol,
+    IELocal,
     IENotFound,
     IEAmbiguous,
 } InstanceEntry_t;
 
 typedef struct {
+    PiType* head_type;
+    SymbolArray path;
+} LocalInstance;
+
+typedef struct {
     InstanceEntry_t type;
     union {
         AbsVariable abvar;
-        Symbol var;
+        LocalInstance local;
         // If ambiguous, return names/modules defining values.
         InstSrcArray ambiguous_sources;
     };

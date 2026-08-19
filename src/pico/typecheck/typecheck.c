@@ -2025,15 +2025,38 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
                 InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
                 switch (e.type) {
-                case IESymbol: {
+                case IELocal: {
                     SynRef new_impl = new_syntax(ctx.tape);
+                    PiType* current_type = e.local.head_type;
                     set_syntax(new_impl,
                                (Syntax){
                                    .type = SVariable,
-                                   .variable = e.var,
+                                   .variable = e.local.path.data[0],
                                },
                                ctx.tape);
-                    set_type(new_impl, arg_ty, ctx.tape);
+                    set_type(new_impl, current_type, ctx.tape);
+                    for (size_t i = 1; i < e.local.path.len; i++) {
+                        // If the path has len 1, then nothing changes.
+                        // Otherwise, we will start adding projections here.
+                        Symbol var = e.local.path.data[i];
+                        TraitInstance instance = current_type->instance;
+                        for (size_t i = 0; i < instance.implicit_fields.len; i++) {
+                            if (symbol_eq(var, instance.implicit_fields.data[i].key)) {
+                                current_type = instance.implicit_fields.data[i].val;
+                            }
+                        }
+
+                        SynRef old_impl = new_impl;
+                        new_impl = new_syntax(ctx.tape);
+                        set_syntax(new_impl,
+                                   (Syntax){
+                                       .type = SProjector,
+                                       .projector.val = old_impl,
+                                       .projector.field = var,
+                                   },
+                                   ctx.tape);
+                        set_type(new_impl, current_type, ctx.tape);
+                    }
                     push_syn(new_impl, &syn.application.implicits);
                     set_syntax(ref, syn, ctx.tape);
                     break;
@@ -2099,19 +2122,42 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
             switch (e.type) {
-            case IESymbol: {
-              SynRef new_impl = new_syntax(ctx.tape);
-              set_syntax(new_impl,
-                         (Syntax){
-                           .type = SVariable,
-                           .variable = e.var,
-                         },
-                         ctx.tape);
-              set_type(new_impl, arg_ty, ctx.tape);
-              push_syn(new_impl, &syn.all_application.implicits);
-              set_syntax(ref, syn, ctx.tape);
-              break;
-            }
+                case IELocal: {
+                    SynRef new_impl = new_syntax(ctx.tape);
+                    PiType* current_type = e.local.head_type;
+                    set_syntax(new_impl,
+                               (Syntax){
+                                   .type = SVariable,
+                                   .variable = e.local.path.data[0],
+                               },
+                               ctx.tape);
+                    set_type(new_impl, current_type, ctx.tape);
+                    for (size_t i = 1; i < e.local.path.len; i++) {
+                        // If the path has len 1, then nothing changes.
+                        // Otherwise, we will start adding projections here.
+                        Symbol var = e.local.path.data[i];
+                        TraitInstance instance = current_type->instance;
+                        for (size_t j = 0; j < instance.implicit_fields.len; j++) {
+                            if (symbol_eq(var, instance.implicit_fields.data[j].key)) {
+                                current_type = instance.implicit_fields.data[j].val;
+                            }
+                        }
+
+                        SynRef old_impl = new_impl;
+                        new_impl = new_syntax(ctx.tape);
+                        set_syntax(new_impl,
+                                   (Syntax){
+                                       .type = SProjector,
+                                       .projector.val = old_impl,
+                                       .projector.field = var,
+                                   },
+                                   ctx.tape);
+                        set_type(new_impl, current_type, ctx.tape);
+                    }
+                    push_syn(new_impl, &syn.all_application.implicits);
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
             case IEAbsSymbol: {
                 SynRef new_impl = new_syntax(ctx.tape);//mem_alloc(sizeof(Syntax), ctx.a);
                 set_syntax(new_impl,

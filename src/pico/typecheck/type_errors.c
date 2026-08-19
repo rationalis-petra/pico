@@ -581,9 +581,9 @@ _Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeC
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(3, a);
 
-    push_ptr(mv_cstr_doc("Attempting to create an instance with field ", a), &nodes);
+    push_ptr(mv_cstr_doc("Attempting to create an instance of a trait, but the field", a), &nodes);
     push_ptr(mk_paren_doc("'", "'.", mv_str_doc(view_symbol_string(name), a), a), &nodes);
-    push_ptr(mv_cstr_doc("However, the trait the instace is being made from does not have this field", a), &nodes);
+    push_ptr(mv_cstr_doc("is missing from the instance.", a), &nodes);
 
     PicoError err = {
         .range = range,
