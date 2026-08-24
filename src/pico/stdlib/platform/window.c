@@ -182,7 +182,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     // The window type is simple an opaque pointer (address)
     typep = mk_opaque_type(pia, "Window", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Window"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -190,7 +190,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     window_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyMap", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("KeyMap"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -198,7 +198,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     keymap_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyState", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("KeyState"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -223,7 +223,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
         "space", 0, "shift", 0, "enter", 0, "backspace", 0));
 
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("RawKey"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -251,7 +251,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
         0, "query", 0,
 
         "space", 0, "shift", 0, "enter", 0, "backspace", 0));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Key"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -266,14 +266,14 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
                          "keymap", 1, keymap_ty);
 
 
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Message"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
     window_message_ty = e->value;
 
-    typep = mk_proc_type(pia, 0, mk_app_type(pia, get_result_type(), mk_prim_type(pia, Unit), mk_prim_type(pia, Unit)));
+    typep = mk_proc_type(pia, 0, mk_type_app(pia, get_result_type(), mk_prim_type(pia, Unit), mk_prim_type(pia, Unit)));
     build_init_window_system_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("init"));
     fn_segments.code = get_instructions(ass);
@@ -313,7 +313,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_slice_type(), window_message_ty));
+    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_type_app(pia, get_slice_type(), window_message_ty));
     build_poll_events_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);

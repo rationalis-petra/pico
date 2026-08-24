@@ -272,6 +272,17 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void kind_tyformer_bad_arglist(RawTree raw, AbstractionICtx ctx) {
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_cstr_doc("The 'Kind' type former (Kind [Type Type ...] Type).", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("expects the parameter list to be a list enclosed with '[' and ']' .", ctx.gpa), &nodes);
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_hsep_doc(nodes, ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void import_key_malformed(RawTree raw, PiErrorPoint* point, Allocator* a) {
     PicoError err = {
         .range = raw.range,

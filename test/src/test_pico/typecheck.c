@@ -158,7 +158,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     if (test_start(log, mv_string("kinds-1"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
-        PiType ty = (PiType){.sort = TKind, .kind.nargs = 1};
+        PiType ty = *mk_type_kind(&pregion, 1, mk_type_type(&pregion), mk_type_type(&pregion));
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);

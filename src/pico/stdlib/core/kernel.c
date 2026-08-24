@@ -1,11 +1,7 @@
-#include <string.h>
-
 #include "platform/signals.h"
-#include "platform/machine_info.h"
 
 #include "components/pretty/string_printer.h"
 
-#include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core/kernel.h"
 
 static PiType* ptr_type;
@@ -303,23 +299,24 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string("Family"));
     add_def(module, name, type, &former, null_segments, NULL);
 
+    former = FKind;
+    name = string_to_name(mv_string("Kind"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
     former = FLiftCType;
     name = string_to_name(mv_string("LiftCType"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
-    // Types 
+    // Unitary/Primitive Types 
     // ------------------------------------------------------------------------
 
-    type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
-
-    type_val = type;
+    type = (PiType) {.sort = TSort};
+    type_val = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Type"));
     add_def(module, name, type, &type_data, null_segments, NULL);
 
+    type = (PiType) {.sort = TType};
     type_val = (PiType) {.sort = TPrim, .prim = Unit};
     name = string_to_name(mv_string("Unit"));
     add_def(module, name, type, &type_data, null_segments, NULL);
@@ -377,16 +374,14 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     // as some core types 
     {
         PiType *type_val;
-        SymbolPiList vars;
         ModuleEntry* e;
 
         // Ptr Type 
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-        type_val = mk_named_type(&pia, "Ptr", mk_type_family(&pia,
-                                                          vars,
-                                                          mk_prim_type(&pia, Address)));
+        type = *mk_type_kind(&pia, 1, mk_type_type(&pia), mk_type_type(&pia));
+        type_val = mk_named_type(&pia, "Ptr",
+                                 mk_type_family(&pia, 1,
+                                                "A", mk_type_type(&pia),
+                                                mk_prim_type(&pia, Address)));
         type_data = type_val;
         name = string_to_name(mv_string("Ptr"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -395,25 +390,21 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         ptr_type = e->value;
 
         // Allocator Type
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-
         PiType *alloc_fn_type = mk_proc_type(&pia, 2,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, UInt_64),
                          mk_prim_type(&pia, Address));
         PiType *realloc_fn_type = mk_proc_type(&pia, 3,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, Address),
                          mk_prim_type(&pia, UInt_64),
                          mk_prim_type(&pia, Address));
         PiType *free_fn_type = mk_proc_type(&pia, 2,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, Address),
                          mk_prim_type(&pia, Address));
         type_val = mk_named_type(&pia, "AllocVTable",
-                                 mk_type_family(&pia, vars,
+                                 mk_type_family(&pia, 1, "A", mk_type_type(&pia),
                                                 mk_struct_type(&pia, 3,
                                                                "alloc", alloc_fn_type,
                                                                "realloc", realloc_fn_type,
@@ -425,13 +416,14 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         allocator_vtable_type = e->value;
 
         // Allocator Type
-        type_val = mk_named_type(&pia, "Allocator", mk_sealed_type(&pia,
-                                                                1, "A", 0,
+        type_val = mk_named_type(&pia, "Allocator",
+                                 mk_sealed_type(&pia,
+                                                1, "A", 0,
                                                                 
-                                                      mk_struct_type(&pia, 2,
-                                                                     "vtable", mk_app_type(&pia, ptr_type, mk_app_type(&pia, allocator_vtable_type, mk_var_type(&pia, "A"))),
-                                                                     "context", mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")))));
-        type.kind.nargs = 0;
+                                                mk_struct_type(&pia, 2,
+                                                               "vtable", mk_type_app(&pia, ptr_type, mk_type_app(&pia, allocator_vtable_type, mk_var_type(&pia, "A"))),
+                                                               "context", mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")))));
+        type = (PiType){.sort = TType};
         type_data = type_val;
         name = string_to_name(mv_string("Allocator"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -441,13 +433,11 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
 
         // Slice Type 
         // Make a ptr
-        type.kind.nargs = 1;
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
+        type = *mk_type_kind(&pia, 1, mk_type_type(&pia), mk_type_type(&pia));
         type_val = 
             mk_named_type(&pia, "Slice",
                           mk_type_family(&pia,
-                                         vars,
+                                         1, "A", mk_type_type(&pia),
                                          mk_struct_type(&pia, 2,
                                                         "addr", mk_prim_type(&pia, Address),
                                                         "len", mk_prim_type(&pia, UInt_64))));
@@ -460,15 +450,12 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
 
         // List Type 
         // Make a ptr
-        type.kind.nargs = 1;
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
         type_val = 
             mk_named_type(&pia, "List",
-                          mk_type_family(&pia,
-                                         vars,
+                          mk_type_family(&pia, 1,
+                                         "A", mk_type_type(&pia),
                                          mk_struct_type(&pia, 3,
-                                                        "data", mk_app_type(&pia, slice_type, mk_var_type(&pia, "A")),
+                                                        "data", mk_type_app(&pia, slice_type, mk_var_type(&pia, "A")),
                                                         "len", mk_prim_type(&pia, UInt_64),
                                                         "gpa", copy_pi_type_p(allocator_type, &pia))));
         type_data = type_val;
@@ -479,11 +466,8 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         list_type = e->value;
         
         // Maybe Type 
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-        type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia,
-                                                      vars,
+        type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia, 1,
+                                                               "A", mk_type_type(&pia),
                                                       mk_enum_type(&pia, 2,
                                                                    "some", 1, mk_var_type(&pia, "A"),
                                                                    "none", 0)));
@@ -494,17 +478,18 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         e = get_def_internal(name, module);
         maybe_type = e->value;
 
-        // Either Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        push_sym(string_to_symbol(mv_string("B")), &vars);
-        type.kind.nargs = 2;
+        // --------------------------------------------------
+        //   Kind [Type Type] Type
+        // --------------------------------------------------
 
-        type_val = mk_named_type(&pia, "Either", mk_type_family(&pia,
-                                                             vars,
-                                                             mk_enum_type(&pia, 2,
-                                                                          "left", 1, mk_var_type(&pia, "A"),
-                                                                          "right", 1, mk_var_type(&pia, "B"))));
+        // Either Type 
+        type = *mk_type_kind(&pia, 2, mk_type_type(&pia), mk_type_type(&pia), mk_type_type(&pia));
+        type_val = mk_named_type(&pia, "Either",
+                                 mk_type_family(&pia, 2,
+                                                "A", mk_type_type(&pia), "B", mk_type_type(&pia), 
+                                                mk_enum_type(&pia, 2,
+                                                             "left", 1, mk_var_type(&pia, "A"),
+                                                             "right", 1, mk_var_type(&pia, "B"))));
         type_data = type_val;
         name = string_to_name(mv_string("Either"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -512,17 +497,13 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         e = get_def_internal(name, module);
         either_type = e->value;
 
-        // Result Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("Value")), &vars);
-        push_sym(string_to_symbol(mv_string("Error")), &vars);
-        type.kind.nargs = 2;
-
-        type_val = mk_named_type(&pia, "Result", mk_type_family(&pia,
-                                                             vars,
-                                                             mk_enum_type(&pia, 2,
-                                                                          "ok", 1, mk_var_type(&pia, "Value"),
-                                                                          "error", 1, mk_var_type(&pia, "Error"))));
+        // Result Type
+        type_val = mk_named_type(&pia, "Result",
+                                 mk_type_family(&pia, 2,
+                                                "Value", mk_type_type(&pia), "Error", mk_type_type(&pia), 
+                                                mk_enum_type(&pia, 2,
+                                                             "ok", 1, mk_var_type(&pia, "Value"),
+                                                             "error", 1, mk_var_type(&pia, "Error"))));
         type_data = type_val;
         name = string_to_name(mv_string("Result"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -531,16 +512,12 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         result_type = e->value;
 
         // Pair Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        push_sym(string_to_symbol(mv_string("B")), &vars);
-        type.kind.nargs = 2;
-
-        type_val = mk_named_type(&pia, "Pair", mk_type_family(&pia,
-                                                      vars,
-                                                      mk_struct_type(&pia, 2,
-                                                                   "_1", mk_var_type(&pia, "A"),
-                                                                   "_2", mk_var_type(&pia, "B"))));
+        type_val = mk_named_type(&pia, "Pair",
+                                 mk_type_family(&pia, 2,
+                                                "A", mk_type_type(&pia), "B", mk_type_type(&pia), 
+                                                mk_struct_type(&pia, 2,
+                                                               "_1", mk_var_type(&pia, "A"),
+                                                               "_2", mk_var_type(&pia, "B"))));
         type_data = type_val;
         name = string_to_name(mv_string("Pair"));
         add_def(module, name, type, &type_data, null_segments, NULL);

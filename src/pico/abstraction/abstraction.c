@@ -367,10 +367,11 @@ bool get_name_list(NameArray* arr, RawTree nodes, Allocator* a) {
     return true;
 }
 
-Result get_annotated_symbol_list(SymPtrAMap *args, RawTree list, AbstractionICtx ctx) {
+Result get_annotated_symbol_list(SymPtrAMap* args, RawTree list, AbstractionICtx ctx) {
     Result error_result = {.type = Err, .error_message = mv_string("Malformed proc argument list.")};
     if (list.type != RawBranch) { return error_result; }
 
+    *args = mk_sym_ptr_amap(list.branch.nodes.len, ctx.gpa);
     for (size_t i = 0; i < list.branch.nodes.len; i++) {
         RawTree annotation = list.branch.nodes.data[i];
         if (annotation.type == RawAtom) {
@@ -489,8 +490,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymPtrAMap implicits = mk_sym_ptr_amap(0, a);
-        SymPtrAMap arguments = mk_sym_ptr_amap(8, a);
+        SymPtrAMap implicits = {};
+        SymPtrAMap arguments = {};
 
         size_t args_index = 1;
         if (raw.branch.nodes.data[args_index].type == RawBranch
@@ -561,21 +562,21 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray arguments;
-        if (!get_symbol_list(&arguments, raw.branch.nodes.data[1], a)) {
+        SymPtrAMap arguments;
+        Result ares = get_annotated_symbol_list(&arguments, raw.branch.nodes.data[1], ctx);
+        if (ares.type != Ok) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mv_cstr_doc("all term former requires first arguments to be a symbol-list!", a);
             throw_pi_error(ctx.point, err);
         }
 
-        shadow_vars(arguments, ctx.env);
-
-        RawTree* raw_term;
-        if (raw.branch.nodes.len == 3) {
-            raw_term = &raw.branch.nodes.data[2];
-        } else {
-            raw_term = raw_slice(&raw, 2, ctx.pia);
+        for (size_t i = 0; i < arguments.len; i++) {
+            shadow_var(arguments.data[i].key, ctx.env);
         }
+
+        RawTree* raw_term = (raw.branch.nodes.len == 3)
+            ? &raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, ctx.pia);
         SynRef body = abstract_expr_i(*raw_term, ctx);
 
         Syntax syn = {
@@ -1096,7 +1097,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
     }
     case FInstance: {
         SymbolArray params = mk_symbol_array(0, a);
-        SymPtrAMap implicits = mk_sym_ptr_amap(0, a);
+        SymPtrAMap implicits = {};
         SynRef constraint;
 
         size_t start_idx = 1;
@@ -1128,11 +1129,16 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         default: panic(mv_string("Invalid hint!"));
         }
 
-        parse_implicits:
+        parse_implicits: {
+            Result ires = get_annotated_symbol_list(&implicits, current, ctx);
+            if (ires.type != Ok) {
+                err.range = current.range;
+                err.message = mv_str_doc(ires.error_message, ctx.gpa);
+                throw_pi_error(ctx.point, err);
+            }
 
-        get_annotated_symbol_list(&implicits, current, ctx);
-
-        current = raw.branch.nodes.data[++start_idx];
+            current = raw.branch.nodes.data[++start_idx];
+        }
 
         parse_constraint:
 
@@ -1476,7 +1482,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             }
             
             size_t index = 1;
-            SymPtrAMap arguments = mk_sym_ptr_amap(8, a);
+            SymPtrAMap arguments = {};
             if (is_special(label_expr->branch.nodes.data[index])) {
                 Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], ctx);
                 if (args_out.type == Err) {
@@ -2304,11 +2310,12 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         Symbol name = rname->atom.symbol;
         
         RawTree raw_vars = raw.branch.nodes.data[2];
-        SymbolArray vars;
+        SymPtrAMap vars = {};
 
-        if (!get_symbol_list(&vars, raw_vars, a)) {
+        Result pres = get_annotated_symbol_list(&vars, raw_vars, ctx);
+        if (pres.type != Ok) {
             err.range = raw_vars.range;
-            err.message = mv_cstr_doc("Malformed Trait parameter list.", a);
+            err.message = mv_str_doc(pres.error_message, ctx.gpa);
             throw_pi_error(ctx.point, err);
         }
 
@@ -2371,14 +2378,16 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray vars;
-        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
+        SymPtrAMap  vars;
+        if (get_annotated_symbol_list(&vars, raw.branch.nodes.data[1], ctx).type == Err) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mk_cstr_doc("All argument list malformed", a);
             throw_pi_error(ctx.point, err);
         }
 
-        shadow_vars(vars, ctx.env);
+        for (size_t i = 0; i < vars.len; i++) {
+            shadow_var(vars.data[i].key, ctx.env);
+        }
 
         RawTree* raw_term;
         if (raw.branch.nodes.len == 3) {
@@ -2454,14 +2463,17 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray vars;
-        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
-            err.range = raw.range;
-            err.message = mk_cstr_doc("All argument list malformed", a);
+        SymPtrAMap vars;
+        Result vres = get_annotated_symbol_list(&vars, raw.branch.nodes.data[1], ctx);
+        if (vres.type == Err) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_str_doc(vres.error_message, ctx.gpa);
             throw_pi_error(ctx.point, err);
         }
 
-        shadow_vars(vars, ctx.env);
+        for (size_t i = 0; i < vars.len; i++) {
+            shadow_var(vars.data[i].key, ctx.env);
+        }
 
         RawTree* raw_term = (raw.branch.nodes.len == 3)
             ? &raw.branch.nodes.data[2]
@@ -2474,6 +2486,41 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             .type = STypeFamily,
             .bind_type.bindings = vars,
             .bind_type.body = body,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FKind: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("Kind term former requires at least 2 arguments!", a);
+            throw_pi_error(ctx.point, err);
+        }
+
+        RawTree raw_args = raw.branch.nodes.data[1];
+        if (raw_args.type != RawBranch || raw_args.branch.hint != HSpecial) {
+          kind_tyformer_bad_arglist(raw_args, ctx);
+        }
+        
+        SynArray params = mk_syn_array(raw_args.branch.nodes.len, a);
+
+        for (size_t i = 0; i < raw_args.branch.nodes.len; i++) {
+          SynRef arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], ctx);
+          push_syn(arg_ty, &params);
+        }
+
+        RawTree* raw_term = (raw.branch.nodes.len == 3)
+            ? &raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, ctx.pia);
+        
+        SynRef body = abstract_expr_i(*raw_term, ctx);
+
+        Syntax syn = {
+            .type = SKind,
+            .kind_type.params = params,
+            .kind_type.body = body,
         };
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
@@ -3606,7 +3653,7 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
                 Syntax syn = {
                     .type = SAbsVariable,
                     .abvar.index = 0,
-                    .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                    .abvar.value = is_sort_or_kind(e->type) ? &e->value : e->value,
                     .abvar.type = &e->type,
                     .abvar.symbol = msym->atom.symbol,
                 };

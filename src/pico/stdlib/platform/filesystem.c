@@ -178,7 +178,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     };
 
     typep = mk_opaque_type(pia, "File", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("File"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -190,7 +190,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
                       mk_enum_type(pia, 5, "does-not-exist", 0,
                                    "already-exists", 0, "permission-denied", 0,
                                    "file-in-use", 0, "invalid-argument", 0));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("FileError"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -198,7 +198,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     file_err_ty = e->value;
 
     typep = mk_named_type(pia, "Mode", mk_enum_type(pia, 3, "read", 0, "write", 0, "read-write", 0, "append", 0, "read-append", 0));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Mode"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -223,7 +223,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
 
     typep = mk_proc_type(pia, 2, mk_string_type(pia),
                          file_mode_ty,
-                         mk_app_type(pia, get_result_type(), file_ty, file_err_ty));
+                         mk_type_app(pia, get_result_type(), file_ty, file_err_ty));
     build_open_file_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("open-file"));
     fn_segments.code = get_instructions(ass);
@@ -250,8 +250,8 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     PiType* u64 = mk_prim_type(pia, UInt_64);
     PiType* u8 = mk_prim_type(pia, UInt_8);
     typep = mk_proc_type(pia, 2, copy_pi_type_p(file_ty, pia),
-                         mk_app_type(pia, get_maybe_type(), u64),
-                         mk_app_type(pia, get_list_type(), u8));
+                         mk_type_app(pia, get_maybe_type(), u64),
+                         mk_type_app(pia, get_list_type(), u8));
     build_read_chunk_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("read-chunk"));
     fn_segments.code = get_instructions(ass);
@@ -269,7 +269,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2, copy_pi_type_p(file_ty, pia),
-                         mk_app_type(pia, get_list_type(), u8),
+                         mk_type_app(pia, get_list_type(), u8),
                          mk_prim_type(pia, Unit));
     build_write_chunk_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("write-chunk"));

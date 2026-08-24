@@ -344,7 +344,9 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
 
       SymbolArray types = mk_symbol_array(inner_type->binder.vars.len, &aa);
       for (size_t i = 0; i < inner_type->binder.vars.len; i++) {
-          push_symbol(inner_type->binder.vars.data[i], &types);
+          // TODO (FEATURE/BUG): Add support for Higher Kinded Types where the
+          // sizeof the type is dependent on the size of the argument.
+          push_symbol(inner_type->binder.vars.data[i].key, &types);
       }
 
       // Source offset: we push 3 values. Combined with the return address, this means
@@ -648,7 +650,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Procedures (inc. polymorphic procedures), Types are passed by reference (i.e. they are addresses). 
             // Dynamic Vars and instances pby value, but are guaranteed to take up 64 bits.
-            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll
+                || indistinct_type.sort == TType || indistinct_type.sort == TKind
                 || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
 
@@ -707,8 +710,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         case ANotFound: {
             PtrArray nodes = mk_ptr_array(2, a);
-            push_ptr(mk_str_doc(view_symbol_string(syn.variable), a), &nodes);
             push_ptr(mv_cstr_doc("Couldn't find variable during codegen: ", a), &nodes);
+            push_ptr(mk_str_doc(view_symbol_string(syn.variable), a), &nodes);
             throw_error(point, mv_sep_doc(nodes, a));
             break;
         }
@@ -937,10 +940,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
          */
         size_t static_arg_size = 2 * ADDRESS_SIZE;
 
-        SymbolPiList type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
+        SymAddrPiAMap type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
         SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
         for (size_t i = 0; i < type_vars.len; i++) {
-            push_symbol(type_vars.data[i], &ctype_vars);
+            push_symbol(type_vars.data[i].key, &ctype_vars);
         }
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
             PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
@@ -1665,19 +1668,24 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
        *  These are functions which take in a set of types and implicits,
        *  returning a new instance. Parametric instance functions are then
        *  instantiated by the type-checker at compile-time.
-       * 
+       *
        *  In order to preserve the calling convention of instances, a lookup
        *  buffer/table is used, with the addresses of the relevant 'proc's in
        *  the code for the instance. Before an instance function is called,
        *  these addresses are replaced with wrappers which transparently pass
        *  through their arguments while instantiating the type/instance
        *  arguments for the instance, i.e. they form a sort of closure.
-       * 
-       *  Note/TODO: usage of local functions in this context won't work well? 
+       *
+       *  Note/TODO: usage of local functions in this context won't work well?
        *   How to fix local functinos...
        *   - Make them local state and therad through
-       *   - 
+       *   -
        * OR Just monomorphize...
+       * 
+       * TODO: Recently added higher kinds to the typechecker, for now, codegen
+       * needs to check that any instances only supply kinds whose size does NOT
+       * depend on their parameters.
+       * 
        */
 
         if (syn.instance.params.len > 0) {
@@ -3215,15 +3223,23 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SAllType:
         // Forall type structure: (array symbol) body
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
-            address_bind_type(syn.bind_type.bindings.data[i], env);
+            address_bind_type(syn.bind_type.bindings.data[i].key, env);
+        }
+        SymbolArray syms = mk_symbol_array(syn.bind_type.bindings.len, a);
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            SymPtrCell cell = syn.bind_type.bindings.data[i];
+            push_symbol(cell.key, &syms);
+            generate_i(*(SynRef*)cell.val, env, ictx);
         }
         generate_i(syn.bind_type.body, env, ictx);
-        gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
+
+        gen_mk_forall_ty(syms, ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE * syn.bind_type.bindings.len);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SSealedType: {
         for (size_t i = 0; i < syn.sealed_type.vars.len; i++) {
-            address_bind_type(syn.bind_type.bindings.data[i], env);
+            address_bind_type(syn.bind_type.bindings.data[i].key, env);
         }
 
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.sealed_type.implicits.len * ADDRESS_SIZE), ass, a, point);
@@ -3260,15 +3276,30 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
-    case STypeFamily:
+    case STypeFamily: {
         // Family type structure: (array symbol) body
+        SymbolArray syms = mk_symbol_array(syn.bind_type.bindings.len, a);
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
-            address_bind_type(syn.bind_type.bindings.data[i], env);
+            SymPtrCell cell = syn.bind_type.bindings.data[i];
+            address_bind_type(cell.key, env);
+            push_symbol(cell.key, &syms);
+            generate_i(*(SynRef*)cell.val, env, ictx);
         }
         generate_i(syn.bind_type.body, env, ictx);
-        gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
+        gen_mk_fam_ty(syms, ass, a, point);
+        data_stack_shrink(env, syn.bind_type.bindings.len * ADDRESS_SIZE);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
+    }
+    case SKind: {
+        for (size_t i = 0; i < syn.kind_type.params.len; i++) {
+            generate_i(syn.kind_type.params.data[i], env, ictx);
+        }
+        generate_i(syn.kind_type.body, env, ictx);
+        gen_mk_kind_ty(syn.kind_type.params.len, ass, a, point);
+        data_stack_shrink(env, syn.kind_type.params.len * ADDRESS_SIZE);
+        break;
+    }
     case SLiftCType: {
         generate_i(syn.c_type, env, ictx);
         gen_mk_c_ty(ass, a, point);
@@ -3298,7 +3329,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         address_pop(env);
         break;
     }
-    case SDistinctType:
+    case SDistinctType: {
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.did), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.name), ass, a, point);
@@ -3311,7 +3342,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         data_stack_shrink(env, sizeof(Symbol));
         address_pop(env);
         break;
-    case SOpaqueType:
+    }
+    case SOpaqueType: {
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.did), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.name), ass, a, point);
@@ -3324,11 +3356,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         data_stack_shrink(env, sizeof(Symbol));
         address_pop(env);
         break;
+    }
     case STraitType: {
         // Generate trait type: first bind relevant variables
         address_bind_type(syn.trait.name, env);
         for (size_t i = 0; i < syn.trait.vars.len; i++) {
-            address_bind_type(syn.trait.vars.data[i], env);
+            address_bind_type(syn.trait.vars.data[i].key, env);
         }
 
         // First, malloc enough data for the array:
@@ -3390,7 +3423,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         data_stack_shrink(env, ADDRESS_SIZE);
 
         // Finally, generate function call to make type
-        gen_mk_trait_ty(syn.trait.name, syn.trait.vars, reg(RAX, sz_64),
+        SymbolArray arr = mk_symbol_array(syn.trait.vars.len, a);
+        for (size_t i = 0; i < syn.trait.vars.len; i++) {
+            push_symbol(syn.trait.vars.data[i].key, &arr);
+        }
+        gen_mk_trait_ty(syn.trait.name, arr, reg(RAX, sz_64),
                         imm32(syn.trait.implicit_fields.len), reg(R11, sz_64),
                         imm32(syn.trait.fields.len), reg(RAX, sz_64),
                         ass, a, point);
@@ -3699,9 +3736,11 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
                 .proc.ret = old_type->proc.ret,
             };
             PiType* all_type = mem_alloc(sizeof(PiType), a);
-            SymbolPiList vars = mk_sym_list(iargs.implicits->len, ictx.pia);
+            SymAddrPiAMap vars = mk_sym_addr_piamap(iargs.implicits->len, ictx.pia);
             for (size_t i = 0; i < iargs.types->len; i++) {
-                push_sym(iargs.types->data[i], &vars);
+                PiType* sort = mem_alloc(sizeof(PiType), a);
+                sort->sort = TType;
+                sym_addr_insert(iargs.types->data[i], sort, &vars);
             }
             *all_type = (PiType) {
                 .sort = TAll,
@@ -3817,7 +3856,11 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
         target.target = target.code_aux;
         ictx.target = target;
 
-        generate_polymorphic(syn.all.args, syn.all.body, env, ictx);
+        SymbolArray arr = mk_symbol_array(syn.all.args.len, ictx.a);
+        for (size_t i = 0; i < syn.all.args.len; i++) {
+            push_symbol(syn.all.args.data[i].key, &arr);
+        }
+        generate_polymorphic(arr, syn.all.body, env, ictx);
         break;
     }
     case SInstance: {

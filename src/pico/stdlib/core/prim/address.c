@@ -11,8 +11,8 @@
 PiType build_store_fn_ty(PiAllocator* pia) {
     PiType* proc_ty  = mk_proc_type(pia, 2, mk_prim_type(pia, Address), mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
 
-    SymbolPiList types = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &types);
+    SymAddrPiAMap types = mk_sym_addr_piamap(1, pia);
+    sym_addr_insert(string_to_symbol(mv_string("A")), mk_type_type(pia), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -68,8 +68,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType build_load_fn_ty(PiAllocator* pia) {
     PiType* proc_ty = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_var_type(pia, "A"));
 
-    SymbolPiList types = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &types);
+    SymAddrPiAMap types = mk_sym_addr_piamap(1, pia);
+    sym_addr_insert(string_to_symbol(mv_string("A")), mk_type_type(pia), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }

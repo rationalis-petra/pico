@@ -7,7 +7,7 @@
 
 // ---------------------------------------------------------------------- 
 //
-//                              Typechecking  
+//                              Typecheck/ing  
 //
 // ----------------------------------------------------------------------
 
@@ -99,7 +99,12 @@ _Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstS
 
 // Type Formers
 _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext ctx);
+_Noreturn void type_error_kind_must_have_args(SynRef kind, TypeCheckContext ctx);
 _Noreturn void type_error_named_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_distinct_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_opaque_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_trait_param_not_type(SynRef trait, size_t idx, TypeCheckContext ctx);
+
 
 
 // ---------------------------------------------------------------------- 

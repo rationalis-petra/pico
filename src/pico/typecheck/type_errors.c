@@ -323,7 +323,7 @@ _Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, SynRef re
     push_ptr(mv_cstr_doc("Typechecking error: When applying an all with type", a), &nodes);
     push_ptr(pretty_type(fn_ty, default_ptp, a), &nodes);
     push_ptr(mv_cstr_doc("not all types were able to be deduced. In particular, the type of ", a), &nodes);
-    push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(fn_ty->binder.vars.data[arg_idx]), a), a), &nodes);
+    push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(fn_ty->binder.vars.data[arg_idx].key), a), a), &nodes);
     push_ptr(mv_cstr_doc("is ambiguous.", a), &nodes);
 
     PicoError err = {
@@ -511,7 +511,27 @@ _Noreturn void type_error_match_missing_variants(PiType* type, SynRef match, U8A
 }
 
 // Struct
-_Noreturn void type_error_struct_invalid_type(PiType *type, SynRef strct, TypeCheckContext ctx); 
+_Noreturn void type_error_struct_invalid_type(PiType *type, SynRef strct, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PicoError err = {.range = get_range(strct, ctx.tape).term};
+    if (type->sort == TDistinct) {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_cstr_doc(
+                             "Attempting to create a structure "
+                             "based off of a distinct type. "
+                             "Note that values of opaque types can only be "
+                             "created in the module that the opaque type is defined."
+                             , a), &nodes);
+        push_ptr(pretty_type(type, default_ptp, a), &nodes);
+        err.message = mv_sep_doc(nodes, a);
+    } else {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
+        push_ptr(pretty_type(type, default_ptp, a), &nodes);
+        err.message = mv_sep_doc(nodes, a);
+    }
+    throw_pi_error(ctx.point, err);
+}
 _Noreturn void type_error_struct_missing_field(PiType* type, SynRef strct, TypeCheckContext ctx);
 _Noreturn void type_error_struct_dupliate_field(PiType* type, SynRef strct, TypeCheckContext ctx);
 _Noreturn void type_error_struct_extra_field(PiType* type, SynRef strct, TypeCheckContext ctx);
@@ -654,6 +674,19 @@ _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext 
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_kind_must_have_args(SynRef kind, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    const char *c_str =
+        "Attempting to form a Kind with no type parameters.\n"
+        "Kinds families require at least one type parameter.";
+
+    PicoError err = {
+        .range = get_range(kind, ctx.tape).term,
+        .message = mv_cstr_doc(c_str, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void type_error_named_must_have_type(SynRef ref, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
 
@@ -668,6 +701,62 @@ _Noreturn void type_error_named_must_have_type(SynRef ref, TypeCheckContext ctx)
 
     PicoError err = {
         .range = get_range(named.named_type.body, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_distinct_must_have_type(SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+
+    Syntax named = get_syntax(ref, ctx.tape);
+    PiType* bad = get_type(named.named_type.body, ctx.tape);
+
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Attempting to creade a distinct type, however, the value that is being made distinct", a), &nodes);
+    push_ptr(mv_cstr_doc("is not a Type or Type Family, but instead has type:", a), &nodes);
+    push_ptr(pretty_type(bad, default_ptp, ctx.a), &nodes);
+
+
+    PicoError err = {
+        .range = get_range(named.named_type.body, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_opaque_must_have_type(SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+
+    Syntax named = get_syntax(ref, ctx.tape);
+    PiType* bad = get_type(named.named_type.body, ctx.tape);
+
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Attempting to creade an opaque type, however, the value that is being made opaque", a), &nodes);
+    push_ptr(mv_cstr_doc("is not a Type or Type Family, but instead has type:", a), &nodes);
+    push_ptr(pretty_type(bad, default_ptp, ctx.a), &nodes);
+
+
+    PicoError err = {
+        .range = get_range(named.named_type.body, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_trait_param_not_type(SynRef ref, size_t idx, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Creating a Trait Type, but the parameter at position", a), &nodes);
+    push_ptr(pretty_u64(idx, a), &nodes);
+    push_ptr(mv_cstr_doc("has a value type rather than a kind.", a), &nodes);
+
+    Syntax trait = get_syntax(ref, ctx.tape);
+    SymPtrCell cell = trait.trait.vars.data[idx];
+    SynRef* param_ref = cell.val;
+    PicoError err = {
+        .range = get_range(*param_ref, ctx.tape).term,
         .message = mv_hsep_doc(nodes, a),
     };
     throw_pi_error(ctx.point, err);

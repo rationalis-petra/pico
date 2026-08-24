@@ -30,7 +30,6 @@ Module* type_env_module(TypeEnv* env) {
 }
 
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
-    static PiType kind = {.sort = TKind, .kind.nargs = 0};
     // Search locally
     TypeEntry out;
     Local* lresult = sym_local_alookup(s, env->locals);
@@ -38,7 +37,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.type = TELocal;
         if (lresult->sort == LQVar) {
             out.is_module = false;
-            out.ptype = &kind;
+            out.ptype = lresult->kind;
             out.value = lresult->type;
             return out;
         } else if (lresult -> sort == LVar) {
@@ -58,7 +57,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.is_module = e.is_module;
         out.ptype = e.type;
         if (!e.is_module) {
-            out.value = (e.type->sort == TKind || e.type->sort == TConstraint) ? e.value : NULL;
+            out.value = is_sort_or_kind(*e.type) ? e.value : NULL;
         } else {
             out.module = e.value;
         }
@@ -284,8 +283,8 @@ void type_var (Symbol var, PiType* type, TypeEnv* env) {
     sym_local_bind(var, (Local){.sort = LVar, .type = type}, &env->locals);
 }
 
-void type_qvar (Symbol var, PiType* type, TypeEnv* env) {
-    sym_local_bind(var, (Local){.sort = LQVar, .type = type}, &env->locals);
+void type_qvar (Symbol var, PiType* type, PiType* kind, TypeEnv* env) {
+    sym_local_bind(var, (Local){.sort = LQVar, .type = type, .kind = kind}, &env->locals);
 }
 
 void pop_type(TypeEnv* env) {

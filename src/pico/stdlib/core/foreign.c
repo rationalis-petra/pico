@@ -172,7 +172,7 @@ void add_foreign_module(Assembler* ass, Module* lang, RegionAllocator* region) {
 
     // C Type Type
     {
-        type = (PiType) {.sort = TKind, .kind.nargs= 0};
+        type = (PiType) {.sort = TType};
         PiType* type_data;
         PiType* prim_sort_type = mk_enum_type(pia, 5,
                                              "char", 0,
@@ -208,14 +208,14 @@ void add_foreign_module(Assembler* ass, Module* lang, RegionAllocator* region) {
                                        "prim-int", 1, prim_type,
                                        "float", 0,
                                        "double", 0,
-                                       "ptr", 1, mk_app_type(pia, get_ptr_type(), mk_var_type(pia, "CType")),
+                                       "ptr", 1, mk_type_app(pia, get_ptr_type(), mk_var_type(pia, "CType")),
                                        "proc", 3,
-                                         mk_app_type(pia, get_maybe_type(), mk_prim_type(pia, UInt_64)),
-                                         mk_app_type(pia, get_list_type(), mk_app_type(pia, get_pair_type(), mk_prim_type(pia, UInt_64), mk_var_type(pia, "CType"))),
-                                         mk_app_type(pia, get_ptr_type(), mk_var_type(pia, "CType")),
+                                         mk_type_app(pia, get_maybe_type(), mk_prim_type(pia, UInt_64)),
+                                         mk_type_app(pia, get_list_type(), mk_type_app(pia, get_pair_type(), mk_prim_type(pia, UInt_64), mk_var_type(pia, "CType"))),
+                                         mk_type_app(pia, get_ptr_type(), mk_var_type(pia, "CType")),
                                        "struct", 2,
-                                         mk_app_type(pia, get_maybe_type(), mk_prim_type(pia, UInt_64)),
-                                         mk_app_type(pia, get_list_type(), mk_app_type(pia, get_pair_type(), mk_prim_type(pia, UInt_64), mk_var_type(pia, "CType"))),
+                                         mk_type_app(pia, get_maybe_type(), mk_prim_type(pia, UInt_64)),
+                                         mk_type_app(pia, get_list_type(), mk_type_app(pia, get_pair_type(), mk_prim_type(pia, UInt_64), mk_var_type(pia, "CType"))),
                                        "unspecified", 0));
         type_data = c_type;
         name = string_to_name(mv_string("CType"));
@@ -231,13 +231,13 @@ void add_foreign_module(Assembler* ass, Module* lang, RegionAllocator* region) {
 
     PiType* dynlib_ty = mk_opaque_type(pia, "DynLib", module, mk_prim_type(pia, Address));
     type_data = dynlib_ty;
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("DynLib"));
     add_def(module, name, type, &type_data, null_segments, NULL);
     clear_assembler(ass);
 
     PiType* str = mk_string_type(pia);
-    typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_app_type(pia, get_either_type(), str, copy_pi_type_p(dynlib_ty, pia)));
+    typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_type_app(pia, get_either_type(), str, copy_pi_type_p(dynlib_ty, pia)));
     build_dynlib_open_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
@@ -255,7 +255,7 @@ void add_foreign_module(Assembler* ass, Module* lang, RegionAllocator* region) {
 
     str = mk_string_type(pia);
     typep = mk_proc_type(pia, 2, dynlib_ty, mk_string_type(pia),
-                         mk_app_type(pia, get_either_type(), str, mk_prim_type(pia, Address)));
+                         mk_type_app(pia, get_either_type(), str, mk_prim_type(pia, Address)));
     build_dynlib_symbol_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dynlib-symbol"));
     fn_segments.code = get_instructions(ass);

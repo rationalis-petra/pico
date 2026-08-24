@@ -130,6 +130,7 @@ typedef enum TermFormer {
     FAllType,
     FSealedType,
     FFamily,
+    FKind,
 
     // The C type former is somewhat special, as it
     // is more explicit about taking in a *value* in the form of a c-type.

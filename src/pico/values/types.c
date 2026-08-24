@@ -133,7 +133,10 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
 
     case TAll:
     case TFam: {
-        sdelete_sym_list(t.binder.vars);
+        for (size_t i = 0; i < t.binder.vars.len; i++) {
+            delete_pi_type_p(t.binder.vars.data[i].val, pia);
+        }
+        sdelete_sym_addr_piamap(t.binder.vars);
         delete_pi_type_p(t.binder.body, pia);
         break;
     }
@@ -164,8 +167,16 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         break;
     case TPrim: break;
 
-    case TKind: break;
+    case TType: break;
     case TConstraint: break;
+    case TKind:
+        delete_pi_type_p(t.kind.body, pia);
+        for (size_t i = 0; i < t.kind.params.len; i++) {
+            delete_pi_type_p(t.kind.params.data[i], pia);
+        }
+        sdelete_addr_list(t.kind.params);
+        break;
+    case TSort: break;
     }
 }
 
@@ -274,11 +285,13 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     }
     case TAll:
     case TFam: {
-        out.binder.vars = scopy_sym_list(t.binder.vars, pia);
+        out.binder.vars = copy_sym_addr_piamap(t.binder.vars, symbol_id, (TyCopier)copy_pi_type_p, pia);
         out.binder.body = copy_pi_type_p(t.binder.body, pia);
         break;
     }
     case TCApp:
+        out.app.fam = copy_pi_type_p(t.app.fam, pia);
+        out.app.args = copy_addr_list(t.app.args,  (TyCopier)copy_pi_type_p, pia);
         break;
 
     case TUVar:
@@ -295,12 +308,15 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     case TPrim:
         out.prim = t.prim;
         break;
-    case TKind:
-        out.kind = t.kind;
-        break;
+    case TType:
     case TConstraint:
-        out.constraint = t.constraint;
         break;
+    case TKind:
+        out.kind.params = copy_addr_list(t.kind.params, (TyCopier)copy_pi_type_p, pia);
+        out.kind.body = copy_pi_type_p(t.kind.body, pia);
+        break;
+    case TSort:
+      break;
     }
 
     return out;
@@ -608,11 +624,21 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     }
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(Fam"), a), &nodes);
 
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
+            // Only annotate if type is complex kind
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type(vtype, params.type, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &args);
+            } else {
+              push_ptr(sym, &args);
+            }
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type(type->binder.body, params.type, a), &nodes);
@@ -625,7 +651,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         push_ptr(mk_str_doc(mv_string("("), a), &nodes);
         push_ptr(pretty_type(type->app.fam, default_ptp, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], params.type,a), &nodes);
+            push_ptr(pretty_type(type->app.args.data[i], params.type, a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
@@ -679,8 +705,10 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case TKind:
-    case TConstraint: {
+    case TType:
+    case TConstraint: 
+    case TKind: 
+    case TSort: {
         PiType** ptype = (PiType**) val;
         out = pretty_type(*ptype, params.type, a);
         break;
@@ -1086,7 +1114,16 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &head_nodes);
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &args);
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type_internal(vtype, ctx, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &args);
+            } else {
+              push_ptr(sym, &args);
+            }
         }
         push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), a), a), &head_nodes);
 
@@ -1141,10 +1178,19 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
     case TFam: {
         PtrArray nodes = mk_ptr_array(2, a);
         PtrArray head_group = mk_ptr_array(2, a);
-        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
         push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Family" ), a), a), &head_group);
+        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &vars);
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type_internal(vtype, ctx, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &vars);
+            } else {
+              push_ptr(sym, &vars);
+            }
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_group);
         push_ptr(mv_group_doc(mv_sep_doc(head_group, a), a), &nodes);
@@ -1156,40 +1202,27 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
+    case TType:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a);
+        break;
+    case TConstraint:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
+        break;
     case TKind: {
-        size_t nargs = type->kind.nargs;
-        if (nargs == 0) {
-            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a);
-        } else {
-            PtrArray nodes = mk_ptr_array(2, a);
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Kind"), a), a), &nodes);
-            PtrArray args = mk_ptr_array(nargs, a);
-            for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &args);
-            }
-            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(args, a), a), a), &nodes);
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &nodes);
-            out = mv_sep_doc(nodes, a);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Kind", a), a), &nodes);
+        PtrArray arg_nodes = mk_ptr_array(type->kind.params.len, a);
+        for (size_t i = 0; i < type->kind.params.len; i++) {
+            push_ptr(pretty_type_internal(type->kind.params.data[i], ctx, a), &arg_nodes);
         }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+        push_ptr(pretty_type_internal(type->kind.body, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
         break;
     }
-    case TConstraint: {
-        size_t nargs = type->constraint.nargs;
-        if (nargs == 0) {
-            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
-        } else {
-            PtrArray nodes = mk_ptr_array(3, a);
-            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Kind", a), a), &nodes);
-            PtrArray arg_nodes = mk_ptr_array(nargs, a);
-            for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Type", a), a), &arg_nodes);
-            }
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Constraint", a), a), &nodes);
-            out = mv_sep_doc(nodes, a);
-        }
+    case TSort:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Sort"), a), a);
         break;
-    }
     }
     if (out == NULL) {
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
@@ -1203,6 +1236,11 @@ Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a) {
     DocStyle default_style = scolour(colour(220, 220, 220), dstyle);
     return mv_style_doc(default_style, pretty_type, a);
 }
+
+
+bool is_kind(PiType type) { return (type.sort == TType) |(type.sort == TConstraint) | (type.sort == TKind); }
+bool is_sort(PiType type) { return type.sort == TSort; }
+bool is_sort_or_kind(PiType type) { return (type.sort == TSort) | (type.sort == TType) |(type.sort == TConstraint) | (type.sort == TKind); }
 
 size_t pi_size_align(size_t size, size_t align) {
     size_t rem = size % align;
@@ -1396,9 +1434,13 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
         return Err;
-    case TKind: 
+
+    // All types are represented with pointers at runtime
+    case TType: 
     case TConstraint: 
-        *out = sizeof(void*);
+    case TKind: 
+    case TSort:
+        *out = sizeof(PiType*);
         return Ok;
     case TUVar:
         return Err;
@@ -1559,9 +1601,11 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         return Err;
     case TCApp:
         panic(mv_string("Need to implement: align-of tc app"));
-    case TKind: 
+    case TType: 
     case TConstraint: 
-        *out = sizeof(void*);
+    case TKind: 
+    case TSort: 
+        *out = sizeof(PiType*);
         return Ok;
     case TUVar:
         return Err;
@@ -1828,7 +1872,8 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
     case TFam:
         for (size_t i = 0; i < body->binder.vars.len; i++) {
-            push_symbol(body->binder.vars.data[i], shadowed);
+            SymAddrPiCell cell = body->binder.vars.data[i];
+            push_symbol(cell.key, shadowed);
         }
         type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
         shadowed->len -= body->binder.vars.len;
@@ -1946,6 +1991,20 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             new_type->distinct.args->data[i] = copy_pi_type_p(args.data[i], pia);
         };
         return new_type;
+    } else if (family.sort == TVar) {
+        PiType* new_type = call_alloc(sizeof(PiType), pia);
+        PiType* new_fam = call_alloc(sizeof(PiType), pia);
+        *new_fam = copy_pi_type(family, pia);
+        *new_type = (PiType) {
+            .sort = TCApp,
+            .app.fam = new_fam,
+        };
+        new_type->app.args = mk_addr_list(args.len, pia);
+        new_type->app.args.len = args.len;
+        for (size_t i = 0; i < args.len; i++) {
+            new_type->app.args.data[i] = copy_pi_type_p(args.data[i], pia);
+        };
+        return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
@@ -1953,7 +2012,7 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
 
         SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
-            Symbol var = family.binder.vars.data[i];
+            Symbol var = family.binder.vars.data[i].key;
             PiType* tipe = args.data[i];
             sym_ptr_bind(var, tipe, &subst);
         }
@@ -2089,9 +2148,10 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             return false;
 
         for (size_t i = 0; i < lhs->instance.over.len; i++) {
+            // TODO (BUG): Compare the kinds of the binder vars! 
             Rename rn = (Rename) {
-                .l_name = lhs->binder.vars.data[i],
-                .r_name = rhs->binder.vars.data[i],
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
             };
             push_rename(rn, array);
         }
@@ -2130,8 +2190,9 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
 
         for (size_t i = 0; i < lhs->binder.vars.len; i++) {
             Rename rn = (Rename) {
-                .l_name = lhs->binder.vars.data[i],
-                .r_name = rhs->binder.vars.data[i],
+                // TODO (BUG): Compare the kinds of the binder vars?
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
             };
             push_rename(rn, array);
         }
@@ -2176,10 +2237,19 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         panic(mv_string("pi_type_eql_i not implemented for type families"));
 
         // Kinds (higher kinds not supported)
-    case TKind:
-        return lhs->kind.nargs == rhs->kind.nargs;
+    case TType:
+        return true;
     case TConstraint:
-        panic(mv_string("pi_type_eql_i not implemented for constraints"));
+        return true;
+    case TKind:
+        if (lhs->kind.params.len != rhs->kind.params.len) 
+            return false;
+         
+        for (size_t i = 0; i < lhs->kind.params.len; i++) {
+            if (!pi_type_eql_i(lhs->kind.params.data[i], rhs->kind.params.data[i], array))
+                return false;
+        }
+        return true;
     default:
         panic(mv_string("pi_type_eql_i provided invalid sort!"));
     }
@@ -2402,8 +2472,10 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
     case TTrait:  {
         panic(mv_string("Not implemented: comparing values of type trait"));
     }
-    case TKind:
-    case TConstraint: {
+    case TType:
+    case TConstraint:
+    case TKind: 
+    case TSort: {
         return pi_type_eql(*(PiType**)lhs, *(PiType**)rhs, a);
     }
 
@@ -2474,8 +2546,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     case TFam:
         // TODO: shadow
         panic(mv_string("not implemented is_variable_for for family"));
+    case TSort:
+    case TType:
     case TKind:
-        return false;
     case TConstraint:
         return false;
     case TUVar:
@@ -2781,13 +2854,16 @@ PiType* mk_var_type(PiAllocator* pia, const char *name) {
     return out;
 }
 
-PiType *mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
+PiType* mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
     va_list args;
     va_start(args, nsymbols);
 
-    SymbolPiList vars = mk_sym_list(nsymbols, pia);
+    SymAddrPiAMap params = mk_sym_addr_piamap(nsymbols, pia);
     for (size_t i = 0; i < nsymbols; i++) {
-        push_sym(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+        Symbol sym = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* kind = call_alloc(sizeof(PiType), pia);
+        *kind = (PiType){.sort = TType};
+        sym_addr_insert(sym, kind, &params);
     }
 
     PiType* body = va_arg(args, PiType*);
@@ -2796,7 +2872,7 @@ PiType *mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out = (PiType) {
         .sort = TAll,
-        .binder.vars = vars,
+        .binder.vars = params,
         .binder.body = body,
     };
     return out;
@@ -2831,13 +2907,65 @@ PiType* mk_sealed_type(PiAllocator* pia, size_t nsymbols, ...) {
     return out;
 }
 
-PiType* mk_type_family(PiAllocator* pia, SymbolPiList vars, PiType* body) {
+PiType* mk_type_family(PiAllocator* pia, size_t nargs, ...) {
+    va_list args;
+    va_start(args, nargs);
+
+    SymAddrPiAMap params = mk_sym_addr_piamap(nargs, pia);
+    for (size_t i = 0; i < nargs; i++) {
+      Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+      PiType* kind = va_arg(args, PiType*);
+      sym_addr_insert(name, kind, &params);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out = (PiType) {
         .sort = TFam,
-        .binder.vars = vars,
+        .binder.vars = params,
         .binder.body = body,
     };
+    return out;
+}
+
+PiType* mk_type_kind(PiAllocator* pia, size_t nargs, ...) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    AddrPiList params = mk_addr_list(nargs, pia);
+
+    va_list args;
+    va_start(args, nargs);
+    for (size_t i = 0; i < nargs; i++) {
+        push_addr(va_arg(args, void*), &params);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    *out = (PiType) {
+        .sort = TKind,
+        .kind.params = params,
+        .kind.body = body,
+    };
+    return out;
+}
+
+PiType* mk_type_type(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TType};
+    return out;
+}
+
+PiType* mk_type_constraint(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TConstraint};
+    return out;
+}
+
+PiType* mk_type_sort(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TSort};
     return out;
 }
 
@@ -2855,7 +2983,7 @@ PiType* unwind_type(PiType *ty) {
     return ty;
 }
 
-PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
+PiType* mk_type_app(PiAllocator* pia, PiType* fam, ...) {
     PiType* lhs = unwind_type(fam);
     Allocator a = convert_to_callocator(pia);
 
@@ -2868,7 +2996,7 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
     } else if (lhs->sort == TTrait) {
         num_args = lhs->trait.vars.len;
     } else {
-        panic(mv_string("Bad arg to mk_app_type"));
+        panic(mv_string("Bad arg to mk_type_app"));
     }
     PtrArray fam_args = mk_ptr_array(num_args, &a);
     for (size_t i = 0; i < num_args; i++) {
@@ -2883,10 +3011,8 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
 }
 
 PiType* mk_slice_type(PiAllocator* pia) {
-    SymbolPiList vars = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &vars);
     return mk_named_type(pia, "Slice",
-                         mk_type_family(pia, vars,
+                         mk_type_family(pia, 1, "A", mk_type_type(pia),
                                         mk_struct_type(pia, 2,
                                                        "addr", mk_prim_type(pia, Address),
                                                        "len", mk_prim_type(pia, UInt_64))));
@@ -2894,5 +3020,5 @@ PiType* mk_slice_type(PiAllocator* pia) {
 
 PiType* mk_string_type(PiAllocator* pia) {
     return mk_named_type(pia, "String",
-                         mk_app_type(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
+                         mk_type_app(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
 }

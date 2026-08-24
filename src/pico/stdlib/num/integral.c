@@ -4,7 +4,6 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/num/submodules.h"
 #include "pico/stdlib/helpers.h"
 

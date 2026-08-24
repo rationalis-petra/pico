@@ -96,6 +96,7 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_sealed_ty(SymbolArray syms, Location nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_kind_ty(size_t ntypes, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_c_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point);

@@ -418,6 +418,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
+    case FKind:
+        out = mk_str_doc(mv_string("::Kind"), a);
+        break;
     case FLiftCType:
         out = mk_str_doc(mv_string("::LiftCType"), a);
         break;

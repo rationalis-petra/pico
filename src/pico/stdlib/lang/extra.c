@@ -45,8 +45,8 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType* build_panic_fn_ty(PiAllocator* pia) {
     PiType* proc_ty = mk_proc_type(pia, 1, mk_string_type(pia), mk_var_type(pia, "A"));
 
-    SymbolPiList types = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &types);
+    SymAddrPiAMap types = mk_sym_addr_piamap(1, pia);
+    sym_addr_insert(string_to_symbol(mv_string("A")), mk_type_type(pia), &types);
 
     PiType* out_ty = call_alloc(sizeof(PiType), pia);
     *out_ty =  (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
@@ -875,7 +875,7 @@ void add_extra_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType* syntax_array = mk_app_type(pia, get_list_type(), get_syntax_type());
+    PiType* syntax_array = mk_type_app(pia, get_list_type(), get_syntax_type());
     PiType* macro_proc = mk_proc_type(pia, 1, syntax_array, get_macro_result_type());
 
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax

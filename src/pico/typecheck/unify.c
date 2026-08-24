@@ -473,25 +473,25 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 
         return unify_internal(lhs->distinct.type, rhs->distinct.type, rename, ctx);
         break;
-    } case TKind: {
-          if (lhs->kind.nargs == rhs->kind.nargs)
-              return (UnifyResult) {.type = UOk};
-          else 
-              return (UnifyResult) {
-                  .type = USimpleError,
-                  .message = mv_cstr_doc("Cannot Unify two kinds of unequal nags", a),
-              };
-          break;
-      }
-    case TConstraint: {
-        if (lhs->constraint.nargs == rhs->constraint.nargs)
-            return (UnifyResult) {.type = UOk};
-        else 
+    }
+    case TSort:
+    case TType:
+    case TConstraint:
+        return (UnifyResult) {.type = UOk};
+    case TKind: {
+        if (lhs->kind.params.len != rhs->kind.params.len) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .message = mv_cstr_doc("Cannot Unify two constraints of unequal nags", a),
+                .message = mv_cstr_doc("Cannot unify two kinds with a different number of parameters.", a),
             };
-        break;
+        }
+        UnifyResult res;
+        for (size_t i = 0; i < lhs->kind.params.len; i++) {
+            res = unify_internal(lhs->kind.params.data[i], rhs->kind.params.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        res = unify_internal(lhs->kind.body, rhs->kind.body, rename, ctx);
+        return res;
     }
     case TVar: {
         // Check that they are alpha-equivalent
@@ -504,23 +504,25 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             };
         }
         return (UnifyResult) {.type = UOk};
-        break;
     }
     case TAll: {
         if (lhs->binder.vars.len != rhs->binder.vars.len) {
             return (UnifyResult) {.type = USimpleError};
         }
         for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            SymAddrPiCell lcell = lhs->binder.vars.data[i];
+            SymAddrPiCell rcell = rhs->binder.vars.data[i];
+            UnifyResult res = unify_internal(lcell.val, rcell.val, rename, ctx);
+            if (res.type != UOk) return res;
             SymPair syms = (SymPair){
-                .lhs = lhs->binder.vars.data[i],
-                .rhs = rhs->binder.vars.data[i]
+                .lhs = lcell.key,
+                .rhs = rcell.key
             };
             push_sym_pair(syms, rename);
         };
         UnifyResult res = unify_internal(lhs->binder.body, rhs->binder.body, rename, ctx);
         rename->len -= lhs->binder.vars.len;
         return res;
-        break;
     }
     case TSealed: {
         if (lhs->sealed.vars.len != rhs->sealed.vars.len) {
@@ -551,7 +553,6 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         UnifyResult res = unify_internal(lhs->sealed.body, rhs->sealed.body, rename, ctx);
         rename->len -= lhs->sealed.vars.len;
         return res;
-        break;
     }
     default:  {
         PtrArray nodes = mk_ptr_array(8, a);
@@ -839,11 +840,23 @@ bool has_unification_vars_p(PiType type) {
         return has_unification_vars_p(*type.app.fam);
     }
     case TFam: {
+        for (size_t i = 0; i < type.kind.params.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.kind.params.data[i]))
+                return true;
+        }
         return has_unification_vars_p(*type.binder.body);
     }
 
-    case TKind: return false;
+    case TType: return false;
     case TConstraint: return false;
+    case TKind: {
+        for (size_t i = 0; i < type.kind.params.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.kind.params.data[i])) 
+                return true;
+        }
+        return has_unification_vars_p(*type.kind.body);
+    }
+    case TSort: return false;
 
     // Special sort: unification variable
     case TUVar:
@@ -967,9 +980,14 @@ bool occurs(UVarType* var, PiType *type) {
         return false;
     }
 
-    case TCType: return false;
-    case TKind: return false;
+    case TSort: return false;
+    case TType: return false;
     case TConstraint: return false;
+    case TKind:
+      for (size_t i = 0; i < type->instance.fields.len; i++) {
+        if (occurs(var, type->binder.vars.data[i].val)) return true;
+      }
+      return occurs(var, type->binder.body);
     // Special sort: unification variable
     case TUVar: {
         UVarType* uvar = type->uvar;
@@ -981,7 +999,7 @@ bool occurs(UVarType* var, PiType *type) {
         return false;
     }
     default: 
-        panic(mv_string("squash_type received invalid type!"));
+        panic(mv_string("occurs received invalid type!"));
     }
 }
 
@@ -1084,7 +1102,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
         break;
     }
 
-    case TCType: break;
+    case TSort: break;
+    case TType: break;
     case TKind: break;
     case TConstraint: break;
     // Special sort: unification variable

@@ -6,8 +6,7 @@
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/num/submodules.h"
-#include "pico/stdlib/helpers.h"
+#include "pico/stdlib/core/prim/submodules.h"
 
 static PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
@@ -241,10 +240,7 @@ void add_prim_integral_module(LocationSize sz, bool is_signed,
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, &a)};
     Segments prepped;
 
-    PiType type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
+    PiType type = (PiType) {.sort = TType};
 
     Segments null_segments = (Segments) {
         .code = mk_u8_array(0, &a),

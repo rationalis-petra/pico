@@ -72,7 +72,7 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
     };
 
     typep = mk_opaque_type(pia, "Timer", module, mk_prim_type(pia, Float_64));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Timer"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -80,7 +80,7 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
     PiType* timer_ty = e->value;
 
     typep = mk_distinct_type(pia, "Seconds", mk_prim_type(pia, Float_64));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Seconds"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);

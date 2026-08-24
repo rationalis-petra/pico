@@ -383,7 +383,7 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
     } else {
-        if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
+        if (is_sort_or_kind(entry.type)) {
             delete_pi_type_p(entry.value, &module->pico_allocator);
         } else if (entry.type.sort == TTraitInstance) {
           if (entry.type.instance.over.len == 0) {
@@ -540,7 +540,7 @@ Result add_def(Module* module, Name name, PiType type, void* data, Segments segm
     entry.is_module = false;
     size_t size = pi_size_of(type);
 
-    if (type.sort == TKind || type.sort == TConstraint) {
+    if (is_sort_or_kind(type)) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, &module->pico_allocator);
     } else {

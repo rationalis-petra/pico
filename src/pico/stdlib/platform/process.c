@@ -88,14 +88,14 @@ void add_process_module(Assembler *ass, Module *platform, RegionAllocator* regio
     };
 
     typep = mk_opaque_type(pia, "Process", module, mk_prim_type(pia, Int_64));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Process"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
     PiType* process_ty = e->value;
 
-    typep = mk_proc_type(pia, 2, mk_string_type(pia), mk_app_type(pia, get_list_type(), mk_string_type(pia)), process_ty);
+    typep = mk_proc_type(pia, 2, mk_string_type(pia), mk_type_app(pia, get_list_type(), mk_string_type(pia)), process_ty);
     build_create_process_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-process"));
     fn_segments.code = get_instructions(ass);
@@ -103,7 +103,7 @@ void add_process_module(Assembler *ass, Module *platform, RegionAllocator* regio
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, process_ty, mk_app_type(pia, get_result_type(), mk_prim_type(pia, Int_8), mk_prim_type(pia, Unit)));
+    typep = mk_proc_type(pia, 1, process_ty, mk_type_app(pia, get_result_type(), mk_prim_type(pia, Int_8), mk_prim_type(pia, Unit)));
     build_wait_on_process_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("wait-on-process"));
     fn_segments.code = get_instructions(ass);

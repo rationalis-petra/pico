@@ -22,6 +22,7 @@ void type_check_expr(SynRef untyped, PiType type, TypeEnv* env, TypeCheckContext
 void type_infer_expr(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 void post_unify(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 PiType* eval_type(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
+PiType* eval_sort(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
@@ -165,7 +166,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         PiType* kind0 = call_alloc(sizeof(PiType), ctx.pia);
-        *kind0 = (PiType){.sort = TKind, .kind.nargs = 0};
+        *kind0 = (PiType){.sort = TType,};
         for (size_t i = 0; i < type->proc.implicits.len; i++) {
             PiType* ann = type->proc.implicits.data[i];
             SymPtrCell cell = untyped.procedure.implicits.data[i];
@@ -243,12 +244,31 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         for (size_t i = 0; i < untyped.all.args.len; i++) {
-            Symbol arg = untyped.all.args.data[i];
+            SymPtrCell cell = untyped.all.args.data[i];
 
+            PiType* sort = mk_type_sort(ctx.pia);
             PiType* arg_ty = mem_alloc(sizeof(PiType), ctx.a);
-            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+            *arg_ty = (PiType) {.sort = TVar, .var = cell.key,};
 
-            type_qvar(arg, arg_ty, env);
+            // TODO: support more kinds
+            PiType* arg_kind;
+            if (cell.val) {
+                arg_kind = eval_sort(*(SynRef*)cell.val, env, ctx);
+            } else {
+                arg_kind = mk_type_type(ctx.pia);
+                SynRef new_syn = new_syntax(ctx.tape);
+                Syntax s = {
+                    .type = SCheckedType, 
+                    .type_val = arg_kind,
+                };
+                set_syntax(new_syn, s, ctx.tape);
+                set_type(new_syn, sort, ctx.tape);
+                SynRef* new_ref = mem_alloc(sizeof(SynRef), ctx.a);
+                *new_ref = new_syn;
+                untyped.all.args.data[i].val = new_ref;
+            }
+
+            type_qvar(cell.key, arg_ty, arg_kind, env);
         }
 
         set_type(ref, type, ctx.tape);
@@ -411,16 +431,34 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         PiType* all_ty = call_alloc(sizeof(PiType), ctx.pia);
         set_type(ref, all_ty, ctx.tape);;
         all_ty->sort = TAll;
-        all_ty->binder.vars = mk_sym_list(untyped.all.args.len, ctx.pia);
+        all_ty->binder.vars = mk_sym_addr_piamap(untyped.all.args.len, ctx.pia);
 
+        PiType* sort = mk_type_sort(ctx.pia);
         for (size_t i = 0; i < untyped.all.args.len; i++) {
-            Symbol arg = untyped.all.args.data[i];
+            SymPtrCell cell = untyped.all.args.data[i];
 
             PiType* arg_ty = mem_alloc(sizeof(PiType), a);
-            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+            *arg_ty = (PiType) {.sort = TVar, .var = cell.key,};
 
-            type_qvar(arg, arg_ty, env);
-            push_sym(arg, &all_ty->binder.vars);
+            PiType* arg_kind;
+            if (cell.val) {
+                arg_kind = eval_type(*(SynRef*)cell.val, env, ctx);
+            } else {
+                arg_kind = mk_type_type(ctx.pia);
+                SynRef new_syn = new_syntax(ctx.tape);
+                Syntax s = {
+                    .type = SCheckedType, 
+                    .type_val = arg_kind,
+                };
+                set_syntax(new_syn, s, ctx.tape);
+                set_type(new_syn, sort, ctx.tape);
+                SynRef* new_ref = mem_alloc(sizeof(SynRef), ctx.a);
+                *new_ref = new_syn;
+                untyped.all.args.data[i].val = new_ref;
+            }
+
+            type_qvar(cell.key, arg_ty, arg_kind, env);
+            sym_addr_insert(cell.key, arg_ty, &all_ty->binder.vars);
         }
 
         type_infer_i(untyped.all.body, env, ctx); 
@@ -444,7 +482,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        PiType* syntax_array = mk_app_type(ctx.pia, get_list_type(), get_syntax_type());
+        PiType* syntax_array = mk_type_app(ctx.pia, get_list_type(), get_syntax_type());
         PiType* transformer_proc = mk_proc_type(ctx.pia, 1, syntax_array, get_macro_result_type());
 
         Range tysrc = (Range){};
@@ -512,7 +550,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             // TODO (FUTURE BUG): When HKTs are allowed, this will need to be
             // replaced with the correct kind!
             PiType* kind = mem_alloc(sizeof(PiType), a);
-            *kind = (PiType){.sort = TKind, .kind.nargs = 0};
+            *kind = (PiType){.sort = TType,};
             for (size_t i = 0; i < fn_type->binder.vars.len; i++) {
                 SynRef syn = new_syntax(ctx.tape);
                 set_syntax(syn, (Syntax) {.type = SCheckedType, .type_val = mk_uvar(ctx.pia),}, ctx.tape);
@@ -533,23 +571,22 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             set_syntax(ref, (Syntax) {.type = SAllApplication, .all_application = new_app}, ctx.tape);
             type_infer_i(ref, env, ctx);
-        } else if (fn_type->sort == TKind || fn_type->sort == TConstraint) {
-            if (fn_type->kind.nargs != untyped.application.args.len) {
+        } else if (fn_type->sort == TKind) {
+            if (fn_type->kind.params.len != untyped.application.args.len) {
                 type_error_incorrect_num_args(fn_type, ref, InvValues, ctx);
             }
-            if (fn_type->kind.nargs == 0) {
+            if (fn_type->kind.params.len == 0) {
                 type_error_app_not_family(fn_type, ref, ctx);
             }
+            // TODO (BUG): check kindedness of operands
 
-            PiType* kind = mem_alloc(sizeof(PiType), a);
-            *kind = (PiType) {.sort = TKind, .kind.nargs = 0};
             Range tysrc = get_range(untyped.application.function, ctx.tape).term;
-            for (size_t i = 0; i < fn_type->kind.nargs; i++) {
+            for (size_t i = 0; i < fn_type->kind.params.len; i++) {
+              PiType* kind = fn_type->kind.params.data[i];
               type_check_i(untyped.application.args.data[i], kind,
                            tysrc, env, ctx);
             }
-            *kind = (PiType) {.sort = fn_type->sort, .kind.nargs = 0};
-            set_type(ref, kind, ctx.tape);;
+            set_type(ref, fn_type->kind.body, ctx.tape);;
         } else {
             type_error_invalid_application_target(fn_type, ref, ctx);
         }
@@ -572,12 +609,12 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         if (all_type->binder.body->sort != TProc) {
-            // Check that all type args are actually types!
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type->binder.vars.len, a);
             for (size_t i = 0; i < all_type->binder.vars.len; i++) {
-                SynRef type = untyped.all_application.types.data[i];
-                eval_type(type, env, ctx);
-                sym_ptr_bind(all_type->binder.vars.data[i], get_syntax(type, ctx.tape).type_val, &type_binds);
+                SynRef type_syn = untyped.all_application.types.data[i];
+                PiType* type = eval_type(type_syn, env, ctx);
+                // TODO (BUG): Check that the type has kind that matches the kind of the all type
+                sym_ptr_bind(all_type->binder.vars.data[i].key, type, &type_binds);
             }
 
             if (all_type->binder.vars.len != untyped.all_application.types.len) {
@@ -599,9 +636,11 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             // Check that all type args are actually types!
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type->binder.vars.len, a);
             for (size_t i = 0; i < all_type->binder.vars.len; i++) {
-                SynRef type = untyped.all_application.types.data[i];
-                eval_type(type, env, ctx);
-                sym_ptr_bind(all_type->binder.vars.data[i], get_syntax(type, ctx.tape).type_val, &type_binds);
+                SynRef syn_type = untyped.all_application.types.data[i];
+                PiType* type = eval_type(syn_type, env, ctx);
+                // TODO (BUG) check that type has the appropriate kind that is
+                // expected here
+                sym_ptr_bind(all_type->binder.vars.data[i].key, type, &type_binds);
             }
         
             // Bind the vars in the all type to specific types!
@@ -667,7 +706,10 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             *ty = (PiType) {.sort = TVar, .var = untyped.unseal.types.data[i]};
             sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
 
-            type_qvar(untyped.unseal.types.data[i], ty, env);
+            PiType* kind = call_alloc(sizeof(PiType), ctx.pia);
+            *kind = (PiType) {.sort = TType};
+
+            type_qvar(untyped.unseal.types.data[i], ty, kind, env);
         }
         PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.logger, ctx.pia, a);
         type_var(untyped.unseal.binder, var_ty, env);
@@ -961,34 +1003,18 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         if (untyped.structure.has_base == Some) {
             bool all_fields_required;
             type_infer_i(untyped.structure.base, env, ctx);
-            if (get_type(untyped.structure.base, ctx.tape)->sort == TKind) {
-                set_type(ref, eval_type(untyped.structure.base, env, ctx), ctx.tape);;
+            if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
+                set_type(ref, eval_type(untyped.structure.base, env, ctx), ctx.tape);
                 all_fields_required = true;
             } else {
-                set_type(ref, get_type(untyped.structure.base, ctx.tape), ctx.tape);;
+                set_type(ref, get_type(untyped.structure.base, ctx.tape), ctx.tape);
                 all_fields_required = false;
             }
 
             PiType* struct_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
 
             if (struct_type->sort != TStruct) {
-                if (struct_type->sort == TDistinct) {
-                    PtrArray nodes = mk_ptr_array(2, a);
-                    push_ptr(mv_cstr_doc(
-                        "Attempting to create a structure "
-                        "based off of an opaque type. "
-                        "Note that values of opaque types can only be "
-                        "created in the module that the opaque type is defined."
-                        , a), &nodes);
-                    push_ptr(pretty_type(struct_type, default_ptp, a), &nodes);
-                    err.message = mv_sep_doc(nodes, a);
-                } else {
-                    PtrArray nodes = mk_ptr_array(2, a);
-                    push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
-                    push_ptr(pretty_type(struct_type, default_ptp, a), &nodes);
-                    err.message = mv_sep_doc(nodes, a);
-                }
-                throw_pi_error(point, err);
+                type_error_struct_invalid_type(struct_type, ref, ctx);
             }
 
             // Check if any fields are missing when a new struct is being created
@@ -1118,14 +1144,15 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         set_type(ref, ty, ctx.tape);;
 
         PiType* constraint_ty = call_alloc(sizeof(PiType), ctx.pia);
-        *constraint_ty = (PiType) {.sort = TConstraint, .constraint.nargs = 0};
+        *constraint_ty = (PiType) {.sort = TConstraint};
 
-        PiType* ty_ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
+        PiType* ty_ty = mk_type_type(ctx.pia);
 
         for (size_t i = 0; i < untyped.instance.params.len; i++) {
             Symbol arg = untyped.instance.params.data[i];
-            type_var(arg, ty_ty, env);
+            PiType* arg_ty = call_alloc(sizeof(PiType), ctx.pia);
+            *arg_ty = (PiType){.sort = TVar, .var = untyped.instance.params.data[i]};
+            type_qvar(arg, arg_ty, ty_ty, env);
         }
 
         AddrPiList implicit_types = mk_addr_list(untyped.instance.implicits.len, ctx.pia);
@@ -1553,7 +1580,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SProcType: {
         PiType* c = call_alloc(sizeof(PiType), ctx.pia);
-        *c = (PiType){.sort = TConstraint, .kind.nargs = 0};
+        *c = (PiType){.sort = TConstraint};
         set_type(ref, c, ctx.tape);;
 
         for (size_t i = 0; i < untyped.proc_type.implicits.len; i++) {
@@ -1562,7 +1589,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_check_i(syn, c, range, env, ctx);
         }
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
         for (size_t i = 0; i < untyped.proc_type.args.len; i++) {
             SynRef syn = untyped.proc_type.args.data[i];
@@ -1577,7 +1604,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SArrayType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
 
         type_check_i(untyped.array_type.element, t, (Range){}, env, ctx);
@@ -1585,7 +1612,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SStructType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
 
         for (size_t i = 0; i < untyped.struct_type.fields.len; i++) {
@@ -1596,7 +1623,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SEnumType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
 
         for (size_t i = 0; i < untyped.enum_type.variants.len; i++) {
@@ -1611,7 +1638,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SResetType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
 
         type_check_i(untyped.reset_type.in, t, (Range){}, env, ctx);
@@ -1620,21 +1647,37 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SDynamicType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
 
         type_check_i(untyped.dynamic_type, t, (Range){}, env, ctx);
         break;
     }
     case SAllType: {
-        // For now, assume that each type has the kind Type (i.e. is not a family)
-        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        PiType* ty = mk_type_type(ctx.pia);
+        PiType* sort = mk_type_sort(ctx.pia);
         set_type(ref, ty, ctx.tape);;
 
         for (size_t i = 0; i < untyped.bind_type.bindings.len; i++) {
-            Symbol arg = untyped.bind_type.bindings.data[i];
-            type_var(arg, ty, env);
+            SymPtrCell cell = untyped.bind_type.bindings.data[i];
+            PiType* atype = ty;
+            // TODO (DECISION): For now, we assume kind 'Type' if none is
+            //   annotated... do we want to change this?
+            if (cell.val) {
+                atype = eval_sort(*(SynRef*)cell.val, env, ctx);
+            } else {
+                SynRef new_syn = new_syntax(ctx.tape);
+                Syntax s = {
+                    .type = SCheckedType, 
+                    .type_val = ty,
+                };
+                set_syntax(new_syn, s, ctx.tape);
+                set_type(new_syn, sort, ctx.tape);
+                SynRef* new_ref = mem_alloc(sizeof(SynRef), ctx.a);
+                *new_ref = new_syn;
+                untyped.bind_type.bindings.data[i].val = new_ref;
+            }
+            type_var(cell.key, atype, env);
         }
 
         type_check_i(untyped.bind_type.body, ty, (Range){}, env, ctx);
@@ -1643,7 +1686,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SSealedType: {
         PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        *ty = (PiType) {.sort = TType};
         set_type(ref, ty, ctx.tape);;
 
         for (size_t i = 0; i < untyped.sealed_type.vars.len; i++) {
@@ -1652,7 +1695,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
-        *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
+        *t = (PiType){.sort = TConstraint};
         for (size_t i = 0; i < untyped.sealed_type.implicits.len; i++) {
             SynRef implicit = untyped.sealed_type.implicits.data[i];
             type_check_i(implicit, t, (Range){}, env, ctx);
@@ -1663,24 +1706,64 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case STypeFamily: {
-        // For now, assume that each type has the kind Type (i.e. is not a family)
-        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty = (PiType) {.sort = TKind, .kind.nargs = untyped.bind_type.bindings.len};
-        set_type(ref, ty, ctx.tape);;
-
         if (untyped.bind_type.bindings.len == 0) {
             type_error_family_must_have_args(ref, ctx);
         }
 
+        PiType* ty = mk_type_type(ctx.pia);
+        PiType* sort = mk_type_sort(ctx.pia);
+
+        PiType* fam_kind = call_alloc(sizeof(PiType), ctx.pia);
+        *fam_kind = (PiType) {
+            .sort = TKind,
+            .kind.params = mk_addr_list(untyped.bind_type.bindings.len, ctx.pia),
+        };
+
         PiType* aty = call_alloc(sizeof(PiType), ctx.pia);
-        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        *aty = (PiType) {.sort = TType};
         for (size_t i = 0; i < untyped.bind_type.bindings.len; i++) {
-            Symbol arg = untyped.bind_type.bindings.data[i];
-            type_var(arg, aty, env);
+            SymPtrCell cell = untyped.bind_type.bindings.data[i];
+            PiType* atype = ty;
+            // TODO (DECISION): For now, we assume kind 'Type' if none is
+            //   annotated... do we want to change this?
+            if (cell.val) {
+                atype = eval_sort(*(SynRef*)cell.val, env, ctx);
+            } else {
+                SynRef new_syn = new_syntax(ctx.tape);
+                Syntax s = {
+                    .type = SCheckedType, 
+                    .type_val = ty,
+                };
+                set_syntax(new_syn, s, ctx.tape);
+                set_type(new_syn, sort, ctx.tape);
+                SynRef* new_ref = mem_alloc(sizeof(SynRef), ctx.a);
+                *new_ref = new_syn;
+                untyped.bind_type.bindings.data[i].val = new_ref;
+            }
+            push_addr(atype, &fam_kind->kind.params);
+            type_var(cell.key, atype, env);
         }
 
-        type_check_i(untyped.bind_type.body, aty, (Range){}, env, ctx);
+        fam_kind->kind.body = ty;
+        type_check_i(untyped.bind_type.body, ty, (Range){}, env, ctx);
+        set_type(ref, fam_kind, ctx.tape);
         pop_types(env, untyped.bind_type.bindings.len);
+        break;
+    }
+    case SKind: {
+        if (untyped.kind_type.params.len == 0) {
+            type_error_kind_must_have_args(ref, ctx);
+        }
+
+        PiType* sort = call_alloc(sizeof(PiType), ctx.pia);
+        *sort = (PiType) {.sort = TSort};
+        for (size_t i = 0; i < untyped.kind_type.params.len; i++) {
+            SynRef param = untyped.kind_type.params.data[i];
+            type_check_i(param, sort, (Range){}, env, ctx);
+        }
+
+        type_check_i(untyped.bind_type.body, sort, (Range){}, env, ctx);
+        set_type(ref, sort, ctx.tape);;
         break;
     }
     case SLiftCType: {
@@ -1689,7 +1772,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         type_check_i(untyped.c_type, c_type, (Range){}, env, ctx);
 
         PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        *ty = (PiType) {.sort = TType};
         set_type(ref, ty, ctx.tape);;
         break;
     }
@@ -1701,8 +1784,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         pop_type(env);
 
         PiType* type = get_type(untyped.named_type.body, ctx.tape);
-        set_type(ref, type, ctx.tape);;
-        if (type->sort != TKind) {
+        set_type(ref, type, ctx.tape);
+        if (!is_kind(*type)) {
             type_error_named_must_have_type(ref, ctx); 
         }
         break;
@@ -1711,9 +1794,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         type_infer_i(untyped.distinct_type.body, env, ctx);
         PiType* type = get_type(untyped.distinct_type.body, ctx.tape);
         set_type(ref, type, ctx.tape);;
-        if (type->sort != TKind) {
-            err.message = mv_cstr_doc("Distinct expects types and families as arguments!", a);
-            throw_pi_error(point, err);
+        if (!is_kind(*type)) {
+            type_error_distinct_must_have_type(ref, ctx); 
         }
         break;
     }
@@ -1721,26 +1803,53 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         type_infer_i(untyped.opaque_type.body, env, ctx);
         PiType* type = get_type(untyped.opaque_type.body, ctx.tape);
         set_type(ref, type, ctx.tape);;
-        if (type->sort != TKind) {
-            err.message = mv_cstr_doc("Opaque expects types and families as arguments!", a);
-            throw_pi_error(point, err);
+        if (!is_kind(*type)) {
+            type_error_opaque_must_have_type(ref, ctx); 
         }
         break;
     }
     case STraitType: {
-        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty = (PiType) {.sort = TConstraint, .constraint.nargs = untyped.trait.vars.len};
-        set_type(ref, ty, ctx.tape);;
+        PiType* sort = mk_type_sort(ctx.pia);
 
+        AddrPiList params = mk_addr_list(untyped.trait.vars.len, ctx.pia); 
         PiType* aty = call_alloc(sizeof(PiType), ctx.pia);
-        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        *aty = (PiType) {.sort = TType};
         for (size_t i = 0; i < untyped.trait.vars.len; i++) {
-            Symbol arg = untyped.trait.vars.data[i];
-            type_var(arg, aty, env);
+            SymPtrCell arg = untyped.trait.vars.data[i];
+            PiType* aty;
+            if (arg.val) {
+                aty = eval_type(*(SynRef*)arg.val, env, ctx);
+                if (aty->sort != TKind) {
+                    type_error_trait_param_not_type(ref, i, ctx);
+                }
+            } else  {
+                // TODO: this should be a uvar that is a kind...
+                //       for now, just set it to have 0 args.
+                aty = mk_type_type(ctx.pia);
+
+                SynRef* tref = mem_alloc(sizeof(SynRef), ctx.a);
+                *tref = new_syntax(ctx.tape);
+                set_syntax(*tref,
+                           (Syntax){
+                               .type = SCheckedType,
+                               .type_val = sort,
+                           },
+                           ctx.tape);
+            }
+            push_addr(aty, &params);
+            type_var(arg.key, aty, env);
         }
 
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
+        *ty = (PiType) {
+          .sort = TKind,
+          .kind.params = params,
+          .kind.body = mk_type_constraint(ctx.pia),
+        };
+        set_type(ref, ty, ctx.tape);;
+
         PiType* cty = call_alloc(sizeof(PiType), ctx.pia);
-        *cty = (PiType) {.sort = TConstraint, .kind.nargs = 0};
+        *cty = (PiType) {.sort = TConstraint};
         for (size_t i = 0; i < untyped.trait.implicit_fields.len; i++) {
             SynRef field = untyped.trait.implicit_fields.data[i].val;
             type_check_i(field, cty, (Range){}, env, ctx);
@@ -1879,7 +1988,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case STypeOf: {
         type_infer_i(untyped.type_of, env, ctx);
         PiType* type = call_alloc(sizeof(PiType), ctx.pia);
-        *type = (PiType) {.sort = TKind, .kind.nargs = 0};
+        *type = (PiType) {.sort = TType};
         set_type(ref, type, ctx.tape);
         break;
     }
@@ -1989,12 +2098,14 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SAll: {
         for (size_t i = 0; i < syn.all.args.len; i++) {
-            Symbol arg = syn.all.args.data[i];
+            SymPtrCell arg = syn.all.args.data[i];
 
             PiType* arg_ty = call_alloc(sizeof(PiType), ctx.pia);
-            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+            *arg_ty = (PiType) {.sort = TVar, .var = arg.key,};
 
-            type_qvar(arg, arg_ty, env);
+            PiType* arg_kind = get_syntax(*(SynRef*)arg.val, ctx.tape).type_val;
+
+            type_qvar(arg.key, arg_ty, arg_kind, env);
         }
         post_unify(syn.all.body, env, ctx);
         pop_types(env, syn.all.args.len);
@@ -2105,7 +2216,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type->binder.vars.len, ctx.a);
         for (size_t i = 0; i < all_type->binder.vars.len; i++) {
             SynRef type = syn.all_application.types.data[i];
-            sym_ptr_bind(all_type->binder.vars.data[i], get_syntax(type, ctx.tape).type_val, &type_binds);
+            sym_ptr_bind(all_type->binder.vars.data[i].key, get_syntax(type, ctx.tape).type_val, &type_binds);
         }
         // TODO (BUG): this type probably wants unwrapping
         PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.logger, ctx.pia, ctx.a);
@@ -2196,8 +2307,10 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             PiType* arg_ty = call_alloc(sizeof(PiType), ctx.pia);
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
+            PiType* arg_kind = mk_type_type(ctx.pia);
+
             sym_ptr_bind(arg, arg_ty, &type_binds);
-            type_qvar(arg, arg_ty, env);
+            type_qvar(arg, arg_ty, arg_kind, env);
         }
         PiType* src_ty = get_type(syn.unseal.sealed, ctx.tape);
         PiType* var_ty = pi_type_subst(src_ty->sealed.body, type_binds, ctx.logger, ctx.pia, ctx.a);
@@ -2305,12 +2418,13 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SInstance: {
-        PiType* ty_ty = call_alloc(sizeof(PiType), ctx.pia);
-        *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
 
+        PiType* ty_ty = mk_type_type(ctx.pia);
         for (size_t i = 0; i < syn.instance.params.len; i++) {
             Symbol arg = syn.instance.params.data[i];
-            type_var(arg, ty_ty, env);
+            PiType* arg_ty = call_alloc(sizeof(PiType), ctx.pia);
+            *arg_ty = (PiType){.sort = TVar, .var = syn.instance.params.data[i]};
+            type_qvar(arg, arg_ty, ty_ty, env);
         }
 
         for (size_t i = 0; i < syn.instance.implicits.len; i++) {
@@ -2508,6 +2622,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case SAllType:
     case SSealedType:
     case STypeFamily:
+    case SKind: 
         break;
     case SLiftCType:
         post_unify(syn.c_type, env, ctx);
@@ -2860,6 +2975,13 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case STypeFamily:
         squash_types(typed.bind_type.body, env, ctx);
         break;
+    case SKind:
+        for (size_t i = 0; i < typed.kind_type.params.len; i++) {
+            SynRef syn = typed.kind_type.params.data[i];
+            squash_types(syn, env, ctx);
+        }
+        squash_types(typed.kind_type.body, env, ctx);
+        break;
     case SLiftCType:
         squash_types(typed.c_type, env, ctx);
         break;
@@ -2992,10 +3114,37 @@ PiType* eval_type(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i(ref, env, ctx);
 
     PiType* type = get_type(ref, ctx.tape);
-    if (type->sort != TKind && type->sort != TConstraint) {
+    if ((type->sort != TKind) & (type->sort != TConstraint) & (type->sort != TType)) {
         PicoError err = (PicoError) {
             .range = get_range(ref, ctx.tape).term,
             .message = mv_cstr_doc("Value expected to be type, was not!", ctx.a),
+        };
+        throw_pi_error(ctx.point, err);
+    }
+
+    PiType** result = eval_typed_expr(ref, env, ctx);
+    syn = (Syntax) {
+        .type = SCheckedType,
+        .type_val = *result,
+    };
+    set_syntax(ref, syn, ctx.tape);
+
+    return *result;
+}
+
+// TODO (BUG LOGIC UB): evaluation may produce a function pointer (or an object
+// with a function pointer) that points to generated code. This method currently
+// provides no means to capture that assembly.
+PiType* eval_sort(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
+    Syntax syn = get_syntax(ref, ctx.tape);
+    if (syn.type == SCheckedType) return syn.type_val;
+    type_infer_i(ref, env, ctx);
+
+    PiType* type = get_type(ref, ctx.tape);
+    if (type->sort != TSort) {
+        PicoError err = (PicoError) {
+            .range = get_range(ref, ctx.tape).term,
+            .message = mv_cstr_doc("Value expected to be a sort, was not!", ctx.a),
         };
         throw_pi_error(ctx.point, err);
     }

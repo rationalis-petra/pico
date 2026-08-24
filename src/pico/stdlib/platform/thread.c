@@ -58,7 +58,7 @@ void add_thread_module(Assembler *ass, Module *platform, RegionAllocator* region
     };
 
     typep = mk_named_type(pia, "Seconds", mk_prim_type(pia, Float_64));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Seconds"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);

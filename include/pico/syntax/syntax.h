@@ -103,6 +103,7 @@ typedef enum {
     SAllType,
     SSealedType,
     STypeFamily,
+    SKind,
     SLiftCType,
 
     SCheckedType,
@@ -159,7 +160,7 @@ typedef struct {
 } SynProcedure;
 
 typedef struct {
-    SymbolArray args;
+    SymPtrAMap args;
     SynRef body;
 } SynAll;
 
@@ -331,7 +332,7 @@ typedef struct {
 
 typedef struct {
     Symbol name;
-    SymbolArray vars;
+    SymPtrAMap vars;
     SymSynAMap implicit_fields;
     SymSynAMap fields;
 } SynTrait;
@@ -355,11 +356,15 @@ typedef struct {
     SynRef type;
 } SynSize;
 
-
 typedef struct {
-    SymbolArray bindings;
+    SymPtrAMap bindings;
     SynRef body;
 } SynBind;
+
+typedef struct {
+    SynArray params;
+    SynRef body;
+} SynKind;
 
 // ----------------------------------------------------------------------
 // Types
@@ -499,6 +504,7 @@ struct Syntax {
         SynResetType reset_type;
         SynRef dynamic_type;
         SynBind bind_type;
+        SynKind kind_type;
         SynSealedType sealed_type;
         SynNamed named_type;
         SynNamed distinct_type;

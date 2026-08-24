@@ -126,7 +126,7 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
 
     if (test_start(log, mv_string("instance-parent-inferred-for-local-variables"))) {
         RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])");
-        RUN("(def Rod Trait Eql [A] {.eql Eql A} [.less Proc [A A] Bool])");
+        RUN("(def Rod Trait Rod [A] {.eql Eql A} [.less Proc [A A] Bool])");
         RUN("(def eql-bool instance (Eql Bool)"
             "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))])");
         // TODO: If we replace rod-bool here with eql-bool (meaning we redefine
@@ -140,4 +140,16 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         bool expected = false;
         TEST_EQ("(uses-eq :false :true)");
     }
+
+    /*
+    if (test_start(log, mv_string("trait-higher-kinded"))) {
+        RUN("(def Cont Trait Cont [(C Kind [Type] Type)] [.get All [A] Proc [(C A)] A])");
+        RUN("(def Ptr Named Ptr Family [A] Address)");
+        RUN("(def ptr-cont instance (Cont Ptr) \n"
+            "[.get all [A] proc [ptr] (load {A} (unname ptr))])");
+
+        bool expected = false;
+        TEST_EQ("(uses-eq :false :true)");
+    }
+    */
 }

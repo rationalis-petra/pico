@@ -174,8 +174,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // Types 
     // ------------------------------------------------------------------------
     type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
+        .sort = TType,
     };
 
     typep = mk_opaque_type(&pia, "Module", module, mk_prim_type(&pia, Address));
@@ -207,7 +206,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     Segments prepped;    // load-module : Proc [String] Unit
     typep = mk_proc_type(&pia, 2,
                          mk_string_type(&pia),
-                         mk_app_type(&pia, get_maybe_type(), module_type),
+                         mk_type_app(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_load_module_fun(typep, ass, &pia, &ra, &point);
     name = string_to_name(mv_string("load-module"));
@@ -219,7 +218,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // run-script : Proc [String] Result
     typep = mk_proc_type(&pia, 2,
                          mk_string_type(&pia),
-                         mk_app_type(&pia, get_maybe_type(), module_type),
+                         mk_type_app(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_run_script_fun(typep, ass, &pia, &ra, &point);
     name = string_to_name(mv_string("run-script"));

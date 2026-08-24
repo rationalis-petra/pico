@@ -55,6 +55,7 @@ typedef enum {
 typedef struct {
     LocalSort sort;
     PiType* type;
+    PiType* kind;
 } Local;
 
 ASSOC_HEADER(Symbol, Local, sym_local, SymLocal)
@@ -68,7 +69,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env);
 InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env);
 
 void type_var (Symbol var, PiType* type, TypeEnv* env);
-void type_qvar (Symbol var, PiType* type, TypeEnv* env);
+void type_qvar (Symbol var, PiType* type, PiType* kind, TypeEnv* env);
 
 void pop_type(TypeEnv* env);
 void pop_types(TypeEnv* env, size_t n);

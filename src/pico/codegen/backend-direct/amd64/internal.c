@@ -701,16 +701,17 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
-void* mk_forall_ty(size_t len, Symbol* syms, PiType* body) {
+void* mk_forall_ty(size_t len, Symbol* syms, PiType** params, PiType* body) {
     PiAllocator pia = get_std_temp_allocator();
+    SymAddrPiAMap args = mk_sym_addr_piamap(len, &pia);
+    for (size_t i = 0; i < len; i++) {
+        sym_addr_insert(syms[i], params[i], &args);
+    }
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TAll,
-        .binder.vars.data = syms,
-        .binder.vars.len = len,
-        .binder.vars.size = len,
-        .binder.vars.gpa = pia,
+        .binder.vars = args,
         .binder.body = body,
     };
     return ty;
@@ -728,17 +729,20 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_forall_ty, ass, a, point);
 
+    build_binary_op(Add, reg(RSP, sz_64), imma(syms.len * sizeof(PiType*)), ass, a, point);
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
@@ -824,16 +828,17 @@ void gen_mk_sealed_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
-void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
+void* mk_fam_ty(size_t len, Symbol* syms, PiType** params, PiType* body) {
     PiAllocator pia = get_std_temp_allocator();
+    SymAddrPiAMap args = mk_sym_addr_piamap(len, &pia);
+    for (size_t i = 0; i < len; i++) {
+        sym_addr_insert(syms[i], params[i], &args);
+    }
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TFam,
-        .binder.vars.data = syms,
-        .binder.vars.len = len,
-        .binder.vars.size = len,
-        .binder.vars.gpa = pia,
+        .binder.vars = args,
         .binder.body = body,
     };
     return ty;
@@ -843,23 +848,64 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
     // Note: this allocation is fine for definitions as types get copied,
     // probably not fine if we have a proc which returns a family!
     // in that case we maybe want this in a data-segment?
+
+    // TODO (IMPLEMENT): gather bindings of sorts for types.
     void* data = mem_alloc(syms.len * sizeof(Symbol), a);
     memcpy(data, syms.data, syms.len * sizeof(Symbol));
 
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_fam_ty, ass, a, point);
 
+    build_binary_op(Add, reg(RSP, sz_64), imma(syms.len * sizeof(PiType*)), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+}
+
+void* mk_kind_ty(size_t len, PiType* body, PiType** args) {
+    PiAllocator pia = get_std_temp_allocator();
+
+    AddrPiList params = mk_addr_list(len, &pia);
+    for (size_t i = 0; i < len; i++) {
+        push_addr(args[i], &params);
+    }
+
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
+    *ty = (PiType) {
+        .sort = TKind,
+        .kind.body = body,
+        .kind.params = params,
+    };
+    return ty;
+}
+
+void gen_mk_kind_ty(size_t ntypes, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(Mov, reg(RDI, sz_64), imm64(ntypes), ass, a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+#elif ABI == WIN_64
+    build_binary_op(Mov, reg(RCX, sz_64), imm64(ntypes), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    generate_c_call(mk_kind_ty, ass, a, point);
+
+    build_binary_op(Add, reg(RSP, sz_64), imma(ntypes * sizeof(PiType*)), ass, a, point);
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 

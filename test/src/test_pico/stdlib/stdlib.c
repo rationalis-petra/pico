@@ -52,7 +52,6 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     RegionAllocator* region = make_region_allocator(16384, true, a);
     if (suite_start(log, mv_string("core"))) {
         RegionAllocator* subregion = make_subregion(region);
-        run_pico_stdlib_core_type_tests(log, module, env, target, region);
         if (suite_start(log, mv_string("kernel"))) {
             run_pico_stdlib_core_kernel_tests(log, module, env, target, subregion);
             suite_end(log);

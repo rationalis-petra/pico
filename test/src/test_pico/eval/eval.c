@@ -51,6 +51,13 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("types"))) {
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_types_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
+        suite_end(log);
+    }
+
     if (suite_start(log, mv_string("proc"))) {
         RegionAllocator* subregion = make_subregion(region);
         run_pico_eval_proc_tests(log, module, env, target, subregion);
