@@ -21,6 +21,8 @@ struct UVarGenerator {
     uint64_t counter;
 };
 
+static PiType* type_app_internal(PiType family, PtrArray args, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a);
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void symbol_nod(Symbol s, Allocator a) { }
@@ -302,7 +304,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         //   like we wish to be there. This part of the logic (in uvar_subst,
         //   towards the end) should be replaced by something that does
         //   appropriate analysis. Then the copy below may be uncommented.
-        // out.uvar = copy_uvar(t.uvar, pia);
+        //   out.uvar = copy_uvar(t.uvar, pia);
         out.uvar = t.uvar; 
         break;
     case TPrim:
@@ -1431,7 +1433,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TCApp:
-        panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
+        return Err;
     case TFam:
         return Err;
 
@@ -1600,7 +1602,7 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TFam:
         return Err;
     case TCApp:
-        panic(mv_string("Need to implement: align-of tc app"));
+        return Err;
     case TType: 
     case TConstraint: 
     case TKind: 
@@ -1754,7 +1756,7 @@ PiType* strip_type(PiType *ty) {
     return ty;
 }
 
-void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
+void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
@@ -1843,14 +1845,18 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         // TODO (BUG): In situations where the type is to be deleted later, we will
         //             need to copy here to ensure that all types are unique!
         if (find_symbol(body->var, *shadowed) == shadowed->len) {
-            PiType** val = (PiType**)sym_ptr_alookup(body->var, subst);
+            PiType** val = (PiType**)sym_ptr_alookup(body->var, *subst);
             if (val) {*body = **val;}
         }
         break;
     }
     case TAll:
-        // Note: when implementing, consider shadowing
-        panic(mv_string("Not implemetned type-app for All"));
+        for (size_t i = 0; i < body->binder.vars.len; i++) {
+            push_symbol(body->binder.vars.data[i].key, shadowed);
+        }
+        type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
+
+        shadowed->len -= body->binder.vars.len;
         break;
     case TSealed: {
         for (size_t i = 0; i < body->sealed.vars.len; i++) {
@@ -1868,7 +1874,13 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
 
     // Used by Sytem-Fω (type constructors)
     case TCApp:
-        panic(mv_string("Not implemetned type-app for App"));
+        type_app_subst(body->app.fam, subst, shadowed, pia, logger, a);
+        PtrArray args = mk_ptr_array(body->app.args.len, a);
+        for (size_t i = 0; i < body->app.args.len; i++) {
+            type_app_subst(body->app.args.data[i], subst, shadowed, pia, logger, a);
+            push_ptr(body->app.args.data[i], &args);
+        }
+        *body = *type_app_internal(*body->app.fam, args, subst, shadowed, pia, a);
         break;
     case TFam:
         for (size_t i = 0; i < body->binder.vars.len; i++) {
@@ -1899,38 +1911,32 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
     }
 }
 
-PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) {
+static PiType* type_app_internal(PiType family, PtrArray args, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a) {
     if (family.sort == TTrait) {
         if (family.trait.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
         
-        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
             Symbol var = family.trait.vars.data[i];
             PiType* tipe = args.data[i];
-            sym_ptr_bind(var, tipe, &subst);
+            sym_ptr_bind(var, tipe, subst);
         }
 
         SymAddrPiAMap new_implicit_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
         for (size_t i = 0; i < family.trait.implicit_fields.len; i++) {
             SymAddrPiCell cell = family.trait.implicit_fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
-            SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-            sdelete_symbol_array(shadowed);
+            type_app_subst (new_type, subst, shadowed, pia, NULL, a);
             sym_addr_insert(cell.key, new_type, &new_implicit_fields);
         }
         SymAddrPiAMap new_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
         for (size_t i = 0; i < family.trait.fields.len; i++) {
             SymAddrPiCell cell = family.trait.fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
-            SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-            sdelete_symbol_array(shadowed);
+            type_app_subst (new_type, subst, shadowed, pia, NULL, a);
             sym_addr_insert(cell.key, new_type, &new_fields);
         }
-        sdelete_sym_ptr_assoc(subst);
 
         AddrPiList saved_args = mk_addr_list(args.len, pia);
         saved_args.len = args.len;
@@ -2005,31 +2011,52 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             new_type->app.args.data[i] = copy_pi_type_p(args.data[i], pia);
         };
         return new_type;
+    } else if (family.sort == TUVar) {
+        PiType* new_type = call_alloc(sizeof(PiType), pia);
+        PiType* new_fam = call_alloc(sizeof(PiType), pia);
+        *new_fam = family;
+        *new_type = (PiType) {
+            .sort = TCApp,
+            .app.fam = new_fam,
+        };
+        new_type->app.args = mk_addr_list(args.len, pia);
+        new_type->app.args.len = args.len;
+        for (size_t i = 0; i < args.len; i++) {
+            new_type->app.args.data[i] = copy_pi_type_p(args.data[i], pia);
+        };
+        return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
 
-        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
             Symbol var = family.binder.vars.data[i].key;
             PiType* tipe = args.data[i];
-            sym_ptr_bind(var, tipe, &subst);
+            sym_ptr_bind(var, tipe, subst);
         }
 
         PiType* new_type = copy_pi_type_p(family.binder.body, pia);
-        SymbolArray shadowed = mk_symbol_array(8, a);
-        type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-        sdelete_symbol_array(shadowed);
-        sdelete_sym_ptr_assoc(subst);
+        type_app_subst (new_type, subst, shadowed, pia, NULL, a);
         return new_type;
     }
+}
+
+PiType* type_app(PiType family, PtrArray args, PiAllocator* pia, Allocator* a) {
+    SymbolArray shadowed = mk_symbol_array(8, a);
+    SymPtrAssoc subst = mk_sym_ptr_assoc(8, a);
+    PiType* out = type_app_internal(family, args, &subst, &shadowed, pia, a);
+    sdelete_sym_ptr_assoc(subst);
+    sdelete_symbol_array(shadowed);
+    return out;
 }
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* logger, PiAllocator* pia, Allocator* a) {
     PiType* new_type = copy_pi_type_p(type, pia);
     SymbolArray shadowed = mk_symbol_array(8, a);
-    type_app_subst(new_type, binds, &shadowed, pia, logger, a);
+    SymPtrAssoc subst = scopy_sym_ptr_assoc(binds, a);
+    type_app_subst(new_type, &subst, &shadowed, pia, logger, a);
+    sdelete_sym_ptr_assoc(subst);
     sdelete_symbol_array(shadowed);
     return new_type;
 }
@@ -2233,8 +2260,23 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         // Used by Sytem-Fω (type constructors)
     case TCApp:
         panic(mv_string("pi_type_eql_i not implemented for type applications"));
-    case TFam:
-        panic(mv_string("pi_type_eql_i not implemented for type families"));
+    case TFam: {
+        if (lhs->binder.vars.len != rhs->binder.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            Rename rn = (Rename) {
+                // TODO (BUG): Compare the kinds of the binder vars?
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
+            };
+            push_rename(rn, array);
+        }
+        bool out = pi_type_eql_i(lhs->binder.body, rhs->binder.body, array);
+        array->len -= lhs->sealed.vars.len;
+        return out;
+        break;
+    }
 
         // Kinds (higher kinds not supported)
     case TType:
@@ -2542,7 +2584,12 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         }
         return is_variable_for_recur(ty->sealed.body, vars, shadowed);
     case TCApp:
-        panic(mv_string("not implemented is_variable_for for applied type"));
+        /* TODO: re-add this when supporting generalized higher kinds
+        for (size_t i = 0; i < ty->app.args.len; i++) {
+            if (is_variable_for_recur(ty->app.args.data[i], vars, shadowed)) return true;
+        }
+        */
+        return is_variable_for_recur(ty->app.fam, vars, shadowed);
     case TFam:
         // TODO: shadow
         panic(mv_string("not implemented is_variable_for for family"));

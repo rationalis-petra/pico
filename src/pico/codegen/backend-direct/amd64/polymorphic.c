@@ -363,6 +363,11 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             generate_size_of(dest, type->named.type, env, ass, a, point);
             break;
         }
+        case TCApp: {
+            // TODO (BUG): encode type families as functions type-encoding -> type-encoding
+            generate_size_of(dest, type->app.fam, env, ass, a, point);
+            break;
+        }
         default: {
             // TODO BUG: This seems to cause crashes!
             PtrArray nodes = mk_ptr_array(4, a);
@@ -464,6 +469,11 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
         }
         case TNamed: {
             generate_align_of(dest, type->named.type, env, ass, a, point);
+            break;
+        }
+        case TCApp: {
+            // TODO (BUG): encode type families as functions type-encoding -> type-encoding
+            generate_align_of(dest, type->app.fam, env, ass, a, point);
             break;
         }
         default: {
@@ -700,9 +710,24 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
             build_binary_op(Or, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
         }
     } else {
-        size_t align = pi_align_of(*type);
-        size_t size = pi_size_of(*type);
-        size_t stack_sz = pi_stack_align(size);
+        size_t align;
+        size_t size;
+        size_t stack_sz;
+
+        // TODO: support higher-kinded types by generating appropriate functions! 
+        if (type->sort == TNamed && type->named.type->sort == TFam) {
+            align = pi_align_of(*type->named.type->binder.body);
+            size = pi_size_of(*type->named.type->binder.body);
+            stack_sz = pi_stack_align(size);
+        } else if (type->sort == TDistinct && type->distinct.type->sort == TFam) {
+            align = pi_align_of(*type->distinct.type->binder.body);
+            size = pi_size_of(*type->distinct.type->binder.body);
+            stack_sz = pi_stack_align(size);
+        } else {
+            align = pi_align_of(*type);
+            size = pi_size_of(*type);
+            stack_sz = pi_stack_align(size);
+        }
 
         // TODO BUG LOGIC Check that stack_sz < max_uint_28
         uint64_t result = (align << 56) | (size << 28) | stack_sz;

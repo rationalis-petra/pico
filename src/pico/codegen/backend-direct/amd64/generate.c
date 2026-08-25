@@ -898,137 +898,228 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         break;
     case SAllApplication: {
-        /**
-         * Polymorphic Funcall:
-         * ====================
-         * Polymorphic function calls are complex because they have to consider:
-         *  - How to pass/return return values
-         *  - Whether any given argument is static or dynamic for us (the caller)
-         *  - Whether any given argument is static or dynamic for the callee
-         * 
-         *  We address return values quite simply: all (polymorphic) functions
-         *  have a hidden first argument that is a pointer to some allocated
-         *  space (either on the dynamic or static stack) that they write the
-         *  result to.
-         *  Note that we ALSO need to pass the value that the stack head (R14)
-         *  should have when the function returns, as otherwise it would have to
-         *  dynamically generate the size of + pop all variable arguments.
-         */ 
-        bool caller_varstack = is_variable_in(type, env);
-        if (caller_varstack) {
-            generate_stack_size_of(RAX, type, env, ass, a, point);
-            build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
-            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-            data_stack_grow(env, 3 * ADDRESS_SIZE);
-        } else {
-            size_t size = pi_stack_size_of(*type);
-            build_binary_op(Sub, reg(RSP, sz_64), imma(size), ass, a, point);
-            build_unary_op(Push, reg(RSP, sz_64), ass, a, point);
-            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-            data_stack_grow(env, size + 2 * ADDRESS_SIZE);
-        }
+      /**
+       * Polymorphic Funcall:
+       * ====================
+       * Polymorphic function calls are complex because they have to consider:
+       *  - How to pass/return return values
+       *  - Whether any given argument is static or dynamic for us (the caller)
+       *  - Whether any given argument is static or dynamic for the callee
+       * 
+       *  We address return values quite simply: all (polymorphic) functions
+       *  have a hidden first argument that is a pointer to some allocated
+       *  space (either on the dynamic or static stack) that they write the
+       *  result to.
+       *  Note that we ALSO need to pass the value that the stack head (R14)
+       *  should have when the function returns, as otherwise it would have to
+       *  dynamically generate the size of + pop all variable arguments.
+       */ 
+      int64_t arg_base;
+      bool caller_varstack = is_variable_in(type, env);
+      if (caller_varstack) {
+        generate_stack_size_of(RAX, type, env, ass, a, point);
+        build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
 
-        /**
-         * The static argument size starts at ADDRESS_SIZE because we pushed
-         * the Pointer to where we want the value returned on the stack. In
-         * the case of the callee's argument being dynamic, we pushed it
-         * twice, as the first pointer what we want to be on the stack once
-         * the function has finished running, while the second is the argument
-         * to the function.
-         */
-        size_t static_arg_size = 2 * ADDRESS_SIZE;
+        data_stack_grow(env, ADDRESS_SIZE);
+        arg_base = get_stack_head(env);
+        
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        data_stack_grow(env, 2 * ADDRESS_SIZE);
+      } else {
+        size_t size = pi_stack_size_of(*type);
+        build_binary_op(Sub, reg(RSP, sz_64), imma(size), ass, a, point);
 
-        SymAddrPiAMap type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
-        SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
-        for (size_t i = 0; i < type_vars.len; i++) {
-            push_symbol(type_vars.data[i].key, &ctype_vars);
-        }
-        for (size_t i = 0; i < syn.all_application.types.len; i++) {
-            PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
-            generate_pi_type(type, env, ass, a, point);
-            static_arg_size += ADDRESS_SIZE;
-        }
+        data_stack_grow(env, size);
+        arg_base = get_stack_head(env);
 
-        bool mismatch_variable_args = false;
-        PiType* fn_ty = strip_type(get_type(syn.all_application.function, ictx.tape));
-        if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
+        build_unary_op(Push, reg(RSP, sz_64), ass, a, point);
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        data_stack_grow(env, 2 * ADDRESS_SIZE);
+      }
 
-        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
-            SynRef arg = syn.all_application.implicits.data[i];
-            PiType* paramty = fn_ty->proc.implicits.data[i];
-            PiType* argty = get_type(arg, ictx.tape);
-            
-            generate_i(arg, env, ictx);
+      /**
+       * The static argument size starts at ADDRESS_SIZE because we pushed
+       * the Pointer to where we want the value returned on the stack. In
+       * the case of the callee's argument being dynamic, we pushed it
+       * twice, as the first pointer what we want to be on the stack once
+       * the function has finished running, while the second is the argument
+       * to the function.
+       */
+      size_t static_arg_size = 2 * ADDRESS_SIZE;
 
-            // TODO: (simplification) aren't implicits always non-variable, as
-            // they MUST be TraitInstance, which have fixed size?
-
-            // The argument is variable for for the callee
-            if (is_variable_for(paramty, ctype_vars)) {
-                // Is it also variable in our context?
-                // if not, we need to move to variable stack, otherwise can keep here.
-                static_arg_size += ADDRESS_SIZE;
-                if (!is_variable_in(argty, env)) {
-                    size_t arg_size = pi_stack_size_of(*argty);
-                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
-                    generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
-                    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-
-                    data_stack_shrink(env, arg_size);
-                    data_stack_grow(env, ADDRESS_SIZE);
-
-                }
-            } else {
-                mismatch_variable_args |= is_variable_in(argty, env);
-                static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
-            }
-        }
-
-        for (size_t i = 0; i < syn.all_application.args.len; i++) {
-            SynRef arg = syn.all_application.args.data[i];
-            PiType* paramty = fn_ty->proc.args.data[i];
-            PiType* argty = get_type(arg, ictx.tape);
-            generate_i(arg, env, ictx);
-
-            // The argument is variable for for the callee
-            if (is_variable_for(paramty, ctype_vars)) {
-                // Is it also variable in our context?
-                // if not, we need to move to variable stack, otherwise can keep here.
-                static_arg_size += ADDRESS_SIZE;
-                if (!is_variable_in(argty, env)) {
-                    size_t arg_size = pi_stack_size_of(*argty);
-                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
-                    generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
-                    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-
-                    data_stack_shrink(env, arg_size);
-                    data_stack_grow(env, ADDRESS_SIZE);
-                }
-            } else {
-                mismatch_variable_args |= is_variable_in(argty, env);
-                static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
-            }
-        }
-        generate_i(syn.all_application.function, env, ictx);
+      SymAddrPiAMap type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
+      SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
+      for (size_t i = 0; i < type_vars.len; i++) {
+        push_symbol(type_vars.data[i].key, &ctype_vars);
+      }
+      for (size_t i = 0; i < syn.all_application.types.len; i++) {
+        PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
+        generate_pi_type(type, env, ass, a, point);
         static_arg_size += ADDRESS_SIZE;
+      }
 
-        if (mismatch_variable_args) {
-            panic(mv_string("Mismatch in variable args: codegen for this scenario not implemented."));
+      bool mismatch_variable_args = false;
+      PiType* fn_ty = strip_type(get_type(syn.all_application.function, ictx.tape));
+      if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
+
+      for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+        SynRef arg = syn.all_application.implicits.data[i];
+        PiType* paramty = fn_ty->proc.implicits.data[i];
+        PiType* argty = get_type(arg, ictx.tape);
+            
+        generate_i(arg, env, ictx);
+
+        // TODO: (simplification) aren't implicits always non-variable, as
+        // they MUST be TraitInstance, which have fixed size?
+
+        // The argument is variable for for the callee
+        if (is_variable_for(paramty, ctype_vars)) {
+          // Is it also variable in our context?
+          // if not, we need to move to variable stack, otherwise can keep here.
+          static_arg_size += ADDRESS_SIZE;
+          if (!is_variable_in(argty, env)) {
+            size_t arg_size = pi_stack_size_of(*argty);
+            build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
+            generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
+            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+
+            data_stack_shrink(env, arg_size);
+            data_stack_grow(env, ADDRESS_SIZE);
+
+          }
+        } else {
+          mismatch_variable_args |= is_variable_in(argty, env);
+          static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
         }
+      }
 
+      for (size_t i = 0; i < syn.all_application.args.len; i++) {
+        SynRef arg = syn.all_application.args.data[i];
+        PiType* paramty = fn_ty->proc.args.data[i];
+        PiType* argty = get_type(arg, ictx.tape);
+        generate_i(arg, env, ictx);
+
+        // The argument is variable for for the callee
+        if (is_variable_for(paramty, ctype_vars)) {
+          // Is it also variable in our context?
+          // if not, we need to move to variable stack, otherwise can keep here.
+          static_arg_size += ADDRESS_SIZE;
+          if (!is_variable_in(argty, env)) {
+            size_t arg_size = pi_stack_size_of(*argty);
+            build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
+            generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
+            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+
+            data_stack_shrink(env, arg_size);
+            data_stack_grow(env, ADDRESS_SIZE);
+          }
+        } else {
+          mismatch_variable_args |= is_variable_in(argty, env);
+          static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
+        }
+      }
+      generate_i(syn.all_application.function, env, ictx);
+      static_arg_size += ADDRESS_SIZE;
+
+      if (!mismatch_variable_args) {
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         data_stack_shrink(env, static_arg_size);
-
         /** Note: no cleanup because the first argument to the proc is the
             output destination. */
+      } else {
+        /**
+         * This case is somewhat awkward, but means we are calling a function
+         * where the function we are generating a call to knows the size of
+         * some arguments, BUT we do not (they are on our varstack, but the
+         * callee is expecting them on the static stack)
+         *  
+         * To call this function, we well need to copy the arguments down and
+         * expand any that are on our varstack. This means we will not know the
+         * value of $RSP - $RBP, and, as such, the destination of our copies
+         * will be relative $RSP, but the source will be relative to $RBP
+         */
 
-        break;
+        // Step 1: Copy the output destination pointer and the final $R14 value down
+        //         The stack.
+        size_t args_size = 0;
+        args_size += 2 * ADDRESS_SIZE;
+        build_binary_op(Sub, reg(RSP, sz_64), imma(2 * ADDRESS_SIZE), ass, a, point);
+        generate_stack_copy_from_base(0, arg_base - args_size, 2 * ADDRESS_SIZE, ass, a, point);
+
+        // Move the types from above 
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            size_t argsz = REGISTER_SIZE;
+            args_size += argsz;
+            build_binary_op(Sub, reg(RSP, sz_64), imma(argsz), ass, a, point);
+            generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
+        }
+
+        // Move implicits down
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+          PiType* aty = get_type(syn.all_application.implicits.data[i], ictx.tape);
+          PiType* paramty = fn_ty->proc.implicits.data[i];
+          if (is_variable_in(aty, env) && !is_variable_for(paramty, ctype_vars)) {
+            // There is a mismatch AND it is static for the callee
+
+            // Unfold argument onto data-stack
+            args_size += ADDRESS_SIZE;
+            generate_stack_size_of(RAX, aty, env, ass, a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RDX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
+            generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
+          } else {
+            // There is either no mismatch, or it is static for us + variable
+            // for the callee, which we already dealt with at argument
+            // generation time.
+
+            // Copy down From Above
+            size_t argsz = is_variable_for(paramty, ctype_vars) ? ADDRESS_SIZE : pi_stack_size_of(*aty);
+            args_size += argsz;
+            build_binary_op(Sub, reg(RSP, sz_64), imma(argsz), ass, a, point);
+            generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
+          }
+        }
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+          PiType* aty = get_type(syn.all_application.args.data[i], ictx.tape);
+          PiType* paramty = fn_ty->proc.args.data[i];
+          if (is_variable_in(aty, env) && !is_variable_for(paramty, ctype_vars)) {
+            // There is a mismatch AND it is static for the callee
+
+            // Unfold argument onto data-stack
+            args_size += ADDRESS_SIZE;
+            generate_stack_size_of(RAX, aty, env, ass, a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RDX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
+            generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
+          } else {
+            // There is either no mismatch, or it is static for us + variable
+            // for the callee, which we already dealt with at argument
+            // generation time.
+
+            // Copy down From Above
+            size_t argsz = is_variable_for(paramty, ctype_vars) ? ADDRESS_SIZE : pi_stack_size_of(*aty);
+            args_size += argsz;
+            build_binary_op(Sub, reg(RSP, sz_64), imma(argsz), ass, a, point);
+            generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
+          }
+        }
+        // Account for the function
+        args_size += ADDRESS_SIZE;
+                
+        // Copy down the function itself & call
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imma(args_size), ass, a, point);
+
+        data_stack_shrink(env, args_size);
+      }
+
+      break;
     }
     case SSeal: {
         // Generating a sealed type is relatively simple: 

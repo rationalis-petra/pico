@@ -141,15 +141,16 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(uses-eq :false :true)");
     }
 
-    /*
     if (test_start(log, mv_string("trait-higher-kinded"))) {
         RUN("(def Cont Trait Cont [(C Kind [Type] Type)] [.get All [A] Proc [(C A)] A])");
         RUN("(def Ptr Named Ptr Family [A] Address)");
         RUN("(def ptr-cont instance (Cont Ptr) \n"
-            "[.get all [A] proc [ptr] (load {A} (unname ptr))])");
+            "[.get all [A] proc [(ptr (Ptr A))] (address.load {A} (unname ptr))])");
 
-        bool expected = false;
-        TEST_EQ("(uses-eq :false :true)");
+        RUN("(def get all [A (C Kind [Type] Type)] proc {(cont (Cont C))} [(c (C A))] \n"
+            "  cont.get {A} c)");
+
+        int64_t expected = 9798;
+        TEST_EQ("(seq [let! ptr (name (Ptr I64) (dyn-alloc (size-of I64)))] (address.store (unname ptr) 9798) (get ptr))");
     }
-    */
 }

@@ -22,7 +22,7 @@ void type_check_expr(SynRef untyped, PiType type, TypeEnv* env, TypeCheckContext
 void type_infer_expr(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 void post_unify(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 PiType* eval_type(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
-PiType* eval_sort(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
+PiType* eval_kind(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
@@ -253,7 +253,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
             // TODO: support more kinds
             PiType* arg_kind;
             if (cell.val) {
-                arg_kind = eval_sort(*(SynRef*)cell.val, env, ctx);
+                arg_kind = eval_kind(*(SynRef*)cell.val, env, ctx);
             } else {
                 arg_kind = mk_type_type(ctx.pia);
                 SynRef new_syn = new_syntax(ctx.tape);
@@ -442,7 +442,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             PiType* arg_kind;
             if (cell.val) {
-                arg_kind = eval_type(*(SynRef*)cell.val, env, ctx);
+                arg_kind = eval_kind(*(SynRef*)cell.val, env, ctx);
             } else {
                 arg_kind = mk_type_type(ctx.pia);
                 SynRef new_syn = new_syntax(ctx.tape);
@@ -1664,7 +1664,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             // TODO (DECISION): For now, we assume kind 'Type' if none is
             //   annotated... do we want to change this?
             if (cell.val) {
-                atype = eval_sort(*(SynRef*)cell.val, env, ctx);
+                atype = eval_kind(*(SynRef*)cell.val, env, ctx);
             } else {
                 SynRef new_syn = new_syntax(ctx.tape);
                 Syntax s = {
@@ -1727,7 +1727,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             // TODO (DECISION): For now, we assume kind 'Type' if none is
             //   annotated... do we want to change this?
             if (cell.val) {
-                atype = eval_sort(*(SynRef*)cell.val, env, ctx);
+                atype = eval_kind(*(SynRef*)cell.val, env, ctx);
             } else {
                 SynRef new_syn = new_syntax(ctx.tape);
                 Syntax s = {
@@ -1818,8 +1818,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             SymPtrCell arg = untyped.trait.vars.data[i];
             PiType* aty;
             if (arg.val) {
-                aty = eval_type(*(SynRef*)arg.val, env, ctx);
-                if (aty->sort != TKind) {
+                aty = eval_kind(*(SynRef*)arg.val, env, ctx);
+                if (!is_kind(*aty)) {
                     type_error_trait_param_not_type(ref, i, ctx);
                 }
             } else  {
@@ -3135,7 +3135,7 @@ PiType* eval_type(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 // TODO (BUG LOGIC UB): evaluation may produce a function pointer (or an object
 // with a function pointer) that points to generated code. This method currently
 // provides no means to capture that assembly.
-PiType* eval_sort(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
+PiType* eval_kind(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     Syntax syn = get_syntax(ref, ctx.tape);
     if (syn.type == SCheckedType) return syn.type_val;
     type_infer_i(ref, env, ctx);

@@ -105,19 +105,5 @@ _Noreturn void type_error_distinct_must_have_type(SynRef named, TypeCheckContext
 _Noreturn void type_error_opaque_must_have_type(SynRef named, TypeCheckContext ctx);
 _Noreturn void type_error_trait_param_not_type(SynRef trait, size_t idx, TypeCheckContext ctx);
 
-
-
-// ---------------------------------------------------------------------- 
-//
-//                              Unifictaion  
-//
-// ----------------------------------------------------------------------
-
-// Enum
-UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs, UnifyContext ctx);
-
-// Named
-UnifyResult unify_error_name_has_args_match(PiType* lhs, PiType* rhs, Allocator* a);
-
 #endif
 

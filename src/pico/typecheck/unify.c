@@ -7,7 +7,7 @@
 #include "pico/data/client/meta/list_header.h"
 #include "pico/data/client/meta/list_impl.h"
 #include "pico/data/client/sym_addr_piamap.h"
-#include "pico/typecheck/type_errors.h"
+#include "pico/typecheck/unify_errors.h"
 #include "pico/typecheck/unify.h"
 
 /**
@@ -149,6 +149,8 @@ bool occurs(UVarType* var, PiType *lhs);
 // Unify two types such they are equal. Assumes they have the same sort
 static UnifyResult unify_eq(PiType *lhs, PiType *rhs,
                      SymPairArray* rename, UnifyContext ctx);
+static UnifyResult unify_app(PiType *app, PiType *val,
+                     SymPairArray* rename, UnifyContext ctx);
 static UnifyResult unify_internal(PiType *lhs, PiType *rhs,
                            SymPairArray* rename, UnifyContext ctx);
 static UnifyResult unify_variant(Symbol lhs_sym, AddrPiList lhs_args,
@@ -191,6 +193,12 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Unify
     }
     else if (rhs->sort == lhs->sort) {
         out = unify_eq(lhs, rhs, rename, ctx);
+    }
+    else if (lhs->sort == TCApp) {
+        out = unify_app(lhs, rhs, rename, ctx);
+    }
+    else if (rhs->sort == TCApp) {
+        out = unify_app(rhs, lhs, rename, ctx);
     } else {
         PtrArray nodes = mk_ptr_array(8, ctx.a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), ctx.a), &nodes);
@@ -474,25 +482,6 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         return unify_internal(lhs->distinct.type, rhs->distinct.type, rename, ctx);
         break;
     }
-    case TSort:
-    case TType:
-    case TConstraint:
-        return (UnifyResult) {.type = UOk};
-    case TKind: {
-        if (lhs->kind.params.len != rhs->kind.params.len) {
-            return (UnifyResult) {
-                .type = USimpleError,
-                .message = mv_cstr_doc("Cannot unify two kinds with a different number of parameters.", a),
-            };
-        }
-        UnifyResult res;
-        for (size_t i = 0; i < lhs->kind.params.len; i++) {
-            res = unify_internal(lhs->kind.params.data[i], rhs->kind.params.data[i], rename, ctx);
-            if (res.type != UOk) return res;
-        }
-        res = unify_internal(lhs->kind.body, rhs->kind.body, rename, ctx);
-        return res;
-    }
     case TVar: {
         // Check that they are alpha-equivalent
 
@@ -554,6 +543,45 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         rename->len -= lhs->sealed.vars.len;
         return res;
     }
+    case TCApp: {
+        // TODO: When the 'family' of TCApp is a unification var, we need to
+        // employ higher-order unification techniques. Look at unificaton of the
+        // pattern fragment due to Dale Miller.
+        if (lhs->app.args.len != rhs->app.args.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Applications of two type families have different numbers of arguments.", a),
+            };
+        }
+        
+        UnifyResult res = unify_internal(lhs->app.fam, rhs->app.fam, rename, ctx);
+        if (res.type != UOk) return res;
+
+        for (size_t i = 0; i < lhs->app.args.len; i++) {
+            UnifyResult res = unify_internal(lhs->app.args.data[i], rhs->app.args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    case TSort:
+    case TType:
+    case TConstraint:
+        return (UnifyResult) {.type = UOk};
+    case TKind: {
+        if (lhs->kind.params.len != rhs->kind.params.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Cannot unify two kinds with a different number of parameters.", a),
+            };
+        }
+        UnifyResult res;
+        for (size_t i = 0; i < lhs->kind.params.len; i++) {
+            res = unify_internal(lhs->kind.params.data[i], rhs->kind.params.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        res = unify_internal(lhs->kind.body, rhs->kind.body, rename, ctx);
+        return res;
+    }
     default:  {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: invalid types"), a), &nodes);
@@ -562,6 +590,93 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
         panic(doc_to_str(mv_sep_doc(nodes, a), 80, a));
     } 
+    }
+}
+
+static UnifyResult unify_app(PiType *app, PiType *val,
+                             SymPairArray* rename, UnifyContext ctx) {
+  /**
+   * TODO
+   * This is effectively where higher order unification (HOU) would come in. 
+   * Look into pattern unification and implement it here: what we have is a very
+   * simple version where we require that head of the value is a type constructor 
+   * (Named, Distinct, Opaque) with fixed arguments, and we don't rename them.
+   */
+    Allocator* a = ctx.a;
+    if (app->sort != TCApp)
+        panic(mv_string("Calling unify_app with app.sort != TCApp."));
+    switch (val->sort) {
+    case TNamed: {
+        if (!val->named.args) {
+            return unify_app_err_no_args(app, val, ctx);
+        }
+        AddrPiList val_args = *val->named.args;
+        if (val_args.len != app->app.args.len) {
+            return unify_app_err_unequal_arglen(app, val, ctx);
+        }
+        PiType* type_no_args = call_alloc(sizeof(PiType), ctx.pia);
+        *type_no_args = *val;
+        type_no_args->named.args = NULL;
+
+        // TODO: add architecture for 'properly' generating a new var
+        if (val_args.len > 8) {
+            panic(mv_string("TODO: add architecture for properly generating a new var."));
+        }
+        const char* vars[8] = {"A", "B", "C", "D", "E", "F", "G", "H"};
+        SymAddrPiAMap new_fam_args = mk_sym_addr_piamap(val_args.len, ctx.pia);
+        for (size_t i = 0; i < val_args.len; i++) {
+            PiType* kind = mk_type_type(ctx.pia); // TODO: add kind_of and
+                                                  // replace this with
+                                                  // kind_of(val_args, ctx.pia)
+            sym_addr_insert(string_to_symbol(mv_string(vars[i])), kind, &new_fam_args);
+        }
+
+        PiType* new_fam = call_alloc(sizeof(PiType), ctx.pia);
+        *new_fam = (PiType) {
+            .sort = TFam,
+            .binder.vars = new_fam_args,
+            .binder.body = type_no_args->named.type,
+        };
+        type_no_args->named.type = new_fam;
+
+        UnifyResult res =  unify_internal(app->app.fam, type_no_args, rename, ctx);
+        if (res.type != UOk) return res;
+        for (size_t i = 0; i < val_args.len; i++) {
+            UnifyResult res =  unify_internal(app->app.args.data[i], val_args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    case TDistinct: {
+        if (!val->distinct.args) {
+            return unify_app_err_no_args(app, val, ctx);
+        }
+        AddrPiList val_args = *val->distinct.args;
+        if (val_args.len != app->app.args.len) {
+            return unify_app_err_unequal_arglen(app, val, ctx);
+        }
+        PiType* type_no_args = call_alloc(sizeof(PiType), ctx.pia);
+        *type_no_args = *val;
+        type_no_args->distinct.args = NULL;
+        UnifyResult res =  unify_internal(app->app.fam, type_no_args, rename, ctx);
+        if (res.type != UOk) return res;
+        for (size_t i = 0; i < val_args.len; i++) {
+            UnifyResult res =  unify_internal(app->app.args.data[i], val_args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    default: {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mk_str_doc(mv_string("Unification failed: unify_app incomplete - cannot unify head type"), a), &nodes);
+        push_ptr(pretty_type(app, default_ptp, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+        push_ptr(pretty_type(val, default_ptp, a), &nodes);
+        return (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_sep_doc(nodes, a),
+        };
+    }
     }
 }
 
@@ -980,6 +1095,12 @@ bool occurs(UVarType* var, PiType *type) {
         return false;
     }
 
+    case TCApp: {
+      for (size_t i = 0; i < type->app.args.len; i++) {
+        if (occurs(var, type->app.args.data[i])) return true;
+      }
+      return occurs(var, type->app.fam);
+    }
     case TSort: return false;
     case TType: return false;
     case TConstraint: return false;
@@ -1048,8 +1169,10 @@ void squash_type(PiType* type, UnifyContext ctx) {
         break;
     }
     case TVar: break;
-    case TAll: 
-    case TFam: {
+    case TAll:  {
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            squash_type(type->binder.vars.data[i].val, ctx);
+        }
         squash_type(type->binder.body, ctx);
         break;
     }
@@ -1101,11 +1224,30 @@ void squash_type(PiType* type, UnifyContext ctx) {
         }
         break;
     }
+    case TFam: {
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            squash_type(type->binder.vars.data[i].val, ctx);
+        }
+        squash_type(type->binder.body, ctx);
+        break;
+    }
+    case TCApp: {
+        for (size_t i = 0; i < type->app.args.len; i++) {
+            squash_type(type->app.args.data[i], ctx);
+        }
+        squash_type(type->app.fam, ctx);
+        break;
+    }
 
     case TSort: break;
     case TType: break;
-    case TKind: break;
     case TConstraint: break;
+    case TKind:
+        for (size_t i = 0; i < type->kind.params.len; i++) {
+            squash_type(type->kind.params.data[i], ctx);
+        }
+        squash_type(type->kind.body, ctx);
+        break;
     // Special sort: unification variable
     case TUVar: {
         UVarType* uvar = type->uvar;
