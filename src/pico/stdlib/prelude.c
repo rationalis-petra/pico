@@ -18,6 +18,7 @@ void add_prelude_module(Package* base, RegionAllocator* region) {
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "equality");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "order");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "lifetime");
+    add_import_all(&re_exports.clauses, &ra, 2, "abs", "sequence");
 
     Exports exports = (Exports) {
         .export_all = true,

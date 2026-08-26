@@ -469,8 +469,8 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
         type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia, 1,
                                                                "A", mk_type_type(&pia),
                                                       mk_enum_type(&pia, 2,
-                                                                   "some", 1, mk_var_type(&pia, "A"),
-                                                                   "none", 0)));
+                                                                   "none", 0,
+                                                                   "some", 1, mk_var_type(&pia, "A"))));
         type_data = type_val;
         name = string_to_name(mv_string("Maybe"));
         add_def(module, name, type, &type_data, null_segments, NULL);

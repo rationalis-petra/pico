@@ -1,4 +1,4 @@
-#include "platform/memory/static.h"
+#include "data/option.h"
 
 #include "pico/stdlib/platform/submodules.h"
 
@@ -93,6 +93,39 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
         Pr expected = (Pr) {.x=127, .y=-75};
         TEST_EQ("(id-2 (struct [.x 127] [.y -75]))");
+    }
+
+    // -------------------------------------------------------------------------
+    //
+    //    Structures
+    //
+    // -------------------------------------------------------------------------
+    if (test_start(log, mv_string("poly-struct-pair"))) {
+        RUN("(def Pair Named Pair Family [A B] Struct [.fst A] [.snd B])");
+        typedef struct {int64_t fst; int64_t snd;} Pair;
+
+        Pair expected = {.fst=1329, .snd=198};
+        TEST_EQ("((all [A B] proc [(x A) (y B)] (struct (Pair A B) [.fst x] [.snd y])) 1329 198)");
+    }
+
+    // -------------------------------------------------------------------------
+    //
+    //    Enumerations
+    //
+    // -------------------------------------------------------------------------
+    if (test_start(log, mv_string("poly-enum-val"))) {
+        RUN("(def Maybe Named Maybe Family [A] Enum :none [:some A])");
+
+        I64Option expected = {.type=Some, .val=987};
+        TEST_EQ("((all [A] proc [(v A)] ((Maybe A):some v)) 987)");
+    }
+
+    if (test_start(log, mv_string("poly-enum-constructor"))) {
+        RUN("(def Maybe Named Maybe Family [A] Enum :none [:some A])");
+        typedef struct {int64_t is_some; int64_t val;} Maybe;
+
+        Maybe expected = {.is_some=0, .val=0};
+        TEST_EQ("((all [A] proc [(v A)] (Maybe A):none) 987)");
     }
 
     // -------------------------------------------------------------------------

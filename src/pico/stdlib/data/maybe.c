@@ -43,6 +43,6 @@ void add_maybe_module(Target target, Module *data, RegionAllocator* region) {
     }
 
     const char *mk_maybe_type =
-        "(def Maybe Family [A] Enum [:some A] [:none])";
+        "(def Maybe Family [A] Enum [:none] [:some A])";
     compile_toplevel(mk_maybe_type, module, target, &point, &pi_point, region);
 }

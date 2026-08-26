@@ -1909,7 +1909,13 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     }
     case SConstructor: {
         if (is_variable_in(type, env)) {
-            not_implemented(mv_string("Polymorphic constructor"));
+            PiType* enum_type = strip_type(type);
+            generate_size_of(RAX, enum_type, env, ass, a, point);
+            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(R14, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+            build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
         } else {
             PiType* enum_type = strip_type(type);
             size_t enum_size = pi_stack_size_of(*enum_type);

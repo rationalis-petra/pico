@@ -12,11 +12,6 @@ static PiType* file_ty;
 static PiType* file_err_ty;
 static PiType* file_mode_ty;
 
-typedef struct {
-    uint64_t tag;
-    uint64_t size;
-} MaybeSize;
-
 FileResult relic_open_file(String name, FileMode mode) {
     PiAllocator pia = get_std_perm_allocator();
     Allocator a = convert_to_callocator(&pia);
@@ -31,12 +26,12 @@ uint8_t relic_read_byte(File *file) {
     return out;
 }
 
-U8PiList relic_read_chunk(File *file, MaybeSize msize) {
+U8PiList relic_read_chunk(File *file, U64Option msize) {
     // TODO: The allocator pointer goes on to live in the output array,
     //       and so it will be dangling when this function exits
     PiAllocator pia = get_std_current_allocator();
     Allocator a = convert_to_callocator(&pia);
-    U8Array arr = read_chunk(file, !msize.tag, msize.size, &a);
+    U8Array arr = read_chunk(file, msize.type == Some, msize.val, &a);
     return (U8PiList) {
       .data = arr.data,
       .len = arr.len,

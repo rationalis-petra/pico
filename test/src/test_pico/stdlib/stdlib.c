@@ -22,6 +22,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
+    add_import(&imports.clauses, a, 1, "abs");
 
     add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
 

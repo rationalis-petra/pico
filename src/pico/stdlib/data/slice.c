@@ -21,6 +21,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
     add_import_all(&imports.clauses, &ra, 2, "abs", "order");
     add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "sequence");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -80,6 +81,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  (struct (Slice A) [.addr (address.num-to-address (u64.+ (u64.* (size-of A) start) (address.address-to-num slice.addr)))] [.len (u64.- end start)]))";
     compile_toplevel(slice_subview, module, target, &point, &pi_point, region);
 
+
     const char *slice_copy_fn =
         "(def copy all [A] proc [(slice (Slice A))] seq\n"
         "  [let! out (new {A} slice.len)]"
@@ -103,4 +105,15 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "    (address.store dest-address val))\n"
         "  out)" ;
     compile_toplevel(slice_join_fn, module, target, &point, &pi_point, region);
+
+    /**
+     *  Implementations for Abstractions: 
+     */
+    const char *slice_seq =
+        "(def slice-seq instance (Seq Slice)\n"
+        "  [.elt all [A] proc [(idx U64) (slice (Slice A))] \n"
+        "    if (u64.< idx slice.len)\n"
+        "       (:some (elt {A} idx slice))"
+        "       :none])\n";
+    compile_toplevel(slice_seq, module, target, &point, &pi_point, region);
 }

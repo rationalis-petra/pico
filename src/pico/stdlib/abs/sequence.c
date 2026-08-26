@@ -41,8 +41,7 @@ void add_sequence_module(Target target, Module *abs, RegionAllocator* region) {
     // TODO: ensure this isn't exported...
     const char* maybe_type = 
         "(def Maybe Named Maybe Family [A] Enum\n"
-        "  [:some A]\n"
-        "  [:none])\n" ;
+        "  :none [:some A])\n";
     compile_toplevel(maybe_type, module, target, &point, &pi_point, region);
 
     const char* iterator_vtable = 
@@ -57,11 +56,18 @@ void add_sequence_module(Target target, Module *abs, RegionAllocator* region) {
         "  [.state I])\n" ;
     compile_toplevel(iterator_type, module, target, &point, &pi_point, region);
 
-    /*
+    const char* iterable_trait = 
+        "(def Iterable Trait Iterable [C A]\n"
+        "  [.begin Proc [C] (Iterator A)])" ;
+    compile_toplevel(iterable_trait, module, target, &point, &pi_point, region);
+
     const char* seq_trait = 
-        "(def Seq Trait Ord [(C Kind [Type] Type)]\n"
-        "  [.elt All [A] Proc [U64 (C A)] (Maybe A)]\n"
-        "  [.begin All [A] Proc [(C A)] (Iterator (C A) A)])" ;
+        "(def Seq Trait Seq [(C Kind [Type] Type)]\n"
+        "  [.elt All [A] Proc [U64 (C A)] (Maybe A)])" ;
     compile_toplevel(seq_trait, module, target, &point, &pi_point, region);
-    */
+
+    const char* elt_fn = 
+        "(def elt all [A (C Kind [Type] Type)] proc {(seq (Seq C))} [idx container]\n"
+        "  seq.elt {A} idx container)" ;
+    compile_toplevel(elt_fn, module, target, &point, &pi_point, region);
 }

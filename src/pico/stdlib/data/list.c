@@ -24,6 +24,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "abs", "order");
     add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
     add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "sequence");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -179,6 +180,14 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     /**
      *  Implementations for Abstractions: 
      */
+    const char *list_seq =
+        "(def list-seq instance (Seq List)\n"
+        "  [.elt all [A] proc [(idx U64) (lst (List A))] \n"
+        "    if (u64.< idx lst.len)\n"
+        "       (:some (slice.elt {A} idx lst.data))"
+        "       :none])\n";
+    compile_toplevel(list_seq, module, target, &point, &pi_point, region);
+
     const char *list_eq =
         "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"
         "  [.= proc [(l1 (List A)) (l2 (List A))] \n"

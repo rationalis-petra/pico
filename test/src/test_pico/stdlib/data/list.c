@@ -29,6 +29,17 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(list.elt 0 list-1)");
     }
 
+    if (test_start(log, mv_string("seq-elt-matches-eset"))) {
+        I64Option expected = {.type = Some, .val = -123986};
+        RUN("(list.eset 0 -123986 list-1)");
+        TEST_EQ("(abs.sequence.elt 0 list-1)");
+    }
+
+    if (test_start(log, mv_string("seq-elt->len-returns-none"))) {
+        I64Option expected = {.type = None, .val = 0};
+        TEST_EQ("(abs.sequence.elt 128 list-1)");
+    }
+
     if (test_start(log, mv_string("list-literal-macro"))) {
         int64_t expected = -2;
         TEST_EQ("(seq [let! mlist list.list 1 -2 3 -4]\n"
