@@ -201,6 +201,48 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE_FAIL("(def vec2 all [A] proc [x y] name (Vec2 A) array {2} [x y])");
     }
 
+    if (test_start(log, mv_string("instance-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val {I64})");
+    }
+
+    if (test_start(log, mv_string("instance-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val {I64})");
+    }
+
+    if (test_start(log, mv_string("instance-arg-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+        RUN("(def val-2 all [A] proc {(habit (Habit A))} [] (val {A}))");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val-2 {I64})");
+    }
+
+    /* TODO: fix me!
+    if (test_start(log, mv_string("instance-instance-find"))) {
+        RUN("(def InHab Trait InHab [A] [.val A])");
+        RUN("(def inhab-i64 instance (InHab I64) [.val 3])");
+
+        RUN("(def val all [A] proc {(habit (InHab A))} [] habit.val)");
+        RUN("(def Wrap Named Wrap Family [A] Struct [.inner A])");
+        RUN("(def habit-wrap instance [A] {(h (InHab A))} (InHab (Wrap A))\n"
+            "  [.val struct (Wrap A) [.inner (val)]])");
+        RUN("(def val-2 all [A] proc {(habit (InHab A))} [] (val {A}))");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val-2 {(Wrap I64)})");
+    }
+    */
+
     delete_env(env, a);
     remove_module(base, string_to_name(mv_string("typecheck-test-module")));
     delete_assembler(ass);

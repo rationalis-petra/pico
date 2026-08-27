@@ -2462,6 +2462,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SInstance: {
+        PiType* type = get_type(ref, ctx.tape);
 
         PiType* ty_ty = mk_type_type(ctx.pia);
         for (size_t i = 0; i < syn.instance.params.len; i++) {
@@ -2473,10 +2474,9 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
         for (size_t i = 0; i < syn.instance.implicits.len; i++) {
             SymPtrCell arg = syn.instance.implicits.data[i];
-            type_var(arg.key, arg.val, env);
+            type_var(arg.key, type->instance.implicits.data[i], env);
         }
 
-        PiType* type = get_type(ref, ctx.tape);
         if (syn.instance.implicit_fields.len != 0) {
             err.message = mv_cstr_doc("Expecting implicit fields in trait to not be instantiated.", ctx.a);
             throw_pi_error(ctx.point, err);
