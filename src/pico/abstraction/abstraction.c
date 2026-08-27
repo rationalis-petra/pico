@@ -737,13 +737,13 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
-    case FArray: {
+    case FTile: {
         U64Array dims = mk_u64_array(2, a);
         SynArray elements = mk_syn_array(16, a);
         // Special Case: Empty Array
         if (raw.branch.nodes.len == 1) {
             Syntax syn = {
-                .type = SArray,
+                .type = STile,
                 .array.dimensions = dims,
                 .array.elements = elements,
             };
@@ -761,14 +761,14 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             for (size_t i = 0; i < nodes.len; i++) {
                 RawTree dim = nodes.data[i];
                 if (dim.type != RawAtom || dim.atom.type != AIntegral)
-                    array_incorrect_dimtype(dim, ctx);
+                    tile_incorrect_dimtype(dim, ctx);
                 push_u64((uint64_t)dim.atom.int_64, &dims);
             }
             idx++;
         }
 
         if (idx + 1 != raw.branch.nodes.len) {
-            array_incorrect_numterms(raw, idx + 1, ctx);
+            tile_incorrect_numterms(raw, idx + 1, ctx);
         }
         RawTree nodes = raw.branch.nodes.data[idx];
         if (idx == 1) {
@@ -786,7 +786,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
         
         Syntax syn = {
-            .type = SArray,
+            .type = STile,
             .array.dimensions = dims,
             .array.elements = elements,
         };
@@ -795,9 +795,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
-    case FArrayElt: {
+    case FTileElt: {
         if (raw.branch.nodes.len != 3) {
-            array_elt_incorrect_numterms(raw, ctx);
+            tile_elt_incorrect_numterms(raw, ctx);
         }
         SynArray index;
         RawTree raw_index = raw.branch.nodes.data[1];
@@ -812,10 +812,73 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
         
         Syntax syn = {
-            .type = SArrayElt,
+            .type = STileElt,
             .array_elt.index = index,
             .array_elt.array = abstract_expr_i(raw.branch.nodes.data[2], ctx),
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FWithLoop: {
+        //panic(mv_string("TODO: implement with for abstraction.c"));
+        if (raw.branch.nodes.len < 4) {
+            tile_elt_incorrect_numterms(raw, ctx);
+        }
+
+        SymbolArray vars;
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
+            tile_with_invalid_indexlist(raw.branch.nodes.data[1], ctx);
+        }
+
+        U64Array shape = mk_u64_array(8, a);
+        if (!(raw.branch.nodes.data[2].type == RawBranch &&
+              raw.branch.nodes.data[2].branch.hint == HSpecial)) {
+            tile_with_invalid_shape(raw.branch.nodes.data[2], ctx);
+        }
+
+        RawTreePiList shape_nodes = raw.branch.nodes.data[2].branch.nodes;
+        for (size_t i = 0; i < shape_nodes.len; i++) {
+            RawTree dim = shape_nodes.data[i];
+            if (dim.type != RawAtom || dim.atom.type != AIntegral)
+                tile_incorrect_dimtype(dim, ctx);
+            push_u64((uint64_t)dim.atom.int_64, &shape);
+        }
+
+        if (shape.len != vars.len) {
+            tile_with_fold_incorrect_numterms(raw, ctx);
+        }
+
+        FoldOption fold = {.type = None};
+        if (raw.branch.nodes.data[3].type == RawBranch &&
+            raw.branch.nodes.data[3].branch.hint == HImplicit) {
+            RawTreePiList nodes = raw.branch.nodes.data[3].branch.nodes;
+            if (nodes.len != 3) {
+                tile_with_fold_incorrect_numterms(raw.branch.nodes.data[3], ctx);
+            }
+            // TODO: check that nodes.data[0] == fold
+
+            fold.type = Some;
+            fold.fn = abstract_expr_i(nodes.data[1], ctx);
+            fold.element = abstract_expr_i(nodes.data[2], ctx);
+        }
+
+        size_t idx = fold.type == None ? 3 : 4;
+        if (raw.branch.nodes.len < idx + 1) {
+            tile_elt_incorrect_numterms(raw, ctx);
+        }
+        RawTree* body_desc = raw.branch.nodes.len == (idx + 1) ? &raw.branch.nodes.data[idx] : raw_slice(&raw, idx, ctx.pia); 
+        SynRef body = abstract_expr_i(*body_desc, ctx);
+
+        Syntax syn = {
+            .type = SWithLoop,
+            .with.vars = vars,
+            .with.shape = shape,
+            .with.fold = fold,
+            .with.body = body,
+        };
+
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
@@ -1990,7 +2053,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
-    case FArrayType: {
+    case FTileType: {
         // (Array [n m ...] T)
         if (raw.branch.nodes.len != 3) {
             array_tyformer_incorrect_numterms(raw, ctx);
@@ -2026,7 +2089,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
 
         Syntax syn = {
-            .type = SArrayType,
+            .type = STileType,
             .array_type.dimensions = dimensions,
             .array_type.element = abstract_expr_i(raw_type, ctx),
         };
@@ -3699,7 +3762,7 @@ void deduce_dimension(U64Array *dims, RawTree nodes, AbstractionICtx ctx) {
 RawTreePiList next_node_arr(U64Array *index, U64Array dims, RawTree nodes, AbstractionICtx ctx) {
     // TODO: harden?
     if (nodes.type != RawBranch || nodes.branch.hint != HSpecial) {
-        array_incorrect_format(nodes, ctx);
+        tile_incorrect_format(nodes, ctx);
     }
 
     if (dims.len == 1) {
@@ -3711,11 +3774,11 @@ RawTreePiList next_node_arr(U64Array *index, U64Array dims, RawTree nodes, Abstr
         // retrieve the array asoociated with the current index
         for (size_t i = 0; i < dims.len - 1; i++) {
             if (nodes.branch.nodes.len != dims.data[i]) {
-                array_incorrect_size(nodes, dims.data[i], ctx);
+                tile_incorrect_size(nodes, dims.data[i], ctx);
             }
             nodes = nodes.branch.nodes.data[index->data[i]];
             if (nodes.type != RawBranch || nodes.branch.hint != HSpecial) {
-                array_incorrect_format(nodes, ctx);
+                tile_incorrect_format(nodes, ctx);
             }
         }
 

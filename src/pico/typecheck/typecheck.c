@@ -947,7 +947,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
-    case SArray: {
+    case STile: {
         PiType* type = mk_uvar(ctx.pia);
         for (size_t i = 0; i < untyped.array.elements.len; i++) {
             type_check_i(untyped.array.elements.data[i], type, (Range){}, env, ctx);
@@ -962,14 +962,14 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             push_dim(dim, &dims);
         }
         *arr_type = (PiType) {
-            .sort = TArray,
-            .array.dimensions = dims,
-            .array.element = type,
+            .sort = TTile,
+            .tile.dimensions = dims,
+            .tile.element = type,
         };
         set_type(ref, arr_type, ctx.tape);
         break;
     }
-    case SArrayElt: {
+    case STileElt: {
         PiType* array_type = call_alloc(sizeof(PiType), ctx.pia); 
         PiType* elt_type = mk_uvar(ctx.pia);
         DimPiList dimensions = mk_dim_list(untyped.array.dimensions.len, ctx.pia);
@@ -978,9 +978,9 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             push_dim(dim, &dimensions);
         }
         *array_type = (PiType) {
-            .sort = TArray, 
-            .array.dimensions = dimensions,
-            .array.element = elt_type,
+            .sort = TTile, 
+            .tile.dimensions = dimensions,
+            .tile.element = elt_type,
         };
 
         Range arr_src = get_range(ref, ctx.tape).term;
@@ -997,6 +997,42 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         set_type(ref, elt_type, ctx.tape);
+        break;
+    }
+    case SWithLoop: {
+        for (size_t i = 0; i < untyped.with.vars.len; i++) {
+            PiType* type = mk_prim_type(ctx.pia, UInt_64);
+            type_var(untyped.with.vars.data[i], type, env);
+        }
+        type_infer_i(untyped.with.body, env, ctx);
+        PiType* inferred = get_type(untyped.with.body, ctx.tape);
+
+        PiType* out;
+        if (untyped.with.fold.type == Some) {
+            PiType* fn_type = mk_proc_type(ctx.pia, 2, inferred, inferred, inferred);
+            Range range = get_range(untyped.with.body, ctx.tape).term;
+            type_check_i(untyped.with.fold.fn, fn_type, range, env, ctx);
+            type_check_i(untyped.with.fold.element, inferred, range, env, ctx);
+            out = inferred;
+        } else {
+            PiType* tile = call_alloc(sizeof(PiType), ctx.pia);
+            DimPiList shape = mk_dim_list(untyped.with.shape.len, ctx.pia);
+            for (size_t i = 0; i < untyped.with.shape.len; i++) {
+                Dimension dim = {
+                    .is_uvar = false,
+                    .val = untyped.with.shape.data[i],
+                };
+                push_dim(dim, &shape);
+            }
+            *tile = (PiType) {
+                .sort = TTile,
+                .tile.dimensions = shape,
+                .tile.element = inferred,
+            };
+            out = tile;
+        }
+        set_type(ref, out, ctx.tape);
+        pop_types(env, untyped.with.vars.len);
         break;
     }
     case SStructure: {
@@ -1602,7 +1638,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         type_check_i(ret, t, range, env, ctx);
         break;
     }
-    case SArrayType: {
+    case STileType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TType};
         set_type(ref, t, ctx.tape);;
@@ -2391,17 +2427,25 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
-    case SArray: {
+    case STile: {
         for (size_t i = 0; i < syn.array.elements.len; i++) {
             post_unify(syn.array.elements.data[i], env, ctx);
         }
         break;
     }
-    case SArrayElt: {
+    case STileElt: {
         for (size_t i = 0; i < syn.array_elt.index.len; i++) {
             post_unify(syn.array_elt.index.data[i], env, ctx);
         }
         post_unify(syn.array_elt.array, env, ctx);
+        break;
+    }
+    case SWithLoop: {
+        if (syn.with.fold.type == Some) {
+            post_unify(syn.with.fold.fn, env, ctx);
+            post_unify(syn.with.fold.element, env, ctx);
+        }
+        post_unify(syn.with.body, env, ctx);
         break;
     }
     case SStructure: {
@@ -2610,7 +2654,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
     // Types & Type formers
     case SProcType:
-    case SArrayType:
+    case STileType:
     case SStructType:
     case SEnumType:
     case SResetType:
@@ -2767,17 +2811,25 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
-    case SArray: {
+    case STile: {
         for (size_t i = 0; i < typed.array.elements.len; i++) {
             squash_types(typed.array.elements.data[i], env, ctx);
         }
         break;
     }
-    case SArrayElt: {
+    case STileElt: {
         for (size_t i = 0; i < typed.array_elt.index.len; i++) {
             squash_types(typed.array_elt.index.data[i], env, ctx);
         }
         squash_types(typed.array_elt.array, env, ctx);
+        break;
+    }
+    case SWithLoop: {
+        if (typed.with.fold.type == Some) {
+            squash_types(typed.with.fold.fn, env, ctx);
+            squash_types(typed.with.fold.element, env, ctx);
+        }
+        squash_types(typed.with.body, env, ctx);
         break;
     }
     case SStructure: {
@@ -2937,7 +2989,7 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.proc_type.return_type, env, ctx);
         break;
     }
-    case SArrayType: {
+    case STileType: {
         squash_types(typed.array_type.element, env, ctx);
         break;
     }

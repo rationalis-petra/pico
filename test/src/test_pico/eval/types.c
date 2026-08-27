@@ -54,19 +54,19 @@ void run_pico_eval_types_tests(TestLog *log, Module* module, Environment* env, T
 
     //  Array
     // -----------------------------------------------------
-    if (test_start(log, mv_string("1d-array-no-backet"))) {
-        PiType* expected = mk_array_type(pia, 1, 4, mk_prim_type(pia, Int_64));
-        TEST_EQ("(Array 4 I64)");
+    if (test_start(log, mv_string("1d-tile-no-backet"))) {
+        PiType* expected = mk_tile_type(pia, 1, 4, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Tile 4 I64)");
     }
 
-    if (test_start(log, mv_string("1d-array"))) {
-        PiType* expected = mk_array_type(pia, 1, 4, mk_prim_type(pia, Int_64));
-        TEST_EQ("(Array [4] I64)");
+    if (test_start(log, mv_string("1d-tile"))) {
+        PiType* expected = mk_tile_type(pia, 1, 4, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Tile [4] I64)");
     }
 
-    if (test_start(log, mv_string("2d-array"))) {
-        PiType* expected = mk_array_type(pia, 2, 4, 2, mk_prim_type(pia, Int_64));
-        TEST_EQ("(Array [4 2] I64)");
+    if (test_start(log, mv_string("2d-tile"))) {
+        PiType* expected = mk_tile_type(pia, 2, 4, 2, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Tile [4 2] I64)");
     }
 
     //  Structure

@@ -61,6 +61,10 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .log = log,
         .target = target,
     };
+    if (test_start(log, mv_string("with-creates-tile"))) {
+        PiType* expected = mk_tile_type(&pregion, 2, 2, 4, mk_prim_type(&pregion, UInt_64));
+        TEST_TYPE("(with [i j] [2 4] j)");
+    }
 
     if (test_start(log, mv_string("UVar through all"))) {
         PiType* expected = mk_prim_type(&pregion, Int_64);

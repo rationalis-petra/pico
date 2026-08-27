@@ -81,7 +81,6 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  (struct (Slice A) [.addr (address.num-to-address (u64.+ (u64.* (size-of A) start) (address.address-to-num slice.addr)))] [.len (u64.- end start)]))";
     compile_toplevel(slice_subview, module, target, &point, &pi_point, region);
 
-
     const char *slice_copy_fn =
         "(def copy all [A] proc [(slice (Slice A))] seq\n"
         "  [let! out (new {A} slice.len)]"

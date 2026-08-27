@@ -96,6 +96,20 @@ size_t index_offset(U64Array index, U64Array dims) {
     return out;
 }
 
+void inc_index(U64Array index, U64Array dims) {
+    index.data[dims.len - 1]++;
+    for (size_t i = 0; i < dims.len; i++) {
+        size_t level = dims.len - (i + 1);
+        if (index.data[level] >= dims.data[level]) {
+            index.data[level]++;
+            size_t new_level = level == 0 ? level : level - 1;
+            index.data[new_level]++;
+        } else {
+            break;
+        }
+    }
+}
+
 
 // Helper functions for dynamic variables
 // Need to maintain a set of current/valid vars + default values
@@ -288,11 +302,14 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FMatch:
         out = mk_str_doc(mv_string("::match"), a);
         break;
-    case FArray:
-        out = mk_str_doc(mv_string("::array"), a);
+    case FTile:
+        out = mk_str_doc(mv_string("::tile"), a);
         break;
-    case FArrayElt:
-        out = mk_str_doc(mv_string("::array-elt"), a);
+    case FTileElt:
+        out = mk_str_doc(mv_string("::tile-elt"), a);
+        break;
+    case FWithLoop:
+        out = mk_str_doc(mv_string("::with"), a);
         break;
     case FStructure:
         out = mk_str_doc(mv_string("::structure"), a);
@@ -379,8 +396,8 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
 
         // Type formers
-    case FArrayType:
-        out = mk_str_doc(mv_string("::Array"), a);
+    case FTileType:
+        out = mk_str_doc(mv_string("::Tile"), a);
         break;
     case FStructType:
         out = mk_str_doc(mv_string("::Struct"), a);

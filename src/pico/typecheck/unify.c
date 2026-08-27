@@ -316,9 +316,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         return unify_internal(lhs->proc.ret, rhs->proc.ret, rename, ctx);
         break;
     }
-    case TArray: {
-        DimPiList lhs_dims = lhs->array.dimensions;
-        DimPiList rhs_dims = rhs->array.dimensions;
+    case TTile: {
+        DimPiList lhs_dims = lhs->tile.dimensions;
+        DimPiList rhs_dims = rhs->tile.dimensions;
         if (lhs_dims.len != rhs_dims.len) {
             return (UnifyResult) {
                 .type = USimpleError,
@@ -341,7 +341,7 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
                 }
             }
         }
-        return unify_internal(lhs->array.element, rhs->array.element, rename, ctx);
+        return unify_internal(lhs->tile.element, rhs->tile.element, rename, ctx);
         break;
     }
     case TStruct: {
@@ -872,8 +872,8 @@ bool has_unification_vars_p(PiType type) {
         }
         return has_unification_vars_p(*type.proc.ret);
     }
-    case TArray: {
-        return has_unification_vars_p(*type.array.element);
+    case TTile: {
+        return has_unification_vars_p(*type.tile.element);
     }
     case TStruct: {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
@@ -1017,8 +1017,8 @@ bool occurs(UVarType* var, PiType *type) {
         }
         return occurs(var, type->proc.ret);
     }
-    case TArray: {
-        return occurs(var, type->array.element);
+    case TTile: {
+        return occurs(var, type->tile.element);
     }
     case TStruct: {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
@@ -1140,8 +1140,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
         squash_type(type->proc.ret, ctx);
         break;
     }
-    case TArray: {
-        squash_type(type->array.element, ctx);
+    case TTile: {
+        squash_type(type->tile.element, ctx);
         break;
     }
     case TStruct: {

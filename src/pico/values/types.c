@@ -52,9 +52,9 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         sdelete_addr_list(t.proc.args);
         break;
     }
-    case TArray: {
-        delete_pi_type_p(t.array.element, pia);
-        sdelete_dim_list(t.array.dimensions);
+    case TTile: {
+        delete_pi_type_p(t.tile.element, pia);
+        sdelete_dim_list(t.tile.dimensions);
         break;
     }
     case TStruct: {
@@ -213,9 +213,9 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.proc.args = copy_addr_list(t.proc.args, (TyCopier)copy_pi_type_p, pia);
         break;
-    case TArray: {
-        out.array.element = copy_pi_type_p(t.array.element, pia); 
-        out.array.dimensions = scopy_dim_list(t.array.dimensions, pia);
+    case TTile: {
+        out.tile.element = copy_pi_type_p(t.tile.element, pia); 
+        out.tile.dimensions = scopy_dim_list(t.tile.dimensions, pia);
         break;
     }
     case TStruct:
@@ -425,15 +425,15 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
-    case TArray: {
+    case TTile: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
-        U64Array dims = mk_zero_index(type->array.dimensions.len, a);
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            if (type->array.dimensions.data[i].is_uvar) {
+        push_ptr(mk_str_doc(mv_string("tile"), a), &nodes);
+        U64Array dims = mk_zero_index(type->tile.dimensions.len, a);
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            if (type->tile.dimensions.data[i].is_uvar) {
                 panic(mv_string("Cannot print array when type has undefined ."));
             }
-            dims.data[i] = type->array.dimensions.data[i].val;
+            dims.data[i] = type->tile.dimensions.data[i].val;
         }
 
         U64Array index = mk_zero_index(dims.len, a);
@@ -443,7 +443,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             *arr = mk_ptr_array(dims.data[i], a);
             push_ptr(arr, &array_stack);
         }
-        PiType* elt_type = type->array.element;
+        PiType* elt_type = type->tile.element;
         size_t elt_offset = pi_size_align(pi_size_of(*elt_type), pi_align_of(*elt_type));
         while (index_less(index, dims)) {
             size_t base = index_offset(index, dims);
@@ -455,22 +455,29 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             }
             index.data[dims.len - 1] = inner_len;
 
-            // We are done, now increment the index!
-            size_t level = 1;
-            uint64_t curr_idx = index.data[dims.len - level];
-            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
-                if (level + 1 < dims.len) {
-                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
-                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
-                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
-                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
-                }
+            index.data[dims.len - 1]++;
+            for (size_t i = 0; i < dims.len; i++) {
+                size_t level = dims.len - (i + 1);
+                if (index.data[level] >= dims.data[level]) {
 
-                index.data[dims.len - level] = 0;
-                level++;
-                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+                    // If we are not at the top, then we need to push ourselves
+                    // into the array above us
+                    if (level > 0) {
+                        push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(*inner_nodes, a), a), a), array_stack.data[level - 1]);
+                        inner_nodes = array_stack.data[level - 1];
+
+                        PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+                        *arr = mk_ptr_array(dims.data[i], a);
+                        array_stack.data[level] = arr;
+                        index.data[level] = 0;
+                    }
+
+                    size_t new_level = level == 0 ? level : level - 1;
+                    index.data[new_level]++;
+                } else {
+                    break;
+                }
             }
-            index.data[dims.len - level] = curr_idx + 1;
         }
         PtrArray* array_nodes = array_stack.data[0];
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
@@ -818,13 +825,13 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case TArray: {
+    case TTile: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Tile", a)), a), a), &nodes);
 
-        PtrArray dim_nodes = mk_ptr_array(type->array.dimensions.len, a);
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            Dimension dim = type->array.dimensions.data[i];
+        PtrArray dim_nodes = mk_ptr_array(type->tile.dimensions.len, a);
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            Dimension dim = type->tile.dimensions.data[i];
             if (dim.is_uvar) {
                 push_ptr(mk_cstr_doc("?", a), &dim_nodes);
             } else {
@@ -833,7 +840,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         }
         push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), a), a), &nodes);
 
-        push_ptr(pretty_type_internal(type->array.element, ctx, a), &nodes);
+        push_ptr(pretty_type_internal(type->tile.element, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -1316,17 +1323,17 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
-    case TArray: {
+    case TTile: {
         size_t align = 1;
         size_t size = 1;
-        Result_t res = pi_maybe_size_of(*(PiType*)type.array.element, &size);
+        Result_t res = pi_maybe_size_of(*(PiType*)type.tile.element, &size);
         if (res != Ok) return res;
-        res = pi_maybe_align_of(*(PiType*)type.array.element, &align);
+        res = pi_maybe_align_of(*(PiType*)type.tile.element, &align);
         if (res != Ok) return res;
         *out = pi_size_align(size, align);
         size_t total_len = 1;
-        for (size_t i = 0; i < type.array.dimensions.len; i++) {
-            Dimension dim = type.array.dimensions.data[i]; 
+        for (size_t i = 0; i < type.tile.dimensions.len; i++) {
+            Dimension dim = type.tile.dimensions.data[i]; 
             if (dim.is_uvar) {
                 panic(mv_string("Cannot get size of array: dimensions are not resolved."));
             } else {
@@ -1533,8 +1540,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
-    case TArray:
-        return pi_maybe_align_of(*type.array.element, out);
+    case TTile:
+        return pi_maybe_align_of(*type.tile.element, out);
     case TStruct: {
         // TODO (INVESTIGATE BUG): determine how we calculate alignment of
         //   packed struct? is it minimum of all fields?
@@ -1768,8 +1775,8 @@ void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiA
         }
         type_app_subst(body->proc.ret, subst, shadowed, pia, logger, a);
         break;
-    case TArray: 
-        type_app_subst(body->array.element, subst, shadowed, pia, logger, a);
+    case TTile: 
+        type_app_subst(body->tile.element, subst, shadowed, pia, logger, a);
         break;
     case TStruct:
         for (size_t i = 0; i < body->structure.fields.len; i++) {
@@ -2080,11 +2087,11 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         }
         return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
         break;
-    case TArray:
-        if (lhs->array.dimensions.len != rhs->array.dimensions.len) return false;
-        for (size_t i = 0; i < lhs->array.dimensions.len; i++) {
-            Dimension lhd = lhs->array.dimensions.data[i];
-            Dimension rhd = rhs->array.dimensions.data[i];
+    case TTile:
+        if (lhs->tile.dimensions.len != rhs->tile.dimensions.len) return false;
+        for (size_t i = 0; i < lhs->tile.dimensions.len; i++) {
+            Dimension lhd = lhs->tile.dimensions.data[i];
+            Dimension rhd = rhs->tile.dimensions.data[i];
             if (lhd.is_uvar != rhd.is_uvar) return false;
             if (lhd.is_uvar) {
                 // TODO (BUG): do proper structural equality here
@@ -2094,7 +2101,7 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             }
         }
 
-        return pi_type_eql_i(lhs->array.element, rhs->array.element, array);
+        return pi_type_eql_i(lhs->tile.element, rhs->tile.element, array);
         break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
@@ -2382,15 +2389,15 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
-    case TArray: {
+    case TTile: {
         size_t len = 1; 
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            if (type->array.dimensions.data[i].is_uvar) {
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            if (type->tile.dimensions.data[i].is_uvar) {
                 panic(mv_string("Cannot compare values of Array type with undecided dimension."));
             }
-            len *= type->array.dimensions.data[i].val;
+            len *= type->tile.dimensions.data[i].val;
         }
-        PiType* elt_ty = type->array.element;
+        PiType* elt_ty = type->tile.element;
         size_t elt_offset = pi_size_align(pi_size_of(*elt_ty), pi_align_of(*elt_ty));
         for (size_t i = 0; i < len; i++) {
             size_t offset = elt_offset * i;
@@ -2536,9 +2543,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     }
     case TProc:
         return false;
-    case TArray:
+    case TTile:
         // TODO: update me when dimension can vary 
-        return is_variable_for_recur(ty->array.element, vars, shadowed);
+        return is_variable_for_recur(ty->tile.element, vars, shadowed);
     case TStruct:
         for (size_t i = 0; i < ty->structure.fields.len; i++) {
             if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))
@@ -2631,7 +2638,7 @@ PiType* mk_dynamic_type(PiAllocator* a, PiType* t) {
     return dyn;
 }
 
-PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
+PiType* mk_tile_type(PiAllocator *pia, size_t ndims, ...) {
     va_list args;
     va_start(args, ndims);
     
@@ -2649,9 +2656,9 @@ PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
 
     PiType* proc = call_alloc(sizeof(PiType), pia);
     *proc = (PiType) {
-        .sort = TArray,
-        .array.dimensions = dims,
-        .array.element = element,
+        .sort = TTile,
+        .tile.dimensions = dims,
+        .tile.element = element,
     };
     return proc;
 }

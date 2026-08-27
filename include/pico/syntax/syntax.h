@@ -55,8 +55,9 @@ typedef enum {
     SConstructor,
     SVariant,
     SMatch,
-    SArray,
-    SArrayElt,
+    STile,
+    STileElt,
+    SWithLoop,
     SStructure,
     SProjector,
     SInstance,
@@ -91,7 +92,7 @@ typedef enum {
 
     // Types & Type formers
     SProcType,
-    SArrayType,
+    STileType,
     SStructType,
     SEnumType,
     SResetType,
@@ -220,16 +221,6 @@ typedef struct {
     SynRef val;
     ClauseArray clauses;
 } SynMatch;
-
-typedef struct {
-    U64Array dimensions;
-    SynArray elements;
-} SynMkArray;
-
-typedef struct {
-    SynArray index;
-    SynRef array;
-} SynArrayElt;
 
 typedef struct {
     Option_t has_base;
@@ -361,14 +352,41 @@ typedef struct {
     SynRef body;
 } SynBind;
 
+// ----------------------------------------------------------------------
+//  Arrays, SAC-style with loops
+// ----------------------------------------------------------------------
+
 typedef struct {
-    SynArray params;
+    U64Array dimensions;
+    SynArray elements;
+} SynMkTile;
+
+typedef struct {
+    SynArray index;
+    SynRef array;
+} SynTileElt;
+
+typedef struct {
+    Option_t type;
+    SynRef fn;
+    SynRef element;
+} FoldOption;
+
+typedef struct {
+    SymbolArray vars;
+    U64Array shape;
+    FoldOption fold;
     SynRef body;
-} SynKind;
+} SynWithLoop;
 
 // ----------------------------------------------------------------------
 // Types
 // ----------------------------------------------------------------------
+
+typedef struct {
+    SynArray params;
+    SynRef body;
+} SynKind;
 
 typedef struct {
     SymbolArray vars;
@@ -467,8 +485,9 @@ struct Syntax {
         SynConstructor constructor;
         SynVariant variant;
         SynMatch match;
-        SynMkArray array;
-        SynArrayElt array_elt;
+        SynMkTile array;
+        SynTileElt array_elt;
+        SynWithLoop with;
         SynStructure structure;
         SynProjector projector;
         SynInstance instance;

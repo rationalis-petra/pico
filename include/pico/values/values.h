@@ -48,6 +48,7 @@ Name copy_name(Name n, Allocator* a);
 U64Array mk_zero_index(uint64_t , Allocator* a);
 bool index_less(U64Array index, U64Array dims);
 size_t index_offset(U64Array index, U64Array dims);
+void inc_index(U64Array index, U64Array dims);
 
 // Dynamic Variables
 void init_dynamic_vars(Allocator* a);
@@ -77,8 +78,9 @@ typedef enum TermFormer {
     FApplication,
     FSeal,
     FUnseal,
-    FArray,
-    FArrayElt,
+    FTile,
+    FTileElt,
+    FWithLoop,
     FStructure,
     FProjector,
     FVariant,
@@ -117,7 +119,7 @@ typedef enum TermFormer {
     FDynAlloc,
 
     // Type formers
-    FArrayType,
+    FTileType,
     FProcType,
     FStructType,
     FEnumType,

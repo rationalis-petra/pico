@@ -116,10 +116,12 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("<variant>");
     case SMatch:
         return mv_string("match");
-    case SArray:
-        return mv_string("array");
-    case SArrayElt:
-        return mv_string("array-elt");
+    case STile:
+        return mv_string("tile");
+    case STileElt:
+        return mv_string("tile-elt");
+    case SWithLoop:
+        return mv_string("with");
     case SStructure:
         return mv_string("struct");
     case SProjector:
@@ -182,8 +184,8 @@ String syntax_type_to_string(Syntax_t type) {
         // Types & Type formers
     case SProcType:
         return mv_string("Proc");
-    case SArrayType:
-        return mv_string("Array");
+    case STileType:
+        return mv_string("Tile");
     case SStructType:
         return mv_string("Struct");
     case SEnumType:
@@ -525,7 +527,7 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SArray: {
+    case STile: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
         U64Array dims = syntax.array.dimensions;
@@ -547,30 +549,63 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
             }
             index.data[dims.len - 1] = inner_len;
 
-            // We are done, now increment the index!
-            size_t level = 1;
-            uint64_t curr_idx = index.data[dims.len - level];
-            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
-                if (level + 1 < dims.len) {
-                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
-                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
-                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
-                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
-                }
+            index.data[dims.len - 1]++;
+            for (size_t i = 0; i < dims.len; i++) {
+                size_t level = dims.len - (i + 1);
+                if (index.data[level] >= dims.data[level]) {
 
-                index.data[dims.len - level] = 0;
-                level++;
-                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+                    // If we are not at the top, then we need to push ourselves
+                    // into the array above us
+                    if (level > 0) {
+                        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*inner_nodes, a), a), array_stack.data[level - 1]);
+                        inner_nodes = array_stack.data[level - 1];
+
+                        PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+                        *arr = mk_ptr_array(dims.data[i], a);
+                        array_stack.data[level] = arr;
+                        index.data[level] = 0;
+                    }
+
+                    size_t new_level = level == 0 ? level : level - 1;
+                    index.data[new_level]++;
+                } else {
+                    break;
+                }
             }
-            index.data[dims.len - level] = curr_idx + 1;
         }
         PtrArray* array_nodes = array_stack.data[0];
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
         out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SArrayElt: {
+    case STileElt: {
         panic(mv_string("not implemented: pretty syntax for array-elt"));
+    }
+    case SWithLoop: {
+        PtrArray nodes = mk_ptr_array(5, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("with", a), a), &nodes);
+        PtrArray var_nodes = mk_ptr_array(syntax.with.vars.len, a);
+        for (size_t i = 0; i < syntax.with.vars.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(syntax.with.vars.data[i]), a), &var_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(var_nodes, a), a), &nodes);
+
+        PtrArray shape_nodes = mk_ptr_array(syntax.with.vars.len, a);
+        for (size_t i = 0; i < syntax.with.shape.len; i++) {
+            push_ptr(pretty_u64(syntax.with.shape.data[i], a), &shape_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(shape_nodes, a), a), &nodes);
+
+        if (syntax.with.fold.type == Some) {
+            PtrArray fold_nodes = mk_ptr_array(3, a);
+            push_ptr(mv_style_doc(former_style, mv_cstr_doc("fold", a), a), &fold_nodes);
+            push_ptr(pretty_syntax_internal(syntax.with.fold.fn, tape, ctx, a), &fold_nodes);
+            push_ptr(pretty_syntax_internal(syntax.with.fold.element, tape, ctx, a), &fold_nodes);
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(fold_nodes, a), a), &nodes);
+        }
+        push_ptr(pretty_syntax_internal(syntax.with.body, tape, ctx, a), &nodes);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
+        break;
     }
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax.structure.fields.len, a);
@@ -943,9 +978,9 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case SArrayType: {
+    case STileType: {
         PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Array", a), a), a), &nodes);
+        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Tile", a), a), a), &nodes);
 
         PtrArray dim_nodes = mk_ptr_array(syntax.array_type.dimensions.len, a) ;
         for (size_t i = 0; i < syntax.array_type.dimensions.len; i++)  {

@@ -147,12 +147,16 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string("instance"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArray;
-    name = string_to_name(mv_string("array"));
+    former = FTile;
+    name = string_to_name(mv_string("tile"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArrayElt;
-    name = string_to_name(mv_string("aelt"));
+    former = FTileElt;
+    name = string_to_name(mv_string("telt"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
+    former = FWithLoop;
+    name = string_to_name(mv_string("with"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructure;
@@ -251,8 +255,8 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string("Proc"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArrayType;
-    name = string_to_name(mv_string("Array"));
+    former = FTileType;
+    name = string_to_name(mv_string("Tile"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructType;

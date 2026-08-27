@@ -22,12 +22,18 @@ typedef struct {
 // ------------------------------------------------------------
  
 // Arrays
-_Noreturn void array_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx);
-_Noreturn void array_incorrect_dimtype(RawTree raw, AbstractionICtx ctx);
-_Noreturn void array_incorrect_format(RawTree raw, AbstractionICtx ctx);
-_Noreturn void array_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_dimtype(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_format(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx);
 
-_Noreturn void array_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+
+_Noreturn void tile_with_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_invalid_indexlist(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_invalid_shape(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_shape_index_mismatch(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_fold_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 
 // Structures
 _Noreturn void struct_bad_fdesc_type(RawTree raw, AbstractionICtx ctx);

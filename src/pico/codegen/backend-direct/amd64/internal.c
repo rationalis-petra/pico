@@ -272,6 +272,7 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 }
 
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size > INT8_MAX)  {
 #if ABI == SYSTEM_V_64
@@ -293,29 +294,33 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
         generate_c_call(memcpy, ass, a, point);
     } else {
 
-        if (src == RAX || dest == RAX)  {
-            throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: cannoy copy from/to RAX", a));
-        };
+        Regname intermediate_registers[4] = {RAX, RBX, RCX, RDX};
+        size_t reg_index = 0;
+        for (; reg_index < 4; reg_index++) {
+            Regname reg = intermediate_registers[reg_index];
+            if ((src != reg) & (dest != reg)) break;
+        }
+        Regname inter = intermediate_registers[reg_index];
 
         for (size_t i = 0; i < size / 8; i++) {
-            build_binary_op(Mov, reg(RAX, sz_64), rref8(src, i * 8, sz_64), ass, a, point);
-            build_binary_op(Mov, rref8(dest, i * 8, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(inter, sz_64), rref8(src, i * 8, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(dest, i * 8, sz_64), reg(inter, sz_64), ass, a, point);
         }
 
         size_t leftover = size % 8;
         if (leftover >= 4) {
-            build_binary_op(Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), ass, a, point);
-            build_binary_op(Mov, rref8(dest, (size & ~7), sz_32), reg(RAX, sz_32), ass, a, point);
+            build_binary_op(Mov, reg(inter, sz_32), rref8(src, (size & ~7), sz_32), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~7), sz_32), reg(inter, sz_32), ass, a, point);
             leftover -= 4;
         }
         if (leftover >= 2) {
-            build_binary_op(Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), ass, a, point);
-            build_binary_op(Mov, rref8(dest, (size & ~3), sz_16), reg(RAX, sz_16), ass, a, point);
+            build_binary_op(Mov, reg(inter, sz_16), rref8(src, (size & ~3), sz_16), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~3), sz_16), reg(inter, sz_16), ass, a, point);
             leftover -= 2;
         }
         if (leftover >= 1) {
-            build_binary_op(Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), ass, a, point);
-            build_binary_op(Mov, rref8(dest, (size & ~1), sz_8), reg(RAX, sz_8), ass, a, point);
+            build_binary_op(Mov, reg(inter, sz_8), rref8(src, (size & ~1), sz_8), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~1), sz_8), reg(inter, sz_8), ass, a, point);
             leftover -= 1;
         }
     }
@@ -525,12 +530,12 @@ void* mk_array_ty(size_t len, Dimension* data, void* elt) {
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
-        .sort = TArray,
-        .array.dimensions.data = data,
-        .array.dimensions.len = len,
-        .array.dimensions.size = len,
-        .array.dimensions.gpa = pia,
-        .array.element = elt,
+        .sort = TTile,
+        .tile.dimensions.data = data,
+        .tile.dimensions.len = len,
+        .tile.dimensions.size = len,
+        .tile.dimensions.gpa = pia,
+        .tile.element = elt,
     };
     return ty;
 }

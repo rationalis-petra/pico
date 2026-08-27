@@ -47,7 +47,7 @@ typedef enum {
 typedef enum {
   TPrim,
   TProc,
-  TArray,
+  TTile,
   TStruct,
   TEnum,
   TReset,
@@ -106,7 +106,7 @@ PICO_LIST_HEADER(Dimension, dim, Dim);
 typedef struct {
     DimPiList dimensions;
     PiType* element;
-} ArrayType;
+} TileType;
 
 typedef struct {
     SymAddrPiAMap fields;
@@ -186,7 +186,7 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
-        ArrayType array;
+        TileType tile;
         ProcType proc;
         StructType structure;
         EnumType enumeration;
@@ -301,14 +301,14 @@ PiType* strip_type(PiType* ty);
  * • Memory guarantes: both the arguments (args) and famiy are untouched, and can
  *   be safely deleted etc. without affecting the returned type.
  */
-PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
+PiType* type_app(PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 
 // Generators 
 PiType* mk_prim_type(PiAllocator* pia, PrimType t);
 PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
 
-// Sample usage: mk_array_type(a, 2, dim1, dim2, elt_ty)
-PiType* mk_array_type(PiAllocator* pia, size_t ndims, ...);
+// Sample usage: mk_tile_type(a, 2, dim1, dim2, elt_ty)
+PiType* mk_tile_type(PiAllocator* pia, size_t ndims, ...);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
