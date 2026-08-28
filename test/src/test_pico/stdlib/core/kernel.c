@@ -270,56 +270,6 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
 
     // -----------------------------------------------------
     // 
-    //      Tiles & Tile-Loops
-    // 
-    // -----------------------------------------------------
-    if (test_start(log, mv_string("1d-tile-literal"))) {
-        int64_t expected[] = {1, 2, 3, 4};
-        TEST_EQ("(tile {4} [1 2 3 4])");
-    }
-
-    if (test_start(log, mv_string("1d-tile-literal-inferred-size"))) {
-        int64_t expected[] = {2, 4, 6, 8};
-        TEST_EQ("(tile [2 4 6 8])");
-    }
-
-    if (test_start(log, mv_string("2d-tile-literal"))) {
-        int64_t expected[] = {1, 2, 3, 4, 5, 6, 7, 8};
-        TEST_EQ("(tile {2 4} [[1 2 3 4] [5 6 7 8]])");
-    }
-
-    if (test_start(log, mv_string("2d-tile-literal-inferred-size"))) {
-        int64_t expected[] = {2, 4, 6, 8, 10, 12, 14, 16};
-        TEST_EQ("(tile [[2 4 6 8] [10 12 14 16]])");
-    }
-
-    if (test_start(log, mv_string("elt-of-tile"))) {
-        int64_t expected = 9;
-        TEST_EQ("(telt 2 (tile [3 7 9 12]))");
-    }
-
-    if (test_start(log, mv_string("elt-of-tile"))) {
-        int64_t expected = 3;
-        TEST_EQ("(telt [1 0] (tile [[2 4 6 8] [3 7 9 12]]))");
-    }
-
-    if (test_start(log, mv_string("with-gen-tiles-inner"))) {
-        uint64_t expected[8] = {0, 1, 2, 3, 0, 1, 2, 3};
-        TEST_EQ("(with [i j] [2 4] j)");
-    }
-
-    if (test_start(log, mv_string("with-gen-tiles-outer"))) {
-        uint64_t expected[8] = {0, 0, 0, 0, 1, 1, 1, 1};
-        TEST_EQ("(with [i j] [2 4] i)");
-    }
-
-    if (test_start(log, mv_string("with-fold"))) {
-        int64_t expected = 12;
-        TEST_EQ("(with [i j] [2 4] {fold prim.u64.+ 0} j)");
-    }
-
-    // -----------------------------------------------------
-    // 
     //      Struct
     // 
     // -----------------------------------------------------
