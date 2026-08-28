@@ -16,11 +16,13 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         .clauses = mk_import_clause_array(12, a),
     };
     add_import_all(&imports.clauses, a, 1, "prelude");
+    add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
+    add_import(&imports.clauses, a, 1, "abs");
 
     add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
 
@@ -51,15 +53,16 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     RegionAllocator* region = make_region_allocator(16384, true, a);
     if (suite_start(log, mv_string("core"))) {
         RegionAllocator* subregion = make_subregion(region);
-        run_pico_stdlib_core_type_tests(log, module, env, target, region);
-        run_pico_stdlib_core_tests(log, module, env, target, subregion);
-        suite_end(log);
-        release_subregion(subregion);
-    }
-
-    if (suite_start(log, mv_string("num"))) {
-        RegionAllocator* subregion = make_subregion(region);
-        run_pico_stdlib_num_tests(log, module, env, target, subregion);
+        if (suite_start(log, mv_string("kernel"))) {
+            run_pico_stdlib_core_kernel_tests(log, module, env, target, subregion);
+            suite_end(log);
+            reset_subregion(subregion);
+        }
+        if (suite_start(log, mv_string("prim"))) {
+            run_pico_stdlib_core_prim_tests(log, module, env, target, subregion);
+            suite_end(log);
+            reset_subregion(subregion);
+        }
         suite_end(log);
         release_subregion(subregion);
     }

@@ -256,7 +256,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     
     typep = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
-    kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+    kind = (PiType) {.sort = TType};
     name = string_to_name(mv_string("MemBlock"));
     add_def(module, name, kind, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -265,21 +265,21 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     // -------------------------------------------------------------------------
     uint32_t flag_val = 1; // ARead
     typep = mk_prim_type(pia, UInt_32);
-    kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+    kind = (PiType) {.sort = TType};
     name = string_to_name(mv_string("read"));
     add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
 
     flag_val = 2; // AWrite
     typep = mk_prim_type(pia, UInt_32);
-    kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+    kind = (PiType) {.sort = TType};
     name = string_to_name(mv_string("write"));
     add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
 
     flag_val = 4; // AExecute
     typep = mk_prim_type(pia, UInt_32);
-    kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+    kind = (PiType) {.sort = TType};
     name = string_to_name(mv_string("execute"));
     add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);

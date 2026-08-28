@@ -9,9 +9,14 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
+/**
+ * TODO: Typechecking Tests To Add
+ * ================================
+ *  - Check that all types are checked as types (with appropriate kind) (named, sealed, prim etc.)
+ * 
+ */
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
-    // Setup
     Allocator gpa = ra_to_gpa(region);
     Allocator* a = &gpa;
 
@@ -24,10 +29,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
-    add_import_all(&imports.clauses, a, 2, "lang", "relic");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
+    add_import_all(&imports.clauses, a, 2, "core", "kernel");
+    add_import_all(&imports.clauses, a, 2, "core", "prim");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),
@@ -58,6 +61,10 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .log = log,
         .target = target,
     };
+    if (test_start(log, mv_string("with-creates-tile"))) {
+        PiType* expected = mk_tile_type(&pregion, 2, 2, 4, mk_prim_type(&pregion, UInt_64));
+        TEST_TYPE("(with [i j] [2 4] j)");
+    }
 
     if (test_start(log, mv_string("UVar through all"))) {
         PiType* expected = mk_prim_type(&pregion, Int_64);
@@ -77,32 +84,39 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
+        RUN("(def Ptr Named Ptr Family [A] Address)");
+        RUN("(def pinit all [A] (name (Ptr A) (address.num-to-address 0)))");
+        RUN("(def pset all [A] proc [(p Ptr A) (x A)] :unit)");
+        RUN("(def pget all [A] proc [(x Ptr A)] (address.load {A} (unname x)))");
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType* expected = mk_prim_type(&pregion, Int_64);
-        TEST_TYPE("(seq [let! lst (list.init 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
+        TEST_TYPE("(seq [let! ptr (pinit)] (pset ptr 10) (pget ptr))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Default struct from field constraints"))) {
+        RUN("(def i64-fn proc [(x I64) (y I64)] x)");
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType *expected =
             mk_proc_type(&pregion, 1,
                          mk_struct_type(&pregion, 2, "x", mk_prim_type(&pregion, Int_64),
                                         "y", mk_prim_type(&pregion, Int_64)), mk_prim_type(&pregion, Int_64));
-        TEST_TYPE("(proc [point] (i64.+ point.x point.y))");
+        TEST_TYPE("(proc [point] (i64-fn point.x point.y))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
+        // We deduce that Right A has A = address (from use of address-to-num)
+        // We deduce that Left V  has V = U64 (as must be same return type as right)
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType *expected =
             mk_proc_type(&pregion, 1,
                          mk_enum_type(&pregion, 2, "left", 1, mk_prim_type(&pregion, UInt_64),
                                       "right", 1, mk_prim_type(&pregion, Address)), mk_prim_type(&pregion, UInt_64));
-        TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
+        TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address.address-to-num x)])");
         set_std_current_allocator(current_old);
     }
 
@@ -130,7 +144,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
                                         mk_enum_type(&pregion, 2,
                                                      "left", 1, mk_prim_type(&pregion, Int_64),
                                                      "right", 1, mk_prim_type(&pregion, Address)));
-        TEST_TYPE("(proc [which] if which (:left 10) (:right (alloc 8)))") ;
+        TEST_TYPE("(proc [which] if which (:left 10) (:right (address.num-to-address 8)))") ;
         set_std_current_allocator(current_old);
     }
 
@@ -148,7 +162,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     if (test_start(log, mv_string("kinds-1"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
-        PiType ty = (PiType){.sort = TKind, .kind.nargs = 1};
+        PiType ty = *mk_type_kind(&pregion, 1, mk_type_type(&pregion), mk_type_type(&pregion));
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);
@@ -156,6 +170,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
 
     if (test_start(log, mv_string("family-must-have-args"))) {
         TEST_TYPE_FAIL("(Family [] Address)");
+    }
+
+
+    if (test_start(log, mv_string("implicit-must-be-instance"))) {
+        TEST_TYPE_FAIL("(Proc {I64} [I64] I64)");
     }
 
     if (test_start(log, mv_string("cannot-apply-non-family-types"))) {
@@ -177,6 +196,52 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         RUN("(def id-df proc [(df DF)] df)");
         TEST_TYPE_FAIL("(id-df 3.5)");
     }
+
+    if (test_start(log, mv_string("unsolved-var-errors"))) {
+        TEST_TYPE_FAIL("(def vec2 all [A] proc [x y] name (Vec2 A) array {2} [x y])");
+    }
+
+    if (test_start(log, mv_string("instance-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val {I64})");
+    }
+
+    if (test_start(log, mv_string("instance-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val {I64})");
+    }
+
+    if (test_start(log, mv_string("instance-arg-find"))) {
+        RUN("(def Habit Trait Habit [A] [.val A])");
+        RUN("(def habit-i64 instance (Habit I64) [.val 3])");
+        RUN("(def val all [A] proc {(habit (Habit A))} [] habit.val)");
+        RUN("(def val-2 all [A] proc {(habit (Habit A))} [] (val {A}))");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val-2 {I64})");
+    }
+
+    /* TODO: fix me!
+    if (test_start(log, mv_string("instance-instance-find"))) {
+        RUN("(def InHab Trait InHab [A] [.val A])");
+        RUN("(def inhab-i64 instance (InHab I64) [.val 3])");
+
+        RUN("(def val all [A] proc {(habit (InHab A))} [] habit.val)");
+        RUN("(def Wrap Named Wrap Family [A] Struct [.inner A])");
+        RUN("(def habit-wrap instance [A] {(h (InHab A))} (InHab (Wrap A))\n"
+            "  [.val struct (Wrap A) [.inner (val)]])");
+        RUN("(def val-2 all [A] proc {(habit (InHab A))} [] (val {A}))");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("(val-2 {(Wrap I64)})");
+    }
+    */
 
     delete_env(env, a);
     remove_module(base, string_to_name(mv_string("typecheck-test-module")));

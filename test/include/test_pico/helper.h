@@ -31,12 +31,14 @@ void test_typecheck_fail(const char *string, Environment* env, TestContext conte
 
 void test_abstract_fail(const char *string, Environment* env, TestContext context);
 
+PiType* run_type_expr(const char *string, Module *module, TestContext context);
 void run_toplevel(const char *string, Module *module, TestContext context);
 void module_from_string(const char *string, Module *module, TestContext context);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 
+#define GET_TYPE(var, str) var = run_type_expr(str, module, context); refresh_env(env); clear_logger(log);
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env); clear_logger(log);
 #define MODULE(str) module_from_string(str, module, context); refresh_env(env); clear_logger(log);
 

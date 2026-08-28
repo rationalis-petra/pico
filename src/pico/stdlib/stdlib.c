@@ -56,10 +56,84 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
 
     add_prelude_module(base, region);
 
-    reset_subregion(subregion);
-
+    release_subregion(subregion);
     release_executable_allocator(exalloc);
     return base;
 }
 
 Package* get_base_package() { return base; }
+
+Package* base_package_core_only(Assembler* ass, Allocator* default_allocator, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    Allocator exalloc = mk_executable_allocator(&ra);
+    Target target = (Target) {
+        .data_aux = mem_alloc(sizeof(U8Array), &ra),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
+    };
+    *target.data_aux = mk_u8_array(256, &ra);
+
+    base = mk_package(string_to_name(mv_string("base")), *module_allocator);
+
+    RegionAllocator* subregion = make_subregion(region);
+    /** 
+     * Phase 1: Core (lang + meta) modules
+     */
+    add_core_module(ass, target, base, subregion);
+    reset_subregion(subregion);
+    add_meta_module(ass, base, subregion);
+    reset_subregion(subregion);
+
+    /**
+     * We do things slightly out of order vs. the regular base package, because
+     * platform contains memory, which contains allocators. 
+     * //TODO: when the allocators (tmp/current/...) are no longer in platform
+     *   (maybe move to core? refl?), move this down.
+     */
+    add_platform_module(ass, base, default_allocator, subregion);
+    reset_subregion(subregion);
+
+    release_subregion(subregion);
+    release_executable_allocator(exalloc);
+    return base;
+}
+
+void base_package_fillout_stdlib(Package* base, Assembler* ass, Allocator* default_allocator, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    Allocator exalloc = mk_executable_allocator(&ra);
+    Target target = (Target) {
+        .data_aux = mem_alloc(sizeof(U8Array), &ra),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
+    };
+    *target.data_aux = mk_u8_array(256, &ra);
+
+    RegionAllocator* subregion = make_subregion(region);
+    /** 
+     * Phase 1: Lang Module
+     */
+    add_lang_module(ass, target, base, subregion);
+    reset_subregion(subregion);
+
+    /** 
+     * Phase 2: Platform
+     */
+
+    /** 
+     * Phase 3: 'user facing' code: 
+     *   Abs and Data happen after platform, as they depend on allocators present
+     *   in 'platform.memory'.
+     */
+    add_abs_module(target, base, subregion);
+    reset_subregion(subregion);
+    add_num_module(ass, target, base, subregion);
+    reset_subregion(subregion);
+    add_data_module(ass, target, base, subregion);
+    reset_subregion(subregion);
+
+
+    add_prelude_module(base, region);
+
+    release_subregion(subregion);
+    release_executable_allocator(exalloc);
+}

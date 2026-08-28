@@ -21,6 +21,8 @@ struct UVarGenerator {
     uint64_t counter;
 };
 
+static PiType* type_app_internal(PiType family, PtrArray args, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a);
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void symbol_nod(Symbol s, Allocator a) { }
@@ -50,9 +52,9 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         sdelete_addr_list(t.proc.args);
         break;
     }
-    case TArray: {
-        delete_pi_type_p(t.array.element, pia);
-        sdelete_dim_list(t.array.dimensions);
+    case TTile: {
+        delete_pi_type_p(t.tile.element, pia);
+        sdelete_dim_list(t.tile.dimensions);
         break;
     }
     case TStruct: {
@@ -133,7 +135,10 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
 
     case TAll:
     case TFam: {
-        sdelete_sym_list(t.binder.vars);
+        for (size_t i = 0; i < t.binder.vars.len; i++) {
+            delete_pi_type_p(t.binder.vars.data[i].val, pia);
+        }
+        sdelete_sym_addr_piamap(t.binder.vars);
         delete_pi_type_p(t.binder.body, pia);
         break;
     }
@@ -164,8 +169,16 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         break;
     case TPrim: break;
 
-    case TKind: break;
+    case TType: break;
     case TConstraint: break;
+    case TKind:
+        delete_pi_type_p(t.kind.body, pia);
+        for (size_t i = 0; i < t.kind.params.len; i++) {
+            delete_pi_type_p(t.kind.params.data[i], pia);
+        }
+        sdelete_addr_list(t.kind.params);
+        break;
+    case TSort: break;
     }
 }
 
@@ -200,9 +213,9 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.proc.args = copy_addr_list(t.proc.args, (TyCopier)copy_pi_type_p, pia);
         break;
-    case TArray: {
-        out.array.element = copy_pi_type_p(t.array.element, pia); 
-        out.array.dimensions = scopy_dim_list(t.array.dimensions, pia);
+    case TTile: {
+        out.tile.element = copy_pi_type_p(t.tile.element, pia); 
+        out.tile.dimensions = scopy_dim_list(t.tile.dimensions, pia);
         break;
     }
     case TStruct:
@@ -274,11 +287,13 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     }
     case TAll:
     case TFam: {
-        out.binder.vars = scopy_sym_list(t.binder.vars, pia);
+        out.binder.vars = copy_sym_addr_piamap(t.binder.vars, symbol_id, (TyCopier)copy_pi_type_p, pia);
         out.binder.body = copy_pi_type_p(t.binder.body, pia);
         break;
     }
     case TCApp:
+        out.app.fam = copy_pi_type_p(t.app.fam, pia);
+        out.app.args = copy_addr_list(t.app.args,  (TyCopier)copy_pi_type_p, pia);
         break;
 
     case TUVar:
@@ -289,18 +304,21 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         //   like we wish to be there. This part of the logic (in uvar_subst,
         //   towards the end) should be replaced by something that does
         //   appropriate analysis. Then the copy below may be uncommented.
-        // out.uvar = copy_uvar(t.uvar, pia);
+        //   out.uvar = copy_uvar(t.uvar, pia);
         out.uvar = t.uvar; 
         break;
     case TPrim:
         out.prim = t.prim;
         break;
-    case TKind:
-        out.kind = t.kind;
-        break;
+    case TType:
     case TConstraint:
-        out.constraint = t.constraint;
         break;
+    case TKind:
+        out.kind.params = copy_addr_list(t.kind.params, (TyCopier)copy_pi_type_p, pia);
+        out.kind.body = copy_pi_type_p(t.kind.body, pia);
+        break;
+    case TSort:
+      break;
     }
 
     return out;
@@ -407,15 +425,15 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
-    case TArray: {
+    case TTile: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
-        U64Array dims = mk_zero_index(type->array.dimensions.len, a);
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            if (type->array.dimensions.data[i].is_uvar) {
+        push_ptr(mk_str_doc(mv_string("tile"), a), &nodes);
+        U64Array dims = mk_zero_index(type->tile.dimensions.len, a);
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            if (type->tile.dimensions.data[i].is_uvar) {
                 panic(mv_string("Cannot print array when type has undefined ."));
             }
-            dims.data[i] = type->array.dimensions.data[i].val;
+            dims.data[i] = type->tile.dimensions.data[i].val;
         }
 
         U64Array index = mk_zero_index(dims.len, a);
@@ -425,7 +443,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             *arr = mk_ptr_array(dims.data[i], a);
             push_ptr(arr, &array_stack);
         }
-        PiType* elt_type = type->array.element;
+        PiType* elt_type = type->tile.element;
         size_t elt_offset = pi_size_align(pi_size_of(*elt_type), pi_align_of(*elt_type));
         while (index_less(index, dims)) {
             size_t base = index_offset(index, dims);
@@ -437,22 +455,29 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             }
             index.data[dims.len - 1] = inner_len;
 
-            // We are done, now increment the index!
-            size_t level = 1;
-            uint64_t curr_idx = index.data[dims.len - level];
-            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
-                if (level + 1 < dims.len) {
-                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
-                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
-                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
-                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
-                }
+            index.data[dims.len - 1]++;
+            for (size_t i = 0; i < dims.len; i++) {
+                size_t level = dims.len - (i + 1);
+                if (index.data[level] >= dims.data[level]) {
 
-                index.data[dims.len - level] = 0;
-                level++;
-                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+                    // If we are not at the top, then we need to push ourselves
+                    // into the array above us
+                    if (level > 0) {
+                        push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(*inner_nodes, a), a), a), array_stack.data[level - 1]);
+                        inner_nodes = array_stack.data[level - 1];
+
+                        PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+                        *arr = mk_ptr_array(dims.data[i], a);
+                        array_stack.data[level] = arr;
+                        index.data[level] = 0;
+                    }
+
+                    size_t new_level = level == 0 ? level : level - 1;
+                    index.data[new_level]++;
+                } else {
+                    break;
+                }
             }
-            index.data[dims.len - level] = curr_idx + 1;
         }
         PtrArray* array_nodes = array_stack.data[0];
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
@@ -608,11 +633,21 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     }
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(Fam"), a), &nodes);
 
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
+            // Only annotate if type is complex kind
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type(vtype, params.type, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &args);
+            } else {
+              push_ptr(sym, &args);
+            }
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type(type->binder.body, params.type, a), &nodes);
@@ -625,7 +660,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         push_ptr(mk_str_doc(mv_string("("), a), &nodes);
         push_ptr(pretty_type(type->app.fam, default_ptp, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], params.type,a), &nodes);
+            push_ptr(pretty_type(type->app.args.data[i], params.type, a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
@@ -679,8 +714,10 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case TKind:
-    case TConstraint: {
+    case TType:
+    case TConstraint: 
+    case TKind: 
+    case TSort: {
         PiType** ptype = (PiType**) val;
         out = pretty_type(*ptype, params.type, a);
         break;
@@ -788,13 +825,13 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case TArray: {
+    case TTile: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Tile", a)), a), a), &nodes);
 
-        PtrArray dim_nodes = mk_ptr_array(type->array.dimensions.len, a);
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            Dimension dim = type->array.dimensions.data[i];
+        PtrArray dim_nodes = mk_ptr_array(type->tile.dimensions.len, a);
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            Dimension dim = type->tile.dimensions.data[i];
             if (dim.is_uvar) {
                 push_ptr(mk_cstr_doc("?", a), &dim_nodes);
             } else {
@@ -803,7 +840,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         }
         push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), a), a), &nodes);
 
-        push_ptr(pretty_type_internal(type->array.element, ctx, a), &nodes);
+        push_ptr(pretty_type_internal(type->tile.element, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -1086,7 +1123,16 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &head_nodes);
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &args);
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type_internal(vtype, ctx, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &args);
+            } else {
+              push_ptr(sym, &args);
+            }
         }
         push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), a), a), &head_nodes);
 
@@ -1141,10 +1187,19 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
     case TFam: {
         PtrArray nodes = mk_ptr_array(2, a);
         PtrArray head_group = mk_ptr_array(2, a);
-        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
         push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Family" ), a), a), &head_group);
+        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &vars);
+            PiType* vtype = type->binder.vars.data[i].val;
+            Document* sym = mk_str_doc(symbol_to_string(type->binder.vars.data[i].key, a), a);
+            if (vtype->sort == TKind) {
+              PtrArray pnodes = mk_ptr_array(2, a);
+              push_ptr(sym, &pnodes);
+              push_ptr(pretty_type_internal(vtype, ctx, a), &pnodes);
+              push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_hsep_doc(pnodes, a), a), a), &vars);
+            } else {
+              push_ptr(sym, &vars);
+            }
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_group);
         push_ptr(mv_group_doc(mv_sep_doc(head_group, a), a), &nodes);
@@ -1156,40 +1211,27 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
+    case TType:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a);
+        break;
+    case TConstraint:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
+        break;
     case TKind: {
-        size_t nargs = type->kind.nargs;
-        if (nargs == 0) {
-            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a);
-        } else {
-            PtrArray nodes = mk_ptr_array(2, a);
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Kind"), a), a), &nodes);
-            PtrArray args = mk_ptr_array(nargs, a);
-            for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &args);
-            }
-            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(args, a), a), a), &nodes);
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &nodes);
-            out = mv_sep_doc(nodes, a);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Kind", a), a), &nodes);
+        PtrArray arg_nodes = mk_ptr_array(type->kind.params.len, a);
+        for (size_t i = 0; i < type->kind.params.len; i++) {
+            push_ptr(pretty_type_internal(type->kind.params.data[i], ctx, a), &arg_nodes);
         }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+        push_ptr(pretty_type_internal(type->kind.body, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
         break;
     }
-    case TConstraint: {
-        size_t nargs = type->constraint.nargs;
-        if (nargs == 0) {
-            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
-        } else {
-            PtrArray nodes = mk_ptr_array(3, a);
-            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Kind", a), a), &nodes);
-            PtrArray arg_nodes = mk_ptr_array(nargs, a);
-            for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Type", a), a), &arg_nodes);
-            }
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Constraint", a), a), &nodes);
-            out = mv_sep_doc(nodes, a);
-        }
+    case TSort:
+        out = mv_style_doc(cstyle, mk_str_doc(mv_string("Sort"), a), a);
         break;
-    }
     }
     if (out == NULL) {
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
@@ -1203,6 +1245,11 @@ Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a) {
     DocStyle default_style = scolour(colour(220, 220, 220), dstyle);
     return mv_style_doc(default_style, pretty_type, a);
 }
+
+
+bool is_kind(PiType type) { return (type.sort == TType) |(type.sort == TConstraint) | (type.sort == TKind); }
+bool is_sort(PiType type) { return type.sort == TSort; }
+bool is_sort_or_kind(PiType type) { return (type.sort == TSort) | (type.sort == TType) |(type.sort == TConstraint) | (type.sort == TKind); }
 
 size_t pi_size_align(size_t size, size_t align) {
     size_t rem = size % align;
@@ -1276,17 +1323,17 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
-    case TArray: {
+    case TTile: {
         size_t align = 1;
         size_t size = 1;
-        Result_t res = pi_maybe_size_of(*(PiType*)type.array.element, &size);
+        Result_t res = pi_maybe_size_of(*(PiType*)type.tile.element, &size);
         if (res != Ok) return res;
-        res = pi_maybe_align_of(*(PiType*)type.array.element, &align);
+        res = pi_maybe_align_of(*(PiType*)type.tile.element, &align);
         if (res != Ok) return res;
         *out = pi_size_align(size, align);
         size_t total_len = 1;
-        for (size_t i = 0; i < type.array.dimensions.len; i++) {
-            Dimension dim = type.array.dimensions.data[i]; 
+        for (size_t i = 0; i < type.tile.dimensions.len; i++) {
+            Dimension dim = type.tile.dimensions.data[i]; 
             if (dim.is_uvar) {
                 panic(mv_string("Cannot get size of array: dimensions are not resolved."));
             } else {
@@ -1332,10 +1379,14 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
                 if (res != Ok) return res;
                 align = align > var_align ? align : var_align;
 
-                total = pi_size_align(total, var_align);
                 size_t field_size;
                 res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
+
+                // For empty fields, DO NOT modify total
+                if (field_size == 0) continue;
+
+                total = pi_size_align(total, var_align);
                 total += field_size;
             }
 
@@ -1389,12 +1440,16 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TCApp:
-        panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
+        return Err;
     case TFam:
         return Err;
-    case TKind: 
+
+    // All types are represented with pointers at runtime
+    case TType: 
     case TConstraint: 
-        *out = sizeof(void*);
+    case TKind: 
+    case TSort:
+        *out = sizeof(PiType*);
         return Ok;
     case TUVar:
         return Err;
@@ -1485,8 +1540,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
-    case TArray:
-        return pi_maybe_align_of(*type.array.element, out);
+    case TTile:
+        return pi_maybe_align_of(*type.tile.element, out);
     case TStruct: {
         // TODO (INVESTIGATE BUG): determine how we calculate alignment of
         //   packed struct? is it minimum of all fields?
@@ -1554,10 +1609,12 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TFam:
         return Err;
     case TCApp:
-        panic(mv_string("Need to implement: align-of tc app"));
-    case TKind: 
+        return Err;
+    case TType: 
     case TConstraint: 
-        *out = sizeof(void*);
+    case TKind: 
+    case TSort: 
+        *out = sizeof(PiType*);
         return Ok;
     case TUVar:
         return Err;
@@ -1706,7 +1763,7 @@ PiType* strip_type(PiType *ty) {
     return ty;
 }
 
-void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
+void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
@@ -1718,8 +1775,8 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         type_app_subst(body->proc.ret, subst, shadowed, pia, logger, a);
         break;
-    case TArray: 
-        type_app_subst(body->array.element, subst, shadowed, pia, logger, a);
+    case TTile: 
+        type_app_subst(body->tile.element, subst, shadowed, pia, logger, a);
         break;
     case TStruct:
         for (size_t i = 0; i < body->structure.fields.len; i++) {
@@ -1795,14 +1852,18 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         // TODO (BUG): In situations where the type is to be deleted later, we will
         //             need to copy here to ensure that all types are unique!
         if (find_symbol(body->var, *shadowed) == shadowed->len) {
-            PiType** val = (PiType**)sym_ptr_alookup(body->var, subst);
+            PiType** val = (PiType**)sym_ptr_alookup(body->var, *subst);
             if (val) {*body = **val;}
         }
         break;
     }
     case TAll:
-        // Note: when implementing, consider shadowing
-        panic(mv_string("Not implemetned type-app for All"));
+        for (size_t i = 0; i < body->binder.vars.len; i++) {
+            push_symbol(body->binder.vars.data[i].key, shadowed);
+        }
+        type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
+
+        shadowed->len -= body->binder.vars.len;
         break;
     case TSealed: {
         for (size_t i = 0; i < body->sealed.vars.len; i++) {
@@ -1820,32 +1881,27 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
 
     // Used by Sytem-Fω (type constructors)
     case TCApp:
-        panic(mv_string("Not implemetned type-app for App"));
+        type_app_subst(body->app.fam, subst, shadowed, pia, logger, a);
+        PtrArray args = mk_ptr_array(body->app.args.len, a);
+        for (size_t i = 0; i < body->app.args.len; i++) {
+            type_app_subst(body->app.args.data[i], subst, shadowed, pia, logger, a);
+            push_ptr(body->app.args.data[i], &args);
+        }
+        *body = *type_app_internal(*body->app.fam, args, subst, shadowed, pia, a);
         break;
     case TFam:
         for (size_t i = 0; i < body->binder.vars.len; i++) {
-            push_symbol(body->binder.vars.data[i], shadowed);
+            SymAddrPiCell cell = body->binder.vars.data[i];
+            push_symbol(cell.key, shadowed);
         }
         type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
         shadowed->len -= body->binder.vars.len;
         break;
 
     case TUVar:
-        add_subst(body->uvar, subst, a);
-        if (logger) {
-            PtrArray docs = mk_ptr_array(2, a);
-            push_ptr(mv_str_doc(mv_string("adding subst to"), a), &docs);
-            push_ptr(pretty_type(body, default_ptp, a), &docs);
-            push_ptr(mv_str_doc(mv_string(":"), a), &docs);
-            PtrArray subst_nodes = mk_ptr_array(subst.len, a);
-            for (size_t i = 0; i < subst.len; i++) {
-                push_ptr(mk_str_doc(view_symbol_string(subst.data[i].key), a), &docs);
-                push_ptr(mv_str_doc(mv_string("->"), a), &docs);
-                push_ptr(pretty_type(subst.data[i].val, default_ptp, a), &docs);
-            }
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(subst_nodes, a), a), &docs);
-            log_doc(mv_sep_doc(docs, a), logger);
-        }
+        // TODO: should determine what needs to be done here as part of unify.c refactor.
+        //       if unify.c no longer has a comment at the top detailing a
+        //       refactor plan, this comment can safely be deleted.
         break;
 
     // Kinds (higher kinds not supported)
@@ -1862,38 +1918,32 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
     }
 }
 
-PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) {
+static PiType* type_app_internal(PiType family, PtrArray args, SymPtrAssoc* subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a) {
     if (family.sort == TTrait) {
         if (family.trait.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
         
-        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
             Symbol var = family.trait.vars.data[i];
             PiType* tipe = args.data[i];
-            sym_ptr_bind(var, tipe, &subst);
+            sym_ptr_bind(var, tipe, subst);
         }
 
         SymAddrPiAMap new_implicit_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
         for (size_t i = 0; i < family.trait.implicit_fields.len; i++) {
             SymAddrPiCell cell = family.trait.implicit_fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
-            SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-            sdelete_symbol_array(shadowed);
+            type_app_subst (new_type, subst, shadowed, pia, NULL, a);
             sym_addr_insert(cell.key, new_type, &new_implicit_fields);
         }
         SymAddrPiAMap new_fields = mk_sym_addr_piamap(family.trait.fields.len, pia);
         for (size_t i = 0; i < family.trait.fields.len; i++) {
             SymAddrPiCell cell = family.trait.fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
-            SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-            sdelete_symbol_array(shadowed);
+            type_app_subst (new_type, subst, shadowed, pia, NULL, a);
             sym_addr_insert(cell.key, new_type, &new_fields);
         }
-        sdelete_sym_ptr_assoc(subst);
 
         AddrPiList saved_args = mk_addr_list(args.len, pia);
         saved_args.len = args.len;
@@ -1954,31 +2004,66 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             new_type->distinct.args->data[i] = copy_pi_type_p(args.data[i], pia);
         };
         return new_type;
+    } else if (family.sort == TVar) {
+        PiType* new_type = call_alloc(sizeof(PiType), pia);
+        PiType* new_fam = call_alloc(sizeof(PiType), pia);
+        *new_fam = copy_pi_type(family, pia);
+        *new_type = (PiType) {
+            .sort = TCApp,
+            .app.fam = new_fam,
+        };
+        new_type->app.args = mk_addr_list(args.len, pia);
+        new_type->app.args.len = args.len;
+        for (size_t i = 0; i < args.len; i++) {
+            new_type->app.args.data[i] = copy_pi_type_p(args.data[i], pia);
+        };
+        return new_type;
+    } else if (family.sort == TUVar) {
+        PiType* new_type = call_alloc(sizeof(PiType), pia);
+        PiType* new_fam = call_alloc(sizeof(PiType), pia);
+        *new_fam = family;
+        *new_type = (PiType) {
+            .sort = TCApp,
+            .app.fam = new_fam,
+        };
+        new_type->app.args = mk_addr_list(args.len, pia);
+        new_type->app.args.len = args.len;
+        for (size_t i = 0; i < args.len; i++) {
+            new_type->app.args.data[i] = copy_pi_type_p(args.data[i], pia);
+        };
+        return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
 
-        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
-            Symbol var = family.binder.vars.data[i];
+            Symbol var = family.binder.vars.data[i].key;
             PiType* tipe = args.data[i];
-            sym_ptr_bind(var, tipe, &subst);
+            sym_ptr_bind(var, tipe, subst);
         }
 
         PiType* new_type = copy_pi_type_p(family.binder.body, pia);
-        SymbolArray shadowed = mk_symbol_array(8, a);
-        type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
-        sdelete_symbol_array(shadowed);
-        sdelete_sym_ptr_assoc(subst);
+        type_app_subst (new_type, subst, shadowed, pia, NULL, a);
         return new_type;
     }
+}
+
+PiType* type_app(PiType family, PtrArray args, PiAllocator* pia, Allocator* a) {
+    SymbolArray shadowed = mk_symbol_array(8, a);
+    SymPtrAssoc subst = mk_sym_ptr_assoc(8, a);
+    PiType* out = type_app_internal(family, args, &subst, &shadowed, pia, a);
+    sdelete_sym_ptr_assoc(subst);
+    sdelete_symbol_array(shadowed);
+    return out;
 }
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* logger, PiAllocator* pia, Allocator* a) {
     PiType* new_type = copy_pi_type_p(type, pia);
     SymbolArray shadowed = mk_symbol_array(8, a);
-    type_app_subst(new_type, binds, &shadowed, pia, logger, a);
+    SymPtrAssoc subst = scopy_sym_ptr_assoc(binds, a);
+    type_app_subst(new_type, &subst, &shadowed, pia, logger, a);
+    sdelete_sym_ptr_assoc(subst);
     sdelete_symbol_array(shadowed);
     return new_type;
 }
@@ -2002,11 +2087,11 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         }
         return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
         break;
-    case TArray:
-        if (lhs->array.dimensions.len != rhs->array.dimensions.len) return false;
-        for (size_t i = 0; i < lhs->array.dimensions.len; i++) {
-            Dimension lhd = lhs->array.dimensions.data[i];
-            Dimension rhd = rhs->array.dimensions.data[i];
+    case TTile:
+        if (lhs->tile.dimensions.len != rhs->tile.dimensions.len) return false;
+        for (size_t i = 0; i < lhs->tile.dimensions.len; i++) {
+            Dimension lhd = lhs->tile.dimensions.data[i];
+            Dimension rhd = rhs->tile.dimensions.data[i];
             if (lhd.is_uvar != rhd.is_uvar) return false;
             if (lhd.is_uvar) {
                 // TODO (BUG): do proper structural equality here
@@ -2016,7 +2101,7 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             }
         }
 
-        return pi_type_eql_i(lhs->array.element, rhs->array.element, array);
+        return pi_type_eql_i(lhs->tile.element, rhs->tile.element, array);
         break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
@@ -2097,9 +2182,10 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             return false;
 
         for (size_t i = 0; i < lhs->instance.over.len; i++) {
+            // TODO (BUG): Compare the kinds of the binder vars! 
             Rename rn = (Rename) {
-                .l_name = lhs->binder.vars.data[i],
-                .r_name = rhs->binder.vars.data[i],
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
             };
             push_rename(rn, array);
         }
@@ -2129,6 +2215,8 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             if (symbol_eq(array->data[i].r_name, rhs->var))
                 return false;
         }
+        // Neither are renamed, so we can just compare directly 
+        if (symbol_eq(lhs->var, rhs->var)) return true;
         return false;
     case TAll:
         if (lhs->binder.vars.len != rhs->binder.vars.len)
@@ -2136,8 +2224,9 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
 
         for (size_t i = 0; i < lhs->binder.vars.len; i++) {
             Rename rn = (Rename) {
-                .l_name = lhs->binder.vars.data[i],
-                .r_name = rhs->binder.vars.data[i],
+                // TODO (BUG): Compare the kinds of the binder vars?
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
             };
             push_rename(rn, array);
         }
@@ -2178,14 +2267,38 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         // Used by Sytem-Fω (type constructors)
     case TCApp:
         panic(mv_string("pi_type_eql_i not implemented for type applications"));
-    case TFam:
-        panic(mv_string("pi_type_eql_i not implemented for type families"));
+    case TFam: {
+        if (lhs->binder.vars.len != rhs->binder.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            Rename rn = (Rename) {
+                // TODO (BUG): Compare the kinds of the binder vars?
+                .l_name = lhs->binder.vars.data[i].key,
+                .r_name = rhs->binder.vars.data[i].key,
+            };
+            push_rename(rn, array);
+        }
+        bool out = pi_type_eql_i(lhs->binder.body, rhs->binder.body, array);
+        array->len -= lhs->sealed.vars.len;
+        return out;
+        break;
+    }
 
         // Kinds (higher kinds not supported)
-    case TKind:
-        return lhs->kind.nargs == rhs->kind.nargs;
+    case TType:
+        return true;
     case TConstraint:
-        panic(mv_string("pi_type_eql_i not implemented for constraints"));
+        return true;
+    case TKind:
+        if (lhs->kind.params.len != rhs->kind.params.len) 
+            return false;
+         
+        for (size_t i = 0; i < lhs->kind.params.len; i++) {
+            if (!pi_type_eql_i(lhs->kind.params.data[i], rhs->kind.params.data[i], array))
+                return false;
+        }
+        return true;
     default:
         panic(mv_string("pi_type_eql_i provided invalid sort!"));
     }
@@ -2276,15 +2389,15 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
-    case TArray: {
+    case TTile: {
         size_t len = 1; 
-        for (size_t i = 0; i < type->array.dimensions.len; i++) {
-            if (type->array.dimensions.data[i].is_uvar) {
+        for (size_t i = 0; i < type->tile.dimensions.len; i++) {
+            if (type->tile.dimensions.data[i].is_uvar) {
                 panic(mv_string("Cannot compare values of Array type with undecided dimension."));
             }
-            len *= type->array.dimensions.data[i].val;
+            len *= type->tile.dimensions.data[i].val;
         }
-        PiType* elt_ty = type->array.element;
+        PiType* elt_ty = type->tile.element;
         size_t elt_offset = pi_size_align(pi_size_of(*elt_ty), pi_align_of(*elt_ty));
         for (size_t i = 0; i < len; i++) {
             size_t offset = elt_offset * i;
@@ -2408,8 +2521,10 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
     case TTrait:  {
         panic(mv_string("Not implemented: comparing values of type trait"));
     }
-    case TKind:
-    case TConstraint: {
+    case TType:
+    case TConstraint:
+    case TKind: 
+    case TSort: {
         return pi_type_eql(*(PiType**)lhs, *(PiType**)rhs, a);
     }
 
@@ -2428,9 +2543,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     }
     case TProc:
         return false;
-    case TArray:
+    case TTile:
         // TODO: update me when dimension can vary 
-        return is_variable_for_recur(ty->array.element, vars, shadowed);
+        return is_variable_for_recur(ty->tile.element, vars, shadowed);
     case TStruct:
         for (size_t i = 0; i < ty->structure.fields.len; i++) {
             if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))
@@ -2476,16 +2591,25 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         }
         return is_variable_for_recur(ty->sealed.body, vars, shadowed);
     case TCApp:
-        panic(mv_string("not implemented is_variable_for for applied type"));
+        /* TODO: re-add this when supporting generalized higher kinds
+        for (size_t i = 0; i < ty->app.args.len; i++) {
+            if (is_variable_for_recur(ty->app.args.data[i], vars, shadowed)) return true;
+        }
+        */
+        return is_variable_for_recur(ty->app.fam, vars, shadowed);
     case TFam:
         // TODO: shadow
         panic(mv_string("not implemented is_variable_for for family"));
+    case TSort:
+    case TType:
     case TKind:
-        return false;
     case TConstraint:
         return false;
     case TUVar:
-        panic(mv_string("not implemented is_variable_for for uvar"));
+        // We expect this to be called in only one circumstance: when squashing
+        // types is determining whether to substitute. 
+        // TODO: when the uvars no longer have substitutions, make this panic!
+        return false;
 
     default:
         panic(mv_string("not implemented is_variable_for for this sort"));
@@ -2514,7 +2638,7 @@ PiType* mk_dynamic_type(PiAllocator* a, PiType* t) {
     return dyn;
 }
 
-PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
+PiType* mk_tile_type(PiAllocator *pia, size_t ndims, ...) {
     va_list args;
     va_start(args, ndims);
     
@@ -2532,9 +2656,9 @@ PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
 
     PiType* proc = call_alloc(sizeof(PiType), pia);
     *proc = (PiType) {
-        .sort = TArray,
-        .array.dimensions = dims,
-        .array.element = element,
+        .sort = TTile,
+        .tile.dimensions = dims,
+        .tile.element = element,
     };
     return proc;
 }
@@ -2556,6 +2680,34 @@ PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...) {
     *proc = (PiType) {
         .sort = TProc,
         .proc.implicits = mk_addr_list(0, pia),
+        .proc.args = ty_args,
+        .proc.ret = ret
+    };
+    return proc;
+}
+
+PiType* mk_proc_impl_type(PiAllocator* pia, size_t nimpls, size_t nargs, ...) {
+    va_list args;
+    va_start(args, nargs);
+    
+    AddrPiList ty_impls = mk_addr_list(nimpls, pia);
+    for (size_t i = 0; i < nimpls ; i++) {
+        PiType* arg = va_arg(args, PiType*);
+        push_addr(arg, &ty_impls);
+    }
+    AddrPiList ty_args = mk_addr_list(nimpls, pia);
+    for (size_t i = 0; i < nargs ; i++) {
+        PiType* arg = va_arg(args, PiType*);
+        push_addr(arg, &ty_args);
+    }
+
+    PiType* ret = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* proc = call_alloc(sizeof(PiType), pia);
+    *proc = (PiType) {
+        .sort = TProc,
+        .proc.implicits = ty_impls,
         .proc.args = ty_args,
         .proc.ret = ret
     };
@@ -2756,13 +2908,16 @@ PiType* mk_var_type(PiAllocator* pia, const char *name) {
     return out;
 }
 
-PiType *mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
+PiType* mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
     va_list args;
     va_start(args, nsymbols);
 
-    SymbolPiList vars = mk_sym_list(nsymbols, pia);
+    SymAddrPiAMap params = mk_sym_addr_piamap(nsymbols, pia);
     for (size_t i = 0; i < nsymbols; i++) {
-        push_sym(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+        Symbol sym = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* kind = call_alloc(sizeof(PiType), pia);
+        *kind = (PiType){.sort = TType};
+        sym_addr_insert(sym, kind, &params);
     }
 
     PiType* body = va_arg(args, PiType*);
@@ -2771,7 +2926,7 @@ PiType *mk_all_type(PiAllocator* pia, size_t nsymbols, ...) {
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out = (PiType) {
         .sort = TAll,
-        .binder.vars = vars,
+        .binder.vars = params,
         .binder.body = body,
     };
     return out;
@@ -2806,13 +2961,65 @@ PiType* mk_sealed_type(PiAllocator* pia, size_t nsymbols, ...) {
     return out;
 }
 
-PiType* mk_type_family(PiAllocator* pia, SymbolPiList vars, PiType* body) {
+PiType* mk_type_family(PiAllocator* pia, size_t nargs, ...) {
+    va_list args;
+    va_start(args, nargs);
+
+    SymAddrPiAMap params = mk_sym_addr_piamap(nargs, pia);
+    for (size_t i = 0; i < nargs; i++) {
+      Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+      PiType* kind = va_arg(args, PiType*);
+      sym_addr_insert(name, kind, &params);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out = (PiType) {
         .sort = TFam,
-        .binder.vars = vars,
+        .binder.vars = params,
         .binder.body = body,
     };
+    return out;
+}
+
+PiType* mk_type_kind(PiAllocator* pia, size_t nargs, ...) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    AddrPiList params = mk_addr_list(nargs, pia);
+
+    va_list args;
+    va_start(args, nargs);
+    for (size_t i = 0; i < nargs; i++) {
+        push_addr(va_arg(args, void*), &params);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    *out = (PiType) {
+        .sort = TKind,
+        .kind.params = params,
+        .kind.body = body,
+    };
+    return out;
+}
+
+PiType* mk_type_type(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TType};
+    return out;
+}
+
+PiType* mk_type_constraint(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TConstraint};
+    return out;
+}
+
+PiType* mk_type_sort(PiAllocator* pia) {
+    PiType* out = call_alloc(sizeof(PiType), pia);
+    *out = (PiType) {.sort = TSort};
     return out;
 }
 
@@ -2830,7 +3037,7 @@ PiType* unwind_type(PiType *ty) {
     return ty;
 }
 
-PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
+PiType* mk_type_app(PiAllocator* pia, PiType* fam, ...) {
     PiType* lhs = unwind_type(fam);
     Allocator a = convert_to_callocator(pia);
 
@@ -2843,7 +3050,7 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
     } else if (lhs->sort == TTrait) {
         num_args = lhs->trait.vars.len;
     } else {
-        panic(mv_string("Bad arg to mk_app_type"));
+        panic(mv_string("Bad arg to mk_type_app"));
     }
     PtrArray fam_args = mk_ptr_array(num_args, &a);
     for (size_t i = 0; i < num_args; i++) {
@@ -2858,10 +3065,8 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
 }
 
 PiType* mk_slice_type(PiAllocator* pia) {
-    SymbolPiList vars = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &vars);
     return mk_named_type(pia, "Slice",
-                         mk_type_family(pia, vars,
+                         mk_type_family(pia, 1, "A", mk_type_type(pia),
                                         mk_struct_type(pia, 2,
                                                        "addr", mk_prim_type(pia, Address),
                                                        "len", mk_prim_type(pia, UInt_64))));
@@ -2869,5 +3074,5 @@ PiType* mk_slice_type(PiAllocator* pia) {
 
 PiType* mk_string_type(PiAllocator* pia) {
     return mk_named_type(pia, "String",
-                         mk_app_type(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
+                         mk_type_app(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
 }

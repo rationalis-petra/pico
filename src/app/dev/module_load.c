@@ -145,7 +145,30 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
     goto cleanup;
 
  on_noparse:
- cleanup:
+ cleanup: {
+        // Check that all exported definitions are defined
+        CheckExportResult result = check_exports(module, &itera);
+        if (result.result == Err) {
+            PtrArray docs = mk_ptr_array(4, &ra);
+            push_ptr(mk_str_doc(mv_string("Module at"), &ra), &docs);
+            push_ptr(mk_str_doc(vol_filename, &ra), &docs);
+            push_ptr(mk_str_doc(mv_string("did not define all names it claimed to export. Undefinded values are:"), &ra), &docs);
+            PtrArray names = mk_ptr_array(result.not_implemented.len, &ra);
+            for (size_t i = 0; i < result.not_implemented.len; i++) {
+                Document* name = mv_str_doc(view_name_string(result.not_implemented.data[i]), &ra);
+                push_ptr(name, &names);
+            }
+            push_ptr(mk_hsep_doc(names, &ra), &docs);
+            MultiError multi = (MultiError) {
+              .has_many = false,
+              .error = {
+                .message = mv_sep_doc(docs, &ra),
+                .range = header->range,
+              },
+            };
+            display_error(multi, *get_captured_buffer(cin), serr, filename, &itera);
+        }
+    }
     if (old_module) set_std_current_module(old_module);
     uncapture_istream(cin);
     release_subregion(iter_region);

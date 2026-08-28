@@ -51,20 +51,26 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         return mk_str_doc(mv_string("double"), a);
     case CSCEnum: {
         // enum name { l1 = n1, l2 = n2 }
-        PtrArray main_nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("enum"), a), &main_nodes);
-        push_ptr(pretty_cprim(type->enumeration.base, a), &main_nodes);
+        PtrArray main_nodes = mk_ptr_array(2, a);
+        PtrArray head_nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("enum :"), a), &head_nodes);
+        push_ptr(pretty_cprim(type->enumeration.base, a), &head_nodes);
+        push_ptr(mk_str_doc(mv_string("{"), a), &head_nodes);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &main_nodes);
 
-        PtrArray arg_nodes = mk_ptr_array(type->enumeration.vals.len * 4, a);
-        for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(name_to_string(type->enumeration.vals.data[i].key, a), a), &arg_nodes);
-            push_ptr(mk_str_doc(mv_string(" = "), a), &arg_nodes);
-            push_ptr(pretty_i64(type->enumeration.vals.data[i].val, a), &arg_nodes);
-            if (i - 1 != type->proc.args.len) {
-                push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
+        PtrArray arg_nodes = mk_ptr_array(type->enumeration.vals.len, a);
+        for (size_t i = 0; i < type->enumeration.vals.len; i++) {
+            PtrArray instance_nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(name_to_string(type->enumeration.vals.data[i].key, a), a), &instance_nodes);
+            push_ptr(mk_str_doc(mv_string("="), a), &instance_nodes);
+            push_ptr(pretty_i64(type->enumeration.vals.data[i].val, a), &instance_nodes);
+            if (i + 1 != type->enumeration.vals.len) {
+                push_ptr(mk_str_doc(mv_string(","), a), &instance_nodes);
             }
+            push_ptr(mv_group_doc(mv_hsep_doc(instance_nodes, a), a), &arg_nodes);
         }
-        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &main_nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(arg_nodes, a), a), &main_nodes);
+        push_ptr(mk_str_doc(mv_string("}"), a), &main_nodes);
         return mv_sep_doc(main_nodes, a);
     }
     case CSProc: {
@@ -306,10 +312,14 @@ size_t c_size_of(CType type) {
         size_t align = 0;
         size_t max_align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            align = c_align_of(type.structure.fields.data[i].val);
+            CType ftype = type.structure.fields.data[i].val;
+            size_t fsize = c_size_of(ftype);
+            if (fsize == 0) continue; // Skip things that are void, sturctures
+                                      // of void, etc.
+            align = c_align_of(ftype);
             max_align = max_align > align ? max_align : align;
             size = c_size_align(size, align);
-            size += c_size_of(type.structure.fields.data[i].val);
+            size += c_size_of(ftype);
         }
         return c_size_align(size, max_align);
     }
@@ -573,7 +583,7 @@ CType mk_enum_ctype(PiAllocator* pia, CPrimInt store, size_t nfields, ...) {
     va_end(args);
 
     return (CType) {
-        .sort = CSStruct,
+        .sort = CSCEnum,
         .enumeration.base = store,
         .enumeration.vals = vals,
     };
@@ -596,6 +606,13 @@ CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
         .sort = CSUnion,
         .cunion.fields = fields,
     };
+}
+
+CType mk_result_ctype(PiAllocator* pia, CType val, CType err) {
+    CType value = mk_union_ctype(pia, 2, "val", val, "err", err);
+    return mk_struct_ctype(pia, 2,
+                           "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "value", value);
 }
 
 CType mk_string_ctype(PiAllocator* pia) {

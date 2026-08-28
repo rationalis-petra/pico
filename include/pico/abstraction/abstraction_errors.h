@@ -22,12 +22,18 @@ typedef struct {
 // ------------------------------------------------------------
  
 // Arrays
-_Noreturn void array_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx);
-_Noreturn void array_incorrect_dimtype(RawTree raw, AbstractionICtx ctx);
-_Noreturn void array_incorrect_format(RawTree raw, AbstractionICtx ctx);
-_Noreturn void array_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_dimtype(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_format(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx);
 
-_Noreturn void array_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+
+_Noreturn void tile_with_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_invalid_indexlist(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_invalid_shape(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_shape_index_mismatch(RawTree raw, AbstractionICtx ctx);
+_Noreturn void tile_with_fold_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 
 // Structures
 _Noreturn void struct_bad_fdesc_type(RawTree raw, AbstractionICtx ctx);
@@ -39,7 +45,9 @@ _Noreturn void struct_duplicate_fieldname(RawTree raw, Symbol fname, Abstraction
 //   Type Formers
 // ------------------------------------------------------------
 
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, bool has_implicit, AbstractionICtx ctx);
+_Noreturn void proc_tyformer_bad_arglist(RawTree raw, bool is_implicit, AbstractionICtx ctx);
 
 _Noreturn void array_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 _Noreturn void array_tyformer_incorrect_dimformat(RawTree raw, AbstractionICtx ctx);
@@ -48,6 +56,8 @@ _Noreturn void array_tyformer_dim_not_number(RawTree raw, AbstractionICtx ctx);
 _Noreturn void trait_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 _Noreturn void trait_tyformer_incorrect_name(RawTree raw, AbstractionICtx ctx);
 _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx ctx);
+
+_Noreturn void kind_tyformer_bad_arglist(RawTree raw, AbstractionICtx ctx);
 
 // ------------------------------------------------------------
 //   Import Clauses

@@ -4,8 +4,6 @@
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/terminal/terminal.h"
-#include "platform/window/window.h"
-#include "platform/hedron/hedron.h"
 
 #include "components/assembler/assembler.h"
 #include "pico/codegen/codegen.h"
@@ -21,7 +19,7 @@
 #include "app/help_string.h"
 #include "app/repl.h"
 
-static const char* version = "0.2.7";
+static const char* version = "0.2.8";
 
 int main(int argc, char** argv) {
   // Setup
@@ -39,18 +37,6 @@ int main(int argc, char** argv) {
   init_asm();
   init_symbols(stdalloc);
   init_dynamic_vars(stdalloc);
-
-#ifdef WINDOW_SYSTEM
-  if (pl_init_window_system(stdalloc)) {
-    st_write_string(mv_string("Warning: failed to init window system!\n"), cout);
-  }
-#endif
-
-#ifdef USE_VULKAN
-  if (init_hedron(stdalloc)) {
-    st_write_string(mv_string("Warning: failed to init hedron!\n"), cout);
-  }
-#endif
 
   thread_init_dynamic_vars();
 
@@ -194,14 +180,6 @@ int main(int argc, char** argv) {
   clear_symbols();
   thread_clear_dynamic_vars();
   clear_dynamic_vars();
-
-#ifdef USE_VULKAN
-  teardown_hedron();
-#endif
-
-#ifdef WINDOW_SYSYTEM
-  pl_teardown_window_system();
-#endif
 
   return 0;
 }

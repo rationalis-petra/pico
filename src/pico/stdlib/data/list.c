@@ -12,7 +12,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_import_clause_array(8, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
-    add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 2, "core", "prim");
     add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
@@ -24,6 +24,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "abs", "order");
     add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
     add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "sequence");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -50,7 +51,6 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    // TODO (FEAT): add/implement the following:
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
         "  [.data (slice.Slice A)]\n"
@@ -58,7 +58,13 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, region);
 
-    // TODO (BUG): the array should set the allocator
+    // TODO: replace list.len with list.capacity, and have slice intrinsicly be
+    //        only those elements that were instantiated
+    const char *view_slice_fn = 
+        "(def view-slice all [A] proc [(lst List A)]\n"
+        "  (struct (Slice A) [.addr lst.data.addr] [.len lst.len]))";
+    compile_toplevel(view_slice_fn, module, target, &point, &pi_point, region);
+
     const char *mk_list_fn = 
         "(def init all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
@@ -172,8 +178,15 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
 
     /**
-     *  Implementations for Abstractions
+     *  Implementations for Abstractions: 
      */
+    const char *list_seq =
+        "(def list-seq instance (Seq List)\n"
+        "  [.elt all [A] proc [(idx U64) (lst (List A))] \n"
+        "    if (u64.< idx lst.len)\n"
+        "       (:some (slice.elt {A} idx lst.data))"
+        "       :none])\n";
+    compile_toplevel(list_seq, module, target, &point, &pi_point, region);
 
     const char *list_eq =
         "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"

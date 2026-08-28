@@ -824,7 +824,7 @@ uint32_t num_swapchain_images(HedronSurface* surface) {
     return surface->num_images;
 }
 
-HedronShaderModule* create_shader_module(U8PiList code) {
+HedronShaderModule* create_shader_module(U8Slice code) {
     VkShaderModuleCreateInfo create_info = (VkShaderModuleCreateInfo){};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     // TODO: check if code.len % 4 == 0??
@@ -848,7 +848,7 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
+HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingSlice bdesc) {
     VkDescriptorSetLayoutBinding* bindings = mem_alloc(sizeof(VkDescriptorSetLayoutBinding) * bdesc.len, hd_alloc);
 
     for (size_t i = 0; i < bdesc.len; i++) {
@@ -887,7 +887,7 @@ void destroy_descriptor_set_layout(HedronDescriptorSetLayout* layout) {
     mem_free(layout, hd_alloc);
 }
 
-HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets) {
+HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizeSlice sizes, uint32_t max_sets) {
     VkDescriptorPoolSize* pool_sizes = mem_alloc(sizeof(VkDescriptorPoolSize) * sizes.len, hd_alloc);
     for (size_t i = 0; i < sizes.len; i++) {
         HedronDescriptorPoolSize hd_psize = sizes.data[i];
@@ -925,7 +925,7 @@ void destroy_descriptor_pool(HedronDescriptorPool *pool) {
     mem_free(pool, hd_alloc);
 }
 
-AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* layout, HedronDescriptorPool *pool) {
+PtrSlice alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* layout, HedronDescriptorPool *pool) {
     VkDescriptorSetLayout* vk_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * set_count, hd_alloc);
     for (size_t i =  0; i < set_count; i++) {
         vk_layouts[i] = layout->layout;
@@ -953,10 +953,10 @@ AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* 
 
     mem_free(vk_layouts, hd_alloc);
     mem_free(vk_descriptor_sets, hd_alloc);
-    return descriptor_sets;
+    return (PtrSlice){.data = descriptor_sets.data, .len = descriptor_sets.len};
 }
 
-void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
+void update_descriptor_sets(HedronWriteDescriptorSetSlice writes, HedronCopyDescriptorSetSlice copies) {
     VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet) * writes.len, hd_alloc);
     PtrArray to_free = mk_ptr_array(4, hd_alloc);
 
@@ -1629,7 +1629,7 @@ void reset_command_buffer(HedronCommandBuffer *buffer) {
     vkResetCommandBuffer(buffer->buffer, 0);
 }
 
-void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals) {
+void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairSlice wait, PtrSlice signals) {
     VkSemaphore* wait_semaphores = mem_alloc(sizeof(VkSemaphore) * wait.len, hd_alloc);
     VkPipelineStageFlags* wait_stages = mem_alloc(sizeof(VkPipelineStageFlags) * wait.len, hd_alloc);
     for (size_t i = 0; i < wait.len; i++) {
@@ -1723,20 +1723,20 @@ void command_end_render_pass(HedronCommandBuffer *buffer) {
 void command_pipeline_barrier(HedronCommandBuffer* commands,
                               PipelineStage source_stage,
                               PipelineStage dest_stage,
-                              MemoryBarrierPiList memory_barriers,
-                              BufferMemoryBarrierPiList buffer_memory_barriers,
-                              ImageMemoryBarrierPiList image_memory_barriers) {
+                              MemoryBarrierSlice memory_barriers,
+                              BufferMemoryBarrierSlice buffer_memory_barriers,
+                              ImageMemoryBarrierSlice image_memory_barriers) {
     VkMemoryBarrier* vk_barriers = mem_alloc(sizeof(VkMemoryBarrier), hd_alloc);
     VkBufferMemoryBarrier* vk_buffer_barriers = mem_alloc(sizeof(VkBufferMemoryBarrier), hd_alloc);
     VkImageMemoryBarrier* vk_image_barriers = mem_alloc(sizeof(VkImageMemoryBarrier), hd_alloc);
 
-    for (size_t i = 0; i < memory_barriers.size; i++) {
+    for (size_t i = 0; i < memory_barriers.len; i++) {
         panic(mv_string("command-pipeline-barrier does not yet support memory-barriers"));
     }
-    for (size_t i = 0; i < buffer_memory_barriers.size; i++) {
+    for (size_t i = 0; i < buffer_memory_barriers.len; i++) {
         panic(mv_string("command-pipeline-barrier does not yet support buffer-memory-barriers"));
     }
-    for (size_t i = 0; i < image_memory_barriers.size; i++) {
+    for (size_t i = 0; i < image_memory_barriers.len; i++) {
         ImageMemoryBarrier ibarrier = image_memory_barriers.data[i];
         vk_image_barriers[i] = (VkImageMemoryBarrier) {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1824,7 +1824,7 @@ void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buf
     vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
 }
 
-void command_bind_vertex_buffers(HedronCommandBuffer *commands, AddrPiList buffers) {
+void command_bind_vertex_buffers(HedronCommandBuffer *commands, PtrSlice buffers) {
     VkBuffer* vertex_buffers = mem_alloc(sizeof(VkBuffer) * buffers.len, hd_alloc);
     // {buffer->vk_buffer};
     for (size_t i = 0; i < buffers.len; i++) {

@@ -12,6 +12,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_import_clause_array(3, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
+    add_import_all(&imports.clauses, &ra, 2, "core", "prim");
     add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "platform");
@@ -42,16 +43,16 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    const char* get_fn = "(def get all [A] proc [(p (Ptr A))] (load {A} (unname p)))";
+    const char* get_fn = "(def get all [A] proc [(p (Ptr A))] (address.load {A} (unname p)))";
     compile_toplevel(get_fn, module, target, &point, &pi_point, region);
 
     const char* carat_fn = "(def ^ get)";
     compile_toplevel(carat_fn, module, target, &point, &pi_point, region);
 
-    const char* set_fn = "(def set all [A] proc [(p (Ptr A)) (val A)] (store (unname p) val))";
+    const char* set_fn = "(def set all [A] proc [(p (Ptr A)) (val A)] (address.store (unname p) val))";
     compile_toplevel(set_fn, module, target, &point, &pi_point, region);
 
-    const char* null_fn = "(def null all [A] (name (Ptr A) (num-to-address 0)))";
+    const char* null_fn = "(def null all [A] (name (Ptr A) (address.num-to-address 0)))";
     compile_toplevel(null_fn, module, target, &point, &pi_point, region);
 
     const char *new_fn = 
@@ -60,6 +61,11 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         "  (set p v)\n"
         "  p)";
     compile_toplevel(new_fn, module,target,  &point, &pi_point, region);
+
+    const char *de_init_fn = 
+        "(def de-init all [A] proc [(p (Ptr A))]\n"
+        "  (memory.free (unname p)))\n";
+    compile_toplevel(de_init_fn, module,target,  &point, &pi_point, region);
 
     const char *local_fn =
         "(def local all [A] proc [(v A)] \n"

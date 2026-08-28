@@ -10,9 +10,12 @@
 #include "test/test_log.h"
 
 void run_pico_eval_literals_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
+void run_pico_eval_types_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
 void run_pico_eval_proc_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
+void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region);
 void run_pico_eval_modular_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
 void run_pico_eval_polymorphic_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
+void run_pico_eval_trait_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
 void run_pico_eval_foreign_adapter_tests(TestLog* log, Module* module, Environment* env, Target target, RegionAllocator* region);
 
 #endif

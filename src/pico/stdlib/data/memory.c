@@ -7,6 +7,8 @@
 
 void add_memory_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_region = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_region;
 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(3, &ra),
@@ -51,11 +53,11 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
         .data = mk_u8_array(0, &ra),
     };
 
-    type.kind.nargs = 1;
+    type = *mk_type_kind(pia, 1, mk_type_type(pia), mk_type_type(pia));
     name = string_to_name(mv_string("AllocVTable"));
     add_def(module, name, type, get_allocator_vtable_type(), null_segments, NULL);
 
-    type.kind.nargs = 0;
+    type = (PiType){.sort = TType};
     name = string_to_name(mv_string("Allocator"));
     add_def(module, name, type, get_allocator_type(), null_segments, NULL);
 }

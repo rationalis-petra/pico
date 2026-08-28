@@ -134,6 +134,18 @@ void add_import_clause(ImportClause clause, Module* module);
  */
 void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a);
 
+/**
+ * Check that all modules that the module claims to export are actually
+ * exported. If a module is missing some exported definitions, will return with
+ * result = Err and not_implemented, otherwise result=Ok and the array remains
+ * unpopulated.
+ */
+typedef struct {
+    Result_t result;
+    NameArray not_implemented;
+} CheckExportResult;
+CheckExportResult check_exports(Module* module, Allocator* a);
+
 typedef struct {
     NameArray names;
     U64NameAMap renames;

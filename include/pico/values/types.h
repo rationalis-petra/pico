@@ -45,38 +45,42 @@ typedef enum {
 } PrimType;
 
 typedef enum {
-    TPrim,
-    TProc,
-    TArray,
-    TStruct,
-    TEnum,
-    TReset,
-    TResumeMark,
-    TDynamic,
+  TPrim,
+  TProc,
+  TTile,
+  TStruct,
+  TEnum,
+  TReset,
+  TResumeMark,
+  TDynamic,
+
+  // 'Special'
+  TNamed,
+  TDistinct,
+  TTrait,
+  TTraitInstance, // note: not a "real" type in the theory
+
+  TCType, // native (C) type
+
+  // Quantified Types
+  TVar,
+  TAll,
+  TSealed,
+
+  // Used by Sytem-Fω (type constructors)
+  TCApp,
+  TFam,
+
+  // Kinds: base kind (Type, Kind [..] .., Constaint)
+  TType,
+  TConstraint,
+  TKind,
+
+  // Sort = Type1, i.e. Type : Uni, Constraint : Uni, Kind : Uni
+  TSort,
   
-    // 'Special'
-    TNamed,
-    TDistinct,
-    TTrait,
-    TTraitInstance, // note: not a "real" type in the theory
-  
-    TCType, // native (C) type
-  
-    // Quantified Types
-    TVar,
-    TAll,
-    TSealed,
-  
-    // Used by Sytem-Fω (type constructors)
-    TCApp,
-    TFam,
-  
-    // Kinds (higher kinds not supported)
-    TKind,
-    TConstraint,
-  
-    // Used only during unification
-    TUVar,
+  // Used only during unification
+  TUVar,
 } PiType_t;
 
 typedef struct {
@@ -102,7 +106,7 @@ PICO_LIST_HEADER(Dimension, dim, Dim);
 typedef struct {
     DimPiList dimensions;
     PiType* element;
-} ArrayType;
+} TileType;
 
 typedef struct {
     SymAddrPiAMap fields;
@@ -149,7 +153,7 @@ typedef struct {
 } TAppType;
 
 typedef struct {
-    SymbolPiList vars;
+    SymAddrPiAMap vars;
     PiType* body;
 } TypeBinder;
 
@@ -174,18 +178,15 @@ typedef struct {
 } DistinctType;
 
 typedef struct {
-    size_t nargs;
+    AddrPiList params;
+    PiType* body;
 } PiKind;
-
-typedef struct {
-    size_t nargs;
-} PiConstraint;
 
 struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
-        ArrayType array;
+        TileType tile;
         ProcType proc;
         StructType structure;
         EnumType enumeration;
@@ -207,7 +208,6 @@ struct PiType {
         TypeBinder binder;
 
         PiKind kind;
-        PiConstraint constraint;
 
         // For typechecking/inference
         UVarType* uvar;
@@ -236,6 +236,10 @@ static const PrettyValParams default_pvp = {
 // Transform and Analyse
 Document* pretty_pi_value(void* val, PiType* types, PrettyValParams params, Allocator* a);
 Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
+
+bool is_kind(PiType type);
+bool is_sort(PiType type);
+bool is_sort_or_kind(PiType type);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* log, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
@@ -297,17 +301,19 @@ PiType* strip_type(PiType* ty);
  * • Memory guarantes: both the arguments (args) and famiy are untouched, and can
  *   be safely deleted etc. without affecting the returned type.
  */
-PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
+PiType* type_app(PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 
 // Generators 
 PiType* mk_prim_type(PiAllocator* pia, PrimType t);
 PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
 
-// Sample usage: mk_array_type(a, 2, dim1, dim2, elt_ty)
-PiType* mk_array_type(PiAllocator* pia, size_t ndims, ...);
+// Sample usage: mk_tile_type(a, 2, dim1, dim2, elt_ty)
+PiType* mk_tile_type(PiAllocator* pia, size_t ndims, ...);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
+// Sample usage: mk_proc_type(a, 1, 2, impl_ty, arg_1_ty, arg_2_ty, ret_ty)
+PiType* mk_proc_impl_type(PiAllocator* pia, size_t nimpls, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 PiType* mk_struct_packed_type(PiAllocator* pia, bool packed, size_t nfields, ...);
@@ -342,11 +348,20 @@ PiType* mk_all_type(PiAllocator* pia, size_t nsymbols, ...);
 // Sample usage: mk_sealed_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
 PiType* mk_sealed_type(PiAllocator* pia, size_t nsymbols, ...);
 
-// Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
-PiType* mk_type_family(PiAllocator* pia, SymbolPiList vars, PiType* body);
+// Note: naming convention for type operators is reversed.
+// Sample usage: mk_type_family(a, 2, "A", mk_type_type(a), "B", mk_type_type(a), mk_type_type(a))
+PiType* mk_type_family(PiAllocator* pia, size_t nparams, ...);
 
 // Sample usage: mk_app_type(a, array_type, int_type);
-PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
+PiType* mk_type_app(PiAllocator* pia, PiType* fam, ...);
+
+PiType* mk_type_kind(PiAllocator* pia, size_t nargs, ...);
+
+PiType* mk_type_type(PiAllocator* pia);
+
+PiType* mk_type_constraint(PiAllocator* pia);
+
+PiType* mk_type_sort(PiAllocator* pia);
 
 // Types from the standard library
 // Named Slice Family [A] [.addr Address] [.len U64]

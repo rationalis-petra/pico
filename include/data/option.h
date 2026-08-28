@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include "data/string.h"
 
-typedef enum Option_t {
-    Some,
-    None
+typedef enum Option_t : uint64_t {
+    None,
+    Some
 } Option_t;
 
 typedef struct {
@@ -21,37 +21,37 @@ typedef struct {
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    uint16_t val;
 } U16Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    uint32_t val;
 } U32Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    uint64_t val;
 } U64Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    int8_t val;
 } I8Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    int16_t val;
 } I16Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    int32_t val;
 } I32Option;
 
 typedef struct {
     Option_t type;
-    uint8_t val;
+    int64_t val;
 } I64Option;
 
 typedef struct {

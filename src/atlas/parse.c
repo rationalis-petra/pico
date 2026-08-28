@@ -114,7 +114,7 @@ static AtParseResult parse_list(IStream* is, uint32_t terminator, RegionAllocato
     if (sres == StreamEnd) {
         out = (AtParseResult) {
             .type = ParseFail,
-            .error.message = mv_cstr_doc("Unexpected end of stream. List started here was still parsing", &gpa),
+            .error.message = mv_cstr_doc("Unexpected end of stream. List started here was still parsing.\nYou may be missing a closing ')', ']' or '}'", &gpa),
             .error.range.start = start,
             .error.range.end = start + 1,
         };

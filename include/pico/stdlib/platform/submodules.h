@@ -39,6 +39,7 @@ void add_thread_module(Assembler* ass, Module* platform, RegionAllocator* region
 
 // IO (terminal, filesystem)
 // commented out modules are yet to be implemented
+void add_process_module(Assembler* ass, Module* platform, RegionAllocator* region);
 void add_terminal_module(Assembler* ass, Module* platform, RegionAllocator* region);
 void add_filesystem_module(Assembler* ass, Module* platform, RegionAllocator* region);
 void add_window_module(Assembler* ass, Module* platform, RegionAllocator* region);

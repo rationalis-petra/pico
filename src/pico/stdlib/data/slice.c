@@ -12,7 +12,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_import_clause_array(8, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
-    add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 2, "core", "prim");
     add_import_all(&imports.clauses, &ra, 1, "meta");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
 
@@ -21,6 +21,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
     add_import_all(&imports.clauses, &ra, 2, "abs", "order");
     add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "sequence");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -53,7 +54,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     const char* slice_ty_def = "(def Slice Named Slice Family [Type] Struct [.addr Address] [.len U64])";
     compile_toplevel(slice_ty_def, module, target, &point, &pi_point, region);
 
-    const char* slice_null_fn = "(def null all [A] (name (Slice A) struct [.addr (num-to-address 0)] [.len (is U64 0)]))";
+    const char* slice_null_fn = "(def null all [A] (name (Slice A) struct [.addr (address.num-to-address 0)] [.len (is U64 0)]))";
     compile_toplevel(slice_null_fn, module, target, &point, &pi_point, region);
 
     const char* slice_new_fn = "(def new all [A] proc [(len U64)] (name (Slice A) struct [.addr (memory.alloc (u64.* len (size-of A)))] [.len len]))";
@@ -64,20 +65,20 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(slice_delte_fn, module, target, &point, &pi_point, region);
 
     const char *slice_elt_fn = "(def elt all [A] proc [(i U64) (slice (Slice A))] seq\n"
-                               "  [let! sl-num (address-to-num slice.addr)]"
+                               "  [let! sl-num (address.address-to-num slice.addr)]"
                                "  [let! elt-idx (u64.+ sl-num (u64.* i (size-of A)))]"
-                               "  (load {A} (num-to-address elt-idx)))" ;
+                               "  (address.load {A} (address.num-to-address elt-idx)))" ;
     compile_toplevel(slice_elt_fn, module, target, &point, &pi_point, region);
 
     const char* slice_eset_fn = "(def eset all [A] proc [(i U64) (val A) (slice (Slice A))] seq\n"
-                               "  [let! sl-num (address-to-num slice.addr)]"
+                               "  [let! sl-num (address.address-to-num slice.addr)]"
                                "  [let! elt-idx (u64.+ sl-num (u64.* i (size-of A)))]"
-                               "  (store {A} (num-to-address elt-idx) val))";
+                               "  (address.store {A} (address.num-to-address elt-idx) val))";
     compile_toplevel(slice_eset_fn, module, target, &point, &pi_point, region);
 
     const char *slice_subview =
         "(def subview all [A] proc [(start U64) (end U64) (slice (Slice A))] \n"
-        "  (struct (Slice A) [.addr (num-to-address (u64.+ (u64.* (size-of A) start) (address-to-num slice.addr)))] [.len (u64.- end start)]))";
+        "  (struct (Slice A) [.addr (address.num-to-address (u64.+ (u64.* (size-of A) start) (address.address-to-num slice.addr)))] [.len (u64.- end start)]))";
     compile_toplevel(slice_subview, module, target, &point, &pi_point, region);
 
     const char *slice_copy_fn =
@@ -85,8 +86,8 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  [let! out (new {A} slice.len)]"
         "  (loop [for i from 0 below slice.len]\n"
         "    [let! val (elt i slice)]\n"
-        "    [let! dest-address (num-to-address (u64.+ (u64.* i (size-of A)) (address-to-num out.addr)))]\n"
-        "    (store dest-address val))\n"
+        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num out.addr)))]\n"
+        "    (address.store dest-address val))\n"
         "  out)" ;
     compile_toplevel(slice_copy_fn, module, target, &point, &pi_point, region);
 
@@ -95,12 +96,23 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  [let! out (new {A} (u64.+ x.len y.len))]"
         "  (loop [for i from 0 below x.len]\n"
         "    [let! val (elt i x)]\n"
-        "    [let! dest-address (num-to-address (u64.+ (u64.* i (size-of A)) (address-to-num out.addr)))]\n"
-        "    (store dest-address val))\n"
+        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num out.addr)))]\n"
+        "    (address.store dest-address val))\n"
         "  (loop [for i from 0 below y.len]\n"
         "    [let! val (elt (u64.+ i x.len) y)]\n"
-        "    [let! dest-address (num-to-address (u64.+ (u64.* i (size-of A)) (address-to-num out.addr)))]\n"
-        "    (store dest-address val))\n"
+        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num out.addr)))]\n"
+        "    (address.store dest-address val))\n"
         "  out)" ;
     compile_toplevel(slice_join_fn, module, target, &point, &pi_point, region);
+
+    /**
+     *  Implementations for Abstractions: 
+     */
+    const char *slice_seq =
+        "(def slice-seq instance (Seq Slice)\n"
+        "  [.elt all [A] proc [(idx U64) (slice (Slice A))] \n"
+        "    if (u64.< idx slice.len)\n"
+        "       (:some (elt {A} idx slice))"
+        "       :none])\n";
+    compile_toplevel(slice_seq, module, target, &point, &pi_point, region);
 }

@@ -29,6 +29,17 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(list.elt 0 list-1)");
     }
 
+    if (test_start(log, mv_string("seq-elt-matches-eset"))) {
+        I64Option expected = {.type = Some, .val = -123986};
+        RUN("(list.eset 0 -123986 list-1)");
+        TEST_EQ("(abs.sequence.elt 0 list-1)");
+    }
+
+    if (test_start(log, mv_string("seq-elt->len-returns-none"))) {
+        I64Option expected = {.type = None, .val = 0};
+        TEST_EQ("(abs.sequence.elt 128 list-1)");
+    }
+
     if (test_start(log, mv_string("list-literal-macro"))) {
         int64_t expected = -2;
         TEST_EQ("(seq [let! mlist list.list 1 -2 3 -4]\n"
@@ -42,17 +53,17 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         set_std_current_allocator(pregion);
         char* expected = "01234";
         RUN("(loop [for i from 0 below 5] (list.eset i (narrow I64 i) list-1))");
-        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (prim.i64.to-string x)) list-1)");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("map-add-1"))) {
-        RUN("(def list-2 list.map (proc [x] i64.+ 1 x) list-1)");
+        RUN("(def list-2 list.map (proc [x] + 1 x) list-1)");
 
         PiAllocator current_old = get_std_current_allocator();
         char* expected = "12345";
         set_std_current_allocator(pregion);
-        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-2)");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (prim.i64.to-string x)) list-2)");
         set_std_current_allocator(current_old);
     }
 
@@ -65,7 +76,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         PiAllocator current_old = get_std_current_allocator();
         char* expected = "121314";
         set_std_current_allocator(pregion);
-        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) (pointer.get list-3))");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (prim.i64.to-string x)) (pointer.get list-3))");
         set_std_current_allocator(current_old);
     }
 

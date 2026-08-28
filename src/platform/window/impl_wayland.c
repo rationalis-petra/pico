@@ -376,11 +376,11 @@ bool pl_window_should_close(PlWindow *window) {
     return window->should_close;
 }
 
-WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
+WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
     wl_display_dispatch_pending(wl_display);
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
-    return out;
+    return (WinMessageSlice){.data = out.data, .len = out.len};
 }
 
 KeyboardState* create_keyboard_state(KeyMap* map) {

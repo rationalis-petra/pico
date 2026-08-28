@@ -43,7 +43,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         const char* expected = "12345678910";
-        TEST_STDOUT("(loop [for i from 1 upto 10] (terminal.write-string (u64.to-string i)))");
+        TEST_STDOUT("(loop [for i from 1 upto 10] (terminal.write-string (show i)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -52,7 +52,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         const char* expected = "123456789";
-        TEST_STDOUT("(loop [for i from 1 below 10] (terminal.write-string (u64.to-string i)))");
+        TEST_STDOUT("(loop [for i from 1 below 10] (terminal.write-string (show i)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -61,7 +61,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         const char* expected = "10987654321";
-        TEST_STDOUT("(loop [for i from 10 downto 1] (terminal.write-string (u64.to-string i)))");
+        TEST_STDOUT("(loop [for i from 10 downto 1] (terminal.write-string (show i)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -70,7 +70,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         const char* expected = "1098765432";
-        TEST_STDOUT("(loop [for i from 10 above 1] (terminal.write-string (u64.to-string i)))");
+        TEST_STDOUT("(loop [for i from 10 above 1] (terminal.write-string (show i)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -80,7 +80,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         set_std_current_allocator(pregion);
         const char* expected = "90817263544536271809";
         TEST_STDOUT("(loop [for i from 9 downto 0] [for j from 0 below 10]\n"
-                             "(terminal.write-string (u64.to-string i)) (terminal.write-string (u64.to-string j)))");
+                             "(terminal.write-string (show i)) (terminal.write-string (show j)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -89,7 +89,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         const char* expected = "0101010101";
-        TEST_STDOUT("(loop [for i from 1 upto 10] [for j = 0 then (u64.mod (u64.+ 1 j) 2)] (terminal.write-string (u64.to-string j)))");
+        TEST_STDOUT("(loop [for i from 1 upto 10] [for j = 0 then (u64.mod (+ 1 j) 2)] (terminal.write-string (show j)))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
@@ -100,7 +100,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         const char* expected = "12121212121212121212";
         TEST_STDOUT("(loop [for i from 1 upto 10]"
                     "  (loop [for j from 1 upto 2]"
-                    "    (terminal.write-string (u64.to-string j))))");
+                    "    (terminal.write-string (show j))))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }

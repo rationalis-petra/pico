@@ -17,15 +17,10 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(8, a),
     };
-    add_import_all(&imports.clauses, a, 1, "prelude");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "data", "pointer");
+    add_import_all(&imports.clauses, a, 2, "core", "kernel");
+    add_import_all(&imports.clauses, a, 2, "core", "prim");
+    add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "platform");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
-
-    add_import_flags(&imports.clauses, a, ImportTypes | ImportInstances,
-                     2, seg_name("data"), seg_wild());
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),
@@ -56,6 +51,13 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("types"))) {
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_types_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
+        suite_end(log);
+    }
+
     if (suite_start(log, mv_string("proc"))) {
         RegionAllocator* subregion = make_subregion(region);
         run_pico_eval_proc_tests(log, module, env, target, subregion);
@@ -66,6 +68,20 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     if (suite_start(log, mv_string("polymorphic"))) {
         RegionAllocator* subregion = make_subregion(region);
         run_pico_eval_polymorphic_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("values"))) {
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_values_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("trait"))) {
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_trait_tests(log, module, env, target, subregion);
         release_subregion(subregion);
         suite_end(log);
     }

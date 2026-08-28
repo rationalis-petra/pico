@@ -52,16 +52,6 @@ UVarType* copy_uvar(UVarType* uvar, PiAllocator* pia);
 PiType* try_get_uvar(UVarType* uvar);
 
 /**
- * When typechecking, there may be a need to perform substitutions.
- *  For example, given id : All [A] Proc [A] A applied to 3, i.e. (id 3),
- *  it is necessary to substitute A for the type of 3. However, more generall
- *  if we are applying a 'forall' function f, the type of this function may be
- *  undecided, so we note in the unification variables representing its' type 
- *  that we (in the future) will need to substitute a type variable for sometype.
-*/
-void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a);
-
-/**
  * Return true if and only if the type has uninstantiated unification variables
  */
 bool has_unification_vars_p(PiType type);

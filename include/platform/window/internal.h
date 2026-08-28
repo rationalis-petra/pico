@@ -1,6 +1,10 @@
+#include "data/meta/array_header.h"
+#include "data/string.h"
+
 #include "platform/machine_info.h"
 #include "platform/window/window.h"
-#include "data/string.h"
+
+ARRAY_HEADER(WinMessage, wm, WinMessage)
 
 #ifndef WINDOW_SYSTEM
 // Not using a window system!

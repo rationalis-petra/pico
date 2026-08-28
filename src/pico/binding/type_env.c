@@ -30,7 +30,6 @@ Module* type_env_module(TypeEnv* env) {
 }
 
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
-    static PiType kind = {.sort = TKind, .kind.nargs = 0};
     // Search locally
     TypeEntry out;
     Local* lresult = sym_local_alookup(s, env->locals);
@@ -38,7 +37,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.type = TELocal;
         if (lresult->sort == LQVar) {
             out.is_module = false;
-            out.ptype = &kind;
+            out.ptype = lresult->kind;
             out.value = lresult->type;
             return out;
         } else if (lresult -> sort == LVar) {
@@ -58,7 +57,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.is_module = e.is_module;
         out.ptype = e.type;
         if (!e.is_module) {
-            out.value = (e.type->sort == TKind || e.type->sort == TConstraint) ? e.value : NULL;
+            out.value = is_sort_or_kind(*e.type) ? e.value : NULL;
         } else {
             out.module = e.value;
         }
@@ -179,10 +178,57 @@ InstanceEntry parametric_instance_lookup(InstanceSrc* src, AddrPiList args, Type
     };
 }
 
+bool instance_search(uint64_t id, AddrPiList args, TraitInstance instance, Symbol current, SymbolArray* path, Allocator* a) {
+    push_symbol(current, path);
+    const size_t path_len = path->len; 
+    if (instance.instance_of != id) {
+        for (size_t i = 0; i < instance.implicit_fields.len; i++) {
+            SymAddrPiCell cell = instance.implicit_fields.data[i];
+            PiType* parent = cell.val; 
+#ifdef DEBUG_ASSERT
+            if (parent->sort != TTraitInstance)
+                panic(mv_string("All implicit instance fields in a trait instance type should be trait instances."));
+#endif
+            if (instance_search(id, args, parent->instance, cell.key, path, a)) {
+                return true;
+            } else {
+                // Pop old search path; continue in a DFS-manner
+                path->len = path_len;
+            }
+        }
+        return false;
+    }
+
+    bool eql = true;
+    for (size_t i = 0 ; i < args.len; i++) {
+        eql &= pi_type_eql(instance.args.data[i], args.data[i], a);
+    }
+    return eql;
+}
+
 InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
     PtrArray* instances = env_implicit_lookup(id, env->env);
     if (!instances) {
         return (InstanceEntry) {.type = IENotFound,};
+    }
+    // Start with the local environment 
+    // TODO: determine semantics of if multiple results are found??
+    SymbolArray path = mk_symbol_array(4, env->gpa);
+    for (size_t i = 1; i <= env->locals.len; i++) {
+        Local local = env->locals.data[env->locals.len - i].val;
+        if (local.sort != LVar || local.type->sort != TTraitInstance) continue;
+        TraitInstance instance = local.type->instance;
+        // TODO: just returning 'key' may be bad because shadowing...
+        //       e.g. proc {(t I A)} [...] (let [t 3] foo 7) 
+        //       may become proc {(t I A)} [...] (let [t 3] foo {t} 7) , but
+        //       we want 't' to bind the OUTER t, not the inner t...
+        if (instance_search(id, args, instance, env->locals.data[env->locals.len - i].key, &path, env->gpa)) {
+            return (InstanceEntry) {
+                .type = IELocal,
+                .local.head_type = local.type,
+                .local.path = path,
+            };
+        } 
     }
 
     InstanceEntry out = {.type = IENotFound,};
@@ -237,8 +283,8 @@ void type_var (Symbol var, PiType* type, TypeEnv* env) {
     sym_local_bind(var, (Local){.sort = LVar, .type = type}, &env->locals);
 }
 
-void type_qvar (Symbol var, PiType* type, TypeEnv* env) {
-    sym_local_bind(var, (Local){.sort = LQVar, .type = type}, &env->locals);
+void type_qvar (Symbol var, PiType* type, PiType* kind, TypeEnv* env) {
+    sym_local_bind(var, (Local){.sort = LQVar, .type = type, .kind = kind}, &env->locals);
 }
 
 void pop_type(TypeEnv* env) {

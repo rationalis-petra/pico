@@ -229,6 +229,7 @@ void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a) {
       StampedModule sm = {.module = module, .timestamp = module->timestamp};
       push_stamped_module(sm, &targets);
     }
+    sdelete_ptr_array(sources);
 
     ImportData data = {
       .origins = &origins,
@@ -276,6 +277,34 @@ void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a) {
   }
   sdelete_name_ptr_amap(origins);
   sdelete_u64_name_amap(rename);
+}
+
+CheckExportResult check_exports(Module* module, Allocator* a) {
+    ExportClauseArray exports = module->header.exports.clauses;
+    NameArray arr = {};
+    for (size_t i = 0; i < exports.len; i++) {
+        ExportClause clause = exports.data[i];
+        switch (clause.type) {
+        case ExportAll:
+            break;
+        case ExportName:
+        case ExportNameAs: {
+            ModuleEntryInternal* entry = entry_lookup(clause.name, module->entries);
+            if (!entry) {
+                if (arr.data == NULL) {
+                    arr = mk_name_array(8, a);
+                }
+                push_name(clause.name, &arr);
+            }
+            break;
+        }
+        }
+    }
+    if (arr.data == NULL) {
+        return (CheckExportResult) {.result = Ok};
+    } else {
+        return (CheckExportResult) {.result = Err, .not_implemented = arr};
+    }
 }
 
 /** TODO: Update with internal/external variants */
@@ -354,7 +383,7 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
     } else {
-        if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
+        if (is_sort_or_kind(entry.type)) {
             delete_pi_type_p(entry.value, &module->pico_allocator);
         } else if (entry.type.sort == TTraitInstance) {
           if (entry.type.instance.over.len == 0) {
@@ -511,7 +540,7 @@ Result add_def(Module* module, Name name, PiType type, void* data, Segments segm
     entry.is_module = false;
     size_t size = pi_size_of(type);
 
-    if (type.sort == TKind || type.sort == TConstraint) {
+    if (is_sort_or_kind(type)) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, &module->pico_allocator);
     } else {

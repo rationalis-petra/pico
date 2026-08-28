@@ -7,12 +7,6 @@
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
 
-typedef struct {
-    uint64_t tag;
-    uint64_t size;
-} MaybeSize;
-
-
 static IStream* current_istream;
 IStream* set_std_istream(IStream *current) {
     IStream* old = current_istream;

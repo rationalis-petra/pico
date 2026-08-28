@@ -1,7 +1,7 @@
 #ifndef __PLATFORM_WINDOW_WINDOW_H
 #define __PLATFORM_WINDOW_WINDOW_H
 
-#include "data/meta/array_header.h"
+#include "data/meta/slice_header.h"
 #include "data/string.h"
 
 #include "platform/window/keycodes.h"
@@ -62,12 +62,12 @@ typedef struct {
     };
 } WinMessage;
 
-ARRAY_HEADER(WinMessage, wm, WinMessage);
+SLICE_TYPE(WinMessage, WinMessage);
 
 // TODO (IMPROVEMENT):
 //  - separate window events from regular events?
 //  - add window ID to window events?
-WinMessageArray pl_poll_events(PlWindow* window, Allocator* a);
+WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a);
 
 KeyboardState* create_keyboard_state(KeyMap* keymap);
 void destroy_keyboard_state(KeyboardState*);

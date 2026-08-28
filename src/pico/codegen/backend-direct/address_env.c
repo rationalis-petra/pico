@@ -572,7 +572,9 @@ void address_bind_enum_vars(BindingArray vars, size_t tagsize, bool is_variable,
     for (size_t i = 0; i < vars.len; i++) {
         SAddr local;
         Binding bind = vars.data[i];
-        stack_offset = pi_size_align(stack_offset, bind.align);
+        if (bind.size != 0) {
+            stack_offset = pi_size_align(stack_offset, bind.align);
+        }
 
         local.type = bind.is_variable ? SAIndexed : SADirect;
         local.symbol = bind.sym;

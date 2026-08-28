@@ -1,11 +1,7 @@
-#include <string.h>
-
 #include "platform/signals.h"
-#include "platform/machine_info.h"
 
 #include "components/pretty/string_printer.h"
 
-#include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core/kernel.h"
 
 static PiType* ptr_type;
@@ -52,137 +48,7 @@ static PiType* allocator_vtable_type;
 PiType* get_allocator_vtable_type() {
     return allocator_vtable_type;
 }
-
-PiType build_store_fn_ty(PiAllocator* pia) {
-    PiType* proc_ty  = mk_proc_type(pia, 2, mk_prim_type(pia, Address), mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
-
-    SymbolPiList types = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &types);
-
-    return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
-}
-
-void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    /**
-     * The usual calling convention for polymorphic functions is assumed, hence
-     * stack has the form:
-     * [RSP-0x28] | return dest
-     * [RSP-0x20] | R14 output value
-     * [RSP-0x18] | type size
-     * [RSP-0x10  | store address
-     * [RSP-0x8]  | variable stack index (value/ptr)
-     * [RSP]      | return address 
-     */
-
-#if ABI == SYSTEM_V_64
-    // memcpy (dest = rdi, src = rsi, size = rdx)
-    build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
-
-    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
-    build_binary_op(SHR, reg(RDX, sz_64), imm8(28), ass, a, point);
-    build_binary_op(And, reg(RDX, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
-#elif ABI == WIN_64
-    // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
-
-    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
-    build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
-    build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
-#elif ABI == SYSTEM_V_AARCH64
-    panic(mv_string("Not implemented: build_store_fn for aarch64"));
-#else
-#error "Unknown calling convention"
-#endif
-
-    // copy memcpy into RCX & call
-    generate_c_call(memcpy, ass, a, point);
-
-    // Restore R14
-    build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
-
-    // Pop all values from stack (except return address, then return) 
-    build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0x0, sz_64), ass, a, point);
-    build_binary_op(Add, reg(RSP, sz_64), imm8(0x28), ass, a, point);
-    build_binary_op(Mov, rref8(RSP, 0x0, sz_64), reg(RAX, sz_64), ass, a, point);
-    build_nullary_op(Ret, ass, a, point);
-}
-
-PiType build_load_fn_ty(PiAllocator* pia) {
-    PiType* proc_ty = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_var_type(pia, "A"));
-
-    SymbolPiList types = mk_sym_list(1, pia);
-    push_sym(string_to_symbol(mv_string("A")), &types);
-
-    return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
-}
-
-void relic_memcpy(char *dest, char *src, size_t size) {
-    for (size_t i = 0; i < size; i++) {
-        dest[i] = src[i];
-    }
-}
-
-void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    /** 
-     * The usual calling convention for polymorphic functions is assumed, hence
-     * stack has the form:
-     * [RSP-0x20] | return dest
-     * [RSP-0x18] | R14 output value
-     * [RSP-x010] | type size
-     * [RSP-0x8]  | load address
-     * [RSP]      | return address 
-     */
-
-#if ABI == SYSTEM_V_64
-    // memcpy (dest = rdi, src = rsi, size = rdx)
-    build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
-
-    // Store size in RDX
-    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
-    build_binary_op(SHR, reg(RDX, sz_64), imm8(28), ass, a, point);
-    build_binary_op(And, reg(RDX, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
-    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
-
-#elif ABI == WIN_64
-    // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
-
-    // Store size in R8
-    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
-    build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
-    build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
-    // Store the output address value in RCX
-    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
-
-#elif ABI == SYSTEM_V_AARCH64
-    panic(mv_string("Not implemented: build_load_fn for aarch64"));
-#else
-#error "Unknown calling convention"
-#endif
-
-    // Do the load
-    generate_c_call(relic_memcpy, ass, a, point);
-
-    // Restore R14
-    build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
-
-    // Pop all values from stack (except return address, then return) 
-    build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0x0, sz_64), ass, a, point);
-    build_binary_op(Add, reg(RSP, sz_64), imm8(0x20), ass, a, point);
-    build_binary_op(Mov, rref8(RSP, 0x0, sz_64), reg(RAX, sz_64), ass, a, point);
-    build_nullary_op(Ret, ass, a, point);
-}
-
-void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_nullary_op(Ret, ass, a, point);
-}
-
-void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
+void add_kernel_module(Module* core, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -200,12 +66,11 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         .re_exports = re_exports,
         .exports = exports,
     };
-    Package* base = get_package(lang);
-    Module* module = mk_module(header, base, lang);
+    Package* base = get_package(core);
+    Module* module = mk_module(header, base, core);
     Name name;
 
     PiType type;
-    PiType* typep;
     PiType type_val;
     PiType* type_data = &type_val;
     ErrorPoint point;
@@ -215,7 +80,6 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     }
 
     TermFormer former;
-    //TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
 
@@ -283,12 +147,16 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     name = string_to_name(mv_string("instance"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArray;
-    name = string_to_name(mv_string("array"));
+    former = FTile;
+    name = string_to_name(mv_string("tile"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArrayElt;
-    name = string_to_name(mv_string("aelt"));
+    former = FTileElt;
+    name = string_to_name(mv_string("telt"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
+    former = FWithLoop;
+    name = string_to_name(mv_string("with"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructure;
@@ -387,8 +255,8 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     name = string_to_name(mv_string("Proc"));
     add_def(module, name, type, &former, null_segments, NULL);
 
-    former = FArrayType;
-    name = string_to_name(mv_string("Array"));
+    former = FTileType;
+    name = string_to_name(mv_string("Tile"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructType;
@@ -435,23 +303,24 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     name = string_to_name(mv_string("Family"));
     add_def(module, name, type, &former, null_segments, NULL);
 
+    former = FKind;
+    name = string_to_name(mv_string("Kind"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
     former = FLiftCType;
     name = string_to_name(mv_string("LiftCType"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
-    // Types 
+    // Unitary/Primitive Types 
     // ------------------------------------------------------------------------
 
-    type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
-
-    type_val = type;
+    type = (PiType) {.sort = TSort};
+    type_val = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Type"));
     add_def(module, name, type, &type_data, null_segments, NULL);
 
+    type = (PiType) {.sort = TType};
     type_val = (PiType) {.sort = TPrim, .prim = Unit};
     name = string_to_name(mv_string("Unit"));
     add_def(module, name, type, &type_data, null_segments, NULL);
@@ -509,16 +378,14 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     // as some core types 
     {
         PiType *type_val;
-        SymbolPiList vars;
         ModuleEntry* e;
 
         // Ptr Type 
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-        type_val = mk_named_type(&pia, "Ptr", mk_type_family(&pia,
-                                                          vars,
-                                                          mk_prim_type(&pia, Address)));
+        type = *mk_type_kind(&pia, 1, mk_type_type(&pia), mk_type_type(&pia));
+        type_val = mk_named_type(&pia, "Ptr",
+                                 mk_type_family(&pia, 1,
+                                                "A", mk_type_type(&pia),
+                                                mk_prim_type(&pia, Address)));
         type_data = type_val;
         name = string_to_name(mv_string("Ptr"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -527,25 +394,21 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         ptr_type = e->value;
 
         // Allocator Type
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-
         PiType *alloc_fn_type = mk_proc_type(&pia, 2,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, UInt_64),
                          mk_prim_type(&pia, Address));
         PiType *realloc_fn_type = mk_proc_type(&pia, 3,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, Address),
                          mk_prim_type(&pia, UInt_64),
                          mk_prim_type(&pia, Address));
         PiType *free_fn_type = mk_proc_type(&pia, 2,
-                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, Address),
                          mk_prim_type(&pia, Address));
         type_val = mk_named_type(&pia, "AllocVTable",
-                                 mk_type_family(&pia, vars,
+                                 mk_type_family(&pia, 1, "A", mk_type_type(&pia),
                                                 mk_struct_type(&pia, 3,
                                                                "alloc", alloc_fn_type,
                                                                "realloc", realloc_fn_type,
@@ -557,13 +420,14 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         allocator_vtable_type = e->value;
 
         // Allocator Type
-        type_val = mk_named_type(&pia, "Allocator", mk_sealed_type(&pia,
-                                                                1, "A", 0,
+        type_val = mk_named_type(&pia, "Allocator",
+                                 mk_sealed_type(&pia,
+                                                1, "A", 0,
                                                                 
-                                                      mk_struct_type(&pia, 2,
-                                                                     "vtable", mk_app_type(&pia, ptr_type, mk_app_type(&pia, allocator_vtable_type, mk_var_type(&pia, "A"))),
-                                                                     "context", mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")))));
-        type.kind.nargs = 0;
+                                                mk_struct_type(&pia, 2,
+                                                               "vtable", mk_type_app(&pia, ptr_type, mk_type_app(&pia, allocator_vtable_type, mk_var_type(&pia, "A"))),
+                                                               "context", mk_type_app(&pia, ptr_type, mk_var_type(&pia, "A")))));
+        type = (PiType){.sort = TType};
         type_data = type_val;
         name = string_to_name(mv_string("Allocator"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -573,13 +437,11 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
 
         // Slice Type 
         // Make a ptr
-        type.kind.nargs = 1;
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
+        type = *mk_type_kind(&pia, 1, mk_type_type(&pia), mk_type_type(&pia));
         type_val = 
             mk_named_type(&pia, "Slice",
                           mk_type_family(&pia,
-                                         vars,
+                                         1, "A", mk_type_type(&pia),
                                          mk_struct_type(&pia, 2,
                                                         "addr", mk_prim_type(&pia, Address),
                                                         "len", mk_prim_type(&pia, UInt_64))));
@@ -592,15 +454,12 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
 
         // List Type 
         // Make a ptr
-        type.kind.nargs = 1;
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
         type_val = 
             mk_named_type(&pia, "List",
-                          mk_type_family(&pia,
-                                         vars,
+                          mk_type_family(&pia, 1,
+                                         "A", mk_type_type(&pia),
                                          mk_struct_type(&pia, 3,
-                                                        "data", mk_app_type(&pia, slice_type, mk_var_type(&pia, "A")),
+                                                        "data", mk_type_app(&pia, slice_type, mk_var_type(&pia, "A")),
                                                         "len", mk_prim_type(&pia, UInt_64),
                                                         "gpa", copy_pi_type_p(allocator_type, &pia))));
         type_data = type_val;
@@ -611,14 +470,11 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         list_type = e->value;
         
         // Maybe Type 
-        vars = mk_sym_list(1, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        type.kind.nargs = 1;
-        type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia,
-                                                      vars,
+        type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia, 1,
+                                                               "A", mk_type_type(&pia),
                                                       mk_enum_type(&pia, 2,
-                                                                   "some", 1, mk_var_type(&pia, "A"),
-                                                                   "none", 0)));
+                                                                   "none", 0,
+                                                                   "some", 1, mk_var_type(&pia, "A"))));
         type_data = type_val;
         name = string_to_name(mv_string("Maybe"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -626,17 +482,18 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         e = get_def_internal(name, module);
         maybe_type = e->value;
 
-        // Either Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        push_sym(string_to_symbol(mv_string("B")), &vars);
-        type.kind.nargs = 2;
+        // --------------------------------------------------
+        //   Kind [Type Type] Type
+        // --------------------------------------------------
 
-        type_val = mk_named_type(&pia, "Either", mk_type_family(&pia,
-                                                             vars,
-                                                             mk_enum_type(&pia, 2,
-                                                                          "left", 1, mk_var_type(&pia, "A"),
-                                                                          "right", 1, mk_var_type(&pia, "B"))));
+        // Either Type 
+        type = *mk_type_kind(&pia, 2, mk_type_type(&pia), mk_type_type(&pia), mk_type_type(&pia));
+        type_val = mk_named_type(&pia, "Either",
+                                 mk_type_family(&pia, 2,
+                                                "A", mk_type_type(&pia), "B", mk_type_type(&pia), 
+                                                mk_enum_type(&pia, 2,
+                                                             "left", 1, mk_var_type(&pia, "A"),
+                                                             "right", 1, mk_var_type(&pia, "B"))));
         type_data = type_val;
         name = string_to_name(mv_string("Either"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -644,17 +501,13 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         e = get_def_internal(name, module);
         either_type = e->value;
 
-        // Result Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("Value")), &vars);
-        push_sym(string_to_symbol(mv_string("Error")), &vars);
-        type.kind.nargs = 2;
-
-        type_val = mk_named_type(&pia, "Result", mk_type_family(&pia,
-                                                             vars,
-                                                             mk_enum_type(&pia, 2,
-                                                                          "ok", 1, mk_var_type(&pia, "Value"),
-                                                                          "error", 1, mk_var_type(&pia, "Error"))));
+        // Result Type
+        type_val = mk_named_type(&pia, "Result",
+                                 mk_type_family(&pia, 2,
+                                                "Value", mk_type_type(&pia), "Error", mk_type_type(&pia), 
+                                                mk_enum_type(&pia, 2,
+                                                             "ok", 1, mk_var_type(&pia, "Value"),
+                                                             "error", 1, mk_var_type(&pia, "Error"))));
         type_data = type_val;
         name = string_to_name(mv_string("Result"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -663,16 +516,12 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         result_type = e->value;
 
         // Pair Type 
-        vars = mk_sym_list(2, &pia);
-        push_sym(string_to_symbol(mv_string("A")), &vars);
-        push_sym(string_to_symbol(mv_string("B")), &vars);
-        type.kind.nargs = 2;
-
-        type_val = mk_named_type(&pia, "Pair", mk_type_family(&pia,
-                                                      vars,
-                                                      mk_struct_type(&pia, 2,
-                                                                   "_1", mk_var_type(&pia, "A"),
-                                                                   "_2", mk_var_type(&pia, "B"))));
+        type_val = mk_named_type(&pia, "Pair",
+                                 mk_type_family(&pia, 2,
+                                                "A", mk_type_type(&pia), "B", mk_type_type(&pia), 
+                                                mk_struct_type(&pia, 2,
+                                                               "_1", mk_var_type(&pia, "A"),
+                                                               "_2", mk_var_type(&pia, "B"))));
         type_data = type_val;
         name = string_to_name(mv_string("Pair"));
         add_def(module, name, type, &type_data, null_segments, NULL);
@@ -680,42 +529,5 @@ void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         e = get_def_internal(name, module);
         pair_type = e->value;
     }
-
-    // Unit value
-
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
-    Segments prepped;
-
-    type = build_store_fn_ty(&pia);
-    build_store_fn(ass, &ra, &point);
-    name = string_to_name(mv_string("store"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    type = build_load_fn_ty(&pia);
-    build_load_fn(ass, &ra, &point);
-    name = string_to_name(mv_string("load"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, Address), mk_prim_type(&pia, UInt_64));
-    build_nop_fn(ass, &ra, &point);
-    name = string_to_name(mv_string("address-to-num"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, Address));
-    build_nop_fn(ass, &ra, &point);
-    name = string_to_name(mv_string("num-to-address"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
 }
 

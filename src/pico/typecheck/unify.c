@@ -7,21 +7,86 @@
 #include "pico/data/client/meta/list_header.h"
 #include "pico/data/client/meta/list_impl.h"
 #include "pico/data/client/sym_addr_piamap.h"
-#include "pico/typecheck/type_errors.h"
+#include "pico/typecheck/unify_errors.h"
 #include "pico/typecheck/unify.h"
 
-// Handling of named types
-// Unification destructively modifies uvars 
-// Thus, simply, e.g. copying and then renaming types won't work.
-// A rename-map has to deal with shadowing variables, e.g.
-// (Name x (Name x x)) ?= (Name x (Name y x))
-// For this reason, we need a solution satisfying
-// • Does not copy or modify named types
-// • Takes care of naming and shadowing
-// The solution is an array (stack) of lhs & rhs symbols 
-// 
-// lhs_symbol
-// rhs_symbol
+/**
+ *
+ * Unification Refactor Plan
+ * ====================================
+ * Currently, the unifier/typechecker is very much in a state of 'this is not
+ * sound, but it *mostly* works unless you push it. There is a plan for a
+ * refactor to improve soundness and speed of the typechecker, roughly outlined
+ * as follows:
+ * 1. Currently, UVars store 'substitutions', lists of [name ↦ type]
+ *   substitutions, to make up for the fact that we don't keep track of scope
+ *   properly. These should be removed (DONE), and instead, just rely on type-scoping
+ *   information during the 'squash' phase instaed (TODO).
+ * 
+ * 2. During typechecking, instead of unifying in-place, produce a parallel
+ *    syntax tree 'a problem' that keeps track of both type-scope, and all
+ *    unification constraints. This problem is then 'solved' before moving 
+ *    the solution into the syntax tree (this replaces the squashing phase).
+ * 
+ * 3. Once the problem/solution architecture is set-up, rework types to be much
+ *    more efficient memory-wise:
+ *    - UVars should be slimmed down to 32-bit indices into a pool/array (rather
+ *      than full fat pointers).
+ *    - Types Pointers should similarly be replaced with opaque references into
+ *      some contextually relevant pool.
+ *    - Instead of being full types, primitives should be encoded directly into
+ *      the indices.
+ * 
+ * 4. At this point, the main thing to work on will be general correctness. Look
+ *    into Higher-Order unification and possibly consult how Caledon structured
+ *    its' type-checker. See if there is a way to report an easy error message
+ *    when backtracking *would* normally be necessary. This may allow
+ *    efficiency/speed improvemints, at the cost of only a little extra
+ *    explicitness in the (Relic) code.
+ * 
+ * 5. At current, typechecking is by far the slowest step. Investigate whether
+ *    it still is via profiling, and if so, look into more optimisations (I
+ *    recall there being like, 1 paper for speeding up HM type inference that
+ *    the creator of Elm mentioned on the 'Software Unscripted' podcast).
+ */
+
+/**
+ *
+ * Unification
+ * ============
+ * The unifier presented here is a relatively simple extension of a regular
+ * HM-style unifier. Types whose values are unknown are initialized to a blank
+ * UVar, where a UVar stores the type it is substituted for in an internal field
+ * named `subst`. During unification, uvars are mutated in-place to handle the
+ * new values. 
+ * 
+ * Implementation Details
+ * -----------------------
+ * Handling Occurs
+ * ---------------
+ * There are several legitimate scenarios where we might want to unify a uvar,
+ * say α with, e.g. (struct [.x (Ptr α)] [.y I64]). In this case, doing the
+ * substitution blindly would give α = (struct [.x (Ptr α)] [.y I64]). Then,
+ * during the `squash` step (eliminating uvars), we would encounter an infinite
+ * loop, as we constantly go down into the definition of α. To prevent this,
+ * before substitution, (α, T) we first check if T contains α. The function
+ * occurs(α, T) returns true if T contains α. 
+ * 
+ * 
+ * Handling Scope
+ * --------------
+ * Handling of named types
+ * Unification destructively modifies uvars 
+ * Thus, simply, e.g. copying and then renaming types won't work.
+ * A rename-map has to deal with shadowing variables, e.g.
+ * (Name x (Name x x)) ?= (Name x (Name y x))
+ * For this reason, we need a solution satisfying
+ * • Does not copy or modify named types
+ * • Takes care of naming and shadowing
+ * 
+ * The solution is an array (stack) of lhs & rhs symbols 
+ * lhs_symbol rhs_symbol
+ */
 
 typedef enum {
     NoDefault, Integral, Floating, Struct, Enum
@@ -58,7 +123,6 @@ struct UVarType {
     PiType* subst;
     ConstraintPiList constraints;
     UVarDefault default_behaviour;
-    AddrPiList substitutions;
 };
 
 typedef struct {
@@ -80,8 +144,12 @@ typedef SymPair SymbolPair;
 PiType* trace_uvar(PiType* uvar);
 Dimension* trace_dim(Dimension* uvar);
 
+bool occurs(UVarType* var, PiType *lhs);
+
 // Unify two types such they are equal. Assumes they have the same sort
 static UnifyResult unify_eq(PiType *lhs, PiType *rhs,
+                     SymPairArray* rename, UnifyContext ctx);
+static UnifyResult unify_app(PiType *app, PiType *val,
                      SymPairArray* rename, UnifyContext ctx);
 static UnifyResult unify_internal(PiType *lhs, PiType *rhs,
                            SymPairArray* rename, UnifyContext ctx);
@@ -125,6 +193,12 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Unify
     }
     else if (rhs->sort == lhs->sort) {
         out = unify_eq(lhs, rhs, rename, ctx);
+    }
+    else if (lhs->sort == TCApp) {
+        out = unify_app(lhs, rhs, rename, ctx);
+    }
+    else if (rhs->sort == TCApp) {
+        out = unify_app(rhs, lhs, rename, ctx);
     } else {
         PtrArray nodes = mk_ptr_array(8, ctx.a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), ctx.a), &nodes);
@@ -242,9 +316,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         return unify_internal(lhs->proc.ret, rhs->proc.ret, rename, ctx);
         break;
     }
-    case TArray: {
-        DimPiList lhs_dims = lhs->array.dimensions;
-        DimPiList rhs_dims = rhs->array.dimensions;
+    case TTile: {
+        DimPiList lhs_dims = lhs->tile.dimensions;
+        DimPiList rhs_dims = rhs->tile.dimensions;
         if (lhs_dims.len != rhs_dims.len) {
             return (UnifyResult) {
                 .type = USimpleError,
@@ -267,7 +341,7 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
                 }
             }
         }
-        return unify_internal(lhs->array.element, rhs->array.element, rename, ctx);
+        return unify_internal(lhs->tile.element, rhs->tile.element, rename, ctx);
         break;
     }
     case TStruct: {
@@ -407,25 +481,6 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 
         return unify_internal(lhs->distinct.type, rhs->distinct.type, rename, ctx);
         break;
-    } case TKind: {
-          if (lhs->kind.nargs == rhs->kind.nargs)
-              return (UnifyResult) {.type = UOk};
-          else 
-              return (UnifyResult) {
-                  .type = USimpleError,
-                  .message = mv_cstr_doc("Cannot Unify two kinds of unequal nags", a),
-              };
-          break;
-      }
-    case TConstraint: {
-        if (lhs->constraint.nargs == rhs->constraint.nargs)
-            return (UnifyResult) {.type = UOk};
-        else 
-            return (UnifyResult) {
-                .type = USimpleError,
-                .message = mv_cstr_doc("Cannot Unify two constraints of unequal nags", a),
-            };
-        break;
     }
     case TVar: {
         // Check that they are alpha-equivalent
@@ -438,23 +493,25 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             };
         }
         return (UnifyResult) {.type = UOk};
-        break;
     }
     case TAll: {
         if (lhs->binder.vars.len != rhs->binder.vars.len) {
             return (UnifyResult) {.type = USimpleError};
         }
         for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            SymAddrPiCell lcell = lhs->binder.vars.data[i];
+            SymAddrPiCell rcell = rhs->binder.vars.data[i];
+            UnifyResult res = unify_internal(lcell.val, rcell.val, rename, ctx);
+            if (res.type != UOk) return res;
             SymPair syms = (SymPair){
-                .lhs = lhs->binder.vars.data[i],
-                .rhs = rhs->binder.vars.data[i]
+                .lhs = lcell.key,
+                .rhs = rcell.key
             };
             push_sym_pair(syms, rename);
         };
         UnifyResult res = unify_internal(lhs->binder.body, rhs->binder.body, rename, ctx);
         rename->len -= lhs->binder.vars.len;
         return res;
-        break;
     }
     case TSealed: {
         if (lhs->sealed.vars.len != rhs->sealed.vars.len) {
@@ -485,7 +542,45 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         UnifyResult res = unify_internal(lhs->sealed.body, rhs->sealed.body, rename, ctx);
         rename->len -= lhs->sealed.vars.len;
         return res;
-        break;
+    }
+    case TCApp: {
+        // TODO: When the 'family' of TCApp is a unification var, we need to
+        // employ higher-order unification techniques. Look at unificaton of the
+        // pattern fragment due to Dale Miller.
+        if (lhs->app.args.len != rhs->app.args.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Applications of two type families have different numbers of arguments.", a),
+            };
+        }
+        
+        UnifyResult res = unify_internal(lhs->app.fam, rhs->app.fam, rename, ctx);
+        if (res.type != UOk) return res;
+
+        for (size_t i = 0; i < lhs->app.args.len; i++) {
+            UnifyResult res = unify_internal(lhs->app.args.data[i], rhs->app.args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    case TSort:
+    case TType:
+    case TConstraint:
+        return (UnifyResult) {.type = UOk};
+    case TKind: {
+        if (lhs->kind.params.len != rhs->kind.params.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Cannot unify two kinds with a different number of parameters.", a),
+            };
+        }
+        UnifyResult res;
+        for (size_t i = 0; i < lhs->kind.params.len; i++) {
+            res = unify_internal(lhs->kind.params.data[i], rhs->kind.params.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        res = unify_internal(lhs->kind.body, rhs->kind.body, rename, ctx);
+        return res;
     }
     default:  {
         PtrArray nodes = mk_ptr_array(8, a);
@@ -495,6 +590,93 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
         panic(doc_to_str(mv_sep_doc(nodes, a), 80, a));
     } 
+    }
+}
+
+static UnifyResult unify_app(PiType *app, PiType *val,
+                             SymPairArray* rename, UnifyContext ctx) {
+  /**
+   * TODO
+   * This is effectively where higher order unification (HOU) would come in. 
+   * Look into pattern unification and implement it here: what we have is a very
+   * simple version where we require that head of the value is a type constructor 
+   * (Named, Distinct, Opaque) with fixed arguments, and we don't rename them.
+   */
+    Allocator* a = ctx.a;
+    if (app->sort != TCApp)
+        panic(mv_string("Calling unify_app with app.sort != TCApp."));
+    switch (val->sort) {
+    case TNamed: {
+        if (!val->named.args) {
+            return unify_app_err_no_args(app, val, ctx);
+        }
+        AddrPiList val_args = *val->named.args;
+        if (val_args.len != app->app.args.len) {
+            return unify_app_err_unequal_arglen(app, val, ctx);
+        }
+        PiType* type_no_args = call_alloc(sizeof(PiType), ctx.pia);
+        *type_no_args = *val;
+        type_no_args->named.args = NULL;
+
+        // TODO: add architecture for 'properly' generating a new var
+        if (val_args.len > 8) {
+            panic(mv_string("TODO: add architecture for properly generating a new var."));
+        }
+        const char* vars[8] = {"A", "B", "C", "D", "E", "F", "G", "H"};
+        SymAddrPiAMap new_fam_args = mk_sym_addr_piamap(val_args.len, ctx.pia);
+        for (size_t i = 0; i < val_args.len; i++) {
+            PiType* kind = mk_type_type(ctx.pia); // TODO: add kind_of and
+                                                  // replace this with
+                                                  // kind_of(val_args, ctx.pia)
+            sym_addr_insert(string_to_symbol(mv_string(vars[i])), kind, &new_fam_args);
+        }
+
+        PiType* new_fam = call_alloc(sizeof(PiType), ctx.pia);
+        *new_fam = (PiType) {
+            .sort = TFam,
+            .binder.vars = new_fam_args,
+            .binder.body = type_no_args->named.type,
+        };
+        type_no_args->named.type = new_fam;
+
+        UnifyResult res =  unify_internal(app->app.fam, type_no_args, rename, ctx);
+        if (res.type != UOk) return res;
+        for (size_t i = 0; i < val_args.len; i++) {
+            UnifyResult res =  unify_internal(app->app.args.data[i], val_args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    case TDistinct: {
+        if (!val->distinct.args) {
+            return unify_app_err_no_args(app, val, ctx);
+        }
+        AddrPiList val_args = *val->distinct.args;
+        if (val_args.len != app->app.args.len) {
+            return unify_app_err_unequal_arglen(app, val, ctx);
+        }
+        PiType* type_no_args = call_alloc(sizeof(PiType), ctx.pia);
+        *type_no_args = *val;
+        type_no_args->distinct.args = NULL;
+        UnifyResult res =  unify_internal(app->app.fam, type_no_args, rename, ctx);
+        if (res.type != UOk) return res;
+        for (size_t i = 0; i < val_args.len; i++) {
+            UnifyResult res =  unify_internal(app->app.args.data[i], val_args.data[i], rename, ctx);
+            if (res.type != UOk) return res;
+        }
+        return (UnifyResult) {.type = UOk};
+    }
+    default: {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mk_str_doc(mv_string("Unification failed: unify_app incomplete - cannot unify head type"), a), &nodes);
+        push_ptr(pretty_type(app, default_ptp, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+        push_ptr(pretty_type(val, default_ptp, a), &nodes);
+        return (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_sep_doc(nodes, a),
+        };
+    }
     }
 }
 
@@ -551,7 +733,10 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         //   having to specify the name.
         PiType* unwrapped = unname_type(type, ctx.current_module, ctx.pia, a);
         // TODO (BUG): what about if the named type has arugments???
-        // TODO (BUG): add occurs check
+        // TODO (BUG): Enable occurs check/work in proper higher-order
+        //             unification support.
+        if (occurs(uvar, type)) 
+            return (UnifyResult){.type = UOk};
 
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
@@ -653,10 +838,6 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         }
     }
     
-    for (size_t i = 0; i < uvar->substitutions.len; i++) {
-        SymPtrAssoc* subst = uvar->substitutions.data[i];
-        type = pi_type_subst(type, *subst, ctx.logger, ctx.pia, ctx.a);
-    }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
 }
@@ -667,26 +848,12 @@ UVarType* copy_uvar(UVarType* uvar, PiAllocator* pia) {
         .subst = uvar->subst,
         .constraints = scopy_constraint_list(uvar->constraints, pia),
         .default_behaviour = uvar->default_behaviour,
-        .substitutions = scopy_addr_list(uvar->substitutions, pia),
     };
     return new;
 }
 
 PiType* try_get_uvar(UVarType *uvar) {
     return uvar->subst;
-}
-
-void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a) {
-    // NOTE: We shallow copy here due to the allocation guarantees made 
-    //       by the typecheck (caller) function.
-
-    // Eliminate all substitutions that are severed
-    // Note: we start by copying the binds because deletion is destructive
-    if (binds.len > 0) {
-        SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
-        *subst = scopy_sym_ptr_assoc(binds, a);
-        push_addr(subst, &uvar->substitutions);
-    }
 }
 
 bool has_unification_vars_p(PiType type) {
@@ -705,8 +872,8 @@ bool has_unification_vars_p(PiType type) {
         }
         return has_unification_vars_p(*type.proc.ret);
     }
-    case TArray: {
-        return has_unification_vars_p(*type.array.element);
+    case TTile: {
+        return has_unification_vars_p(*type.tile.element);
     }
     case TStruct: {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
@@ -788,11 +955,23 @@ bool has_unification_vars_p(PiType type) {
         return has_unification_vars_p(*type.app.fam);
     }
     case TFam: {
+        for (size_t i = 0; i < type.kind.params.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.kind.params.data[i]))
+                return true;
+        }
         return has_unification_vars_p(*type.binder.body);
     }
 
-    case TKind: return false;
+    case TType: return false;
     case TConstraint: return false;
+    case TKind: {
+        for (size_t i = 0; i < type.kind.params.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.kind.params.data[i])) 
+                return true;
+        }
+        return has_unification_vars_p(*type.kind.body);
+    }
+    case TSort: return false;
 
     // Special sort: unification variable
     case TUVar:
@@ -825,6 +1004,126 @@ Dimension* trace_dim(Dimension* uvar) {
     return uvar;
 }
 
+bool occurs(UVarType* var, PiType *type) {
+    switch (type->sort) {
+    case TPrim:
+        return false;
+    case TProc: {
+        for (size_t i = 0; i < type->proc.implicits.len; i++) {
+            if (occurs(var, type->proc.implicits.data[i])) return true;
+        }
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            if (occurs(var, type->proc.args.data[i])) return true;
+        }
+        return occurs(var, type->proc.ret);
+    }
+    case TTile: {
+        return occurs(var, type->tile.element);
+    }
+    case TStruct: {
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            if (occurs(var, type->structure.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+    case TEnum: {
+        for (size_t i = 0; i < type->enumeration.variants.len; i++) {
+            AddrPiList types = *(AddrPiList*)type->enumeration.variants.data[i].val;
+            for (size_t j = 0; j < types.len; j++) {
+                if (occurs(var, types.data[j])) return true;
+            }
+        }
+        return false;
+    }
+    case TReset: {
+        if (occurs(var, type->reset.in)) return true;
+        if (occurs(var, type->reset.out)) return true;
+        return false;
+    }
+    case TDynamic: {
+        return occurs(var, type->dynamic);
+    }
+    case TVar:
+        return false;
+    case TAll: 
+    case TFam: {
+        return occurs(var, type->binder.body);
+    }
+    case TSealed: {
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            if (occurs(var, type->sealed.implicits.data[i])) return true;
+        }
+        return occurs(var, type->sealed.body);
+    }
+    case TNamed: {
+        if (occurs(var, type->named.type)) return true;
+        if (type->named.args) {
+            for (size_t i = 0; i < type->named.args->len; i++) {
+                if (occurs(var, type->named.args->data[i])) return true;
+            }
+        }
+        return false;
+    }
+    case TDistinct: {
+        if (occurs(var, type->distinct.type)) return true;
+        if (type->distinct.args) {
+            for (size_t i = 0; i < type->distinct.args->len; i++) {
+                if (occurs(var, type->distinct.args->data[i])) return true;
+            }
+        }
+        return false;
+    }
+    case TTrait: {
+        for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
+            if (occurs(var, type->trait.implicit_fields.data[i].val)) return true;
+        }
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
+            if (occurs(var, type->trait.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type->instance.args.len; i++) {
+            if (occurs(var, type->instance.args.data[i])) return true;
+        }
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            if (occurs(var, type->instance.implicit_fields.data[i].val)) return true;
+        }
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            if (occurs(var, type->instance.fields.data[i].val)) return true;
+        }
+        return false;
+    }
+
+    case TCApp: {
+      for (size_t i = 0; i < type->app.args.len; i++) {
+        if (occurs(var, type->app.args.data[i])) return true;
+      }
+      return occurs(var, type->app.fam);
+    }
+    case TSort: return false;
+    case TType: return false;
+    case TConstraint: return false;
+    case TKind:
+      for (size_t i = 0; i < type->instance.fields.len; i++) {
+        if (occurs(var, type->binder.vars.data[i].val)) return true;
+      }
+      return occurs(var, type->binder.body);
+    // Special sort: unification variable
+    case TUVar: {
+        UVarType* uvar = type->uvar;
+        if (var == uvar) return true;
+        // Be conservative: also check substitutions
+        if (uvar->subst) {
+            if (occurs(var, uvar->subst)) return true;
+        } 
+        return false;
+    }
+    default: 
+        panic(mv_string("occurs received invalid type!"));
+    }
+}
+
 void squash_type(PiType* type, UnifyContext ctx) {
     Allocator* a = ctx.a;
     PiAllocator* pia = ctx.pia;
@@ -841,8 +1140,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
         squash_type(type->proc.ret, ctx);
         break;
     }
-    case TArray: {
-        squash_type(type->array.element, ctx);
+    case TTile: {
+        squash_type(type->tile.element, ctx);
         break;
     }
     case TStruct: {
@@ -870,8 +1169,10 @@ void squash_type(PiType* type, UnifyContext ctx) {
         break;
     }
     case TVar: break;
-    case TAll: 
-    case TFam: {
+    case TAll:  {
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            squash_type(type->binder.vars.data[i].val, ctx);
+        }
         squash_type(type->binder.body, ctx);
         break;
     }
@@ -923,10 +1224,30 @@ void squash_type(PiType* type, UnifyContext ctx) {
         }
         break;
     }
+    case TFam: {
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            squash_type(type->binder.vars.data[i].val, ctx);
+        }
+        squash_type(type->binder.body, ctx);
+        break;
+    }
+    case TCApp: {
+        for (size_t i = 0; i < type->app.args.len; i++) {
+            squash_type(type->app.args.data[i], ctx);
+        }
+        squash_type(type->app.fam, ctx);
+        break;
+    }
 
-    case TCType: break;
-    case TKind: break;
+    case TSort: break;
+    case TType: break;
     case TConstraint: break;
+    case TKind:
+        for (size_t i = 0; i < type->kind.params.len; i++) {
+            squash_type(type->kind.params.data[i], ctx);
+        }
+        squash_type(type->kind.body, ctx);
+        break;
     // Special sort: unification variable
     case TUVar: {
         UVarType* uvar = type->uvar;
@@ -999,34 +1320,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
                 push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
             }
             log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
+            end_section(ctx.logger);
         }
-
-        // Now, process any outstanding substitutions:
-        for (size_t i = 0; i < uvar->substitutions.len; i++) {
-            SymPtrAssoc* binds = uvar->substitutions.data[i];
-
-            if (ctx.logger) {
-                PtrArray docs = mk_ptr_array(2, ctx.a);
-                push_ptr(mv_str_doc(mv_string("variable-subst: "), ctx.a), &docs);
-                push_ptr(pretty_uvar_type(uvar, ctx.a), &docs);
-                for (size_t j = 0; j < binds->len; j++) {
-                    PtrArray bind_docs = mk_ptr_array(2, ctx.a);
-                    push_ptr(mk_str_doc(view_symbol_string(binds->data[j].key), a), &bind_docs);
-                    push_ptr(mk_str_doc(mv_string("/"), a), &bind_docs);
-                    push_ptr(pretty_type(binds->data[j].val, default_ptp, a), &bind_docs);
-                    push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(bind_docs, a), a), a), &docs);
-                }
-                push_ptr(mv_str_doc(mv_string("->"), ctx.a), &docs);
-                push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
-                log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
-            }
-            for (size_t j = 0; j < binds->len; j++) {
-                squash_type(binds->data[j].val, ctx);
-            }
-            *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
-        }
-
-        if (ctx.logger) end_section(ctx.logger);
         break;
     }
     default: 
@@ -1043,7 +1338,6 @@ PiType* mk_uvar(PiAllocator* pia) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = NoDefault,
-        .substitutions = mk_addr_list(1, pia),
     };
     
     return uvar;
@@ -1058,7 +1352,6 @@ PiType* mk_uvar_integral(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Integral,
-        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {
@@ -1079,7 +1372,6 @@ PiType* mk_uvar_floating(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Floating,
-        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {

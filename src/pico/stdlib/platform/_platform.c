@@ -30,6 +30,9 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
     reset_subregion(subregion);
     add_thread_module(ass, module, subregion);
     reset_subregion(subregion);
+
+    add_process_module(ass, module, subregion);
+    reset_subregion(subregion);
     add_filesystem_module(ass, module, subregion);
     reset_subregion(subregion);
     add_terminal_module(ass, module, subregion);

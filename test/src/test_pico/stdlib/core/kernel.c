@@ -6,7 +6,7 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
+void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_allocator = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_allocator;
@@ -82,7 +82,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("let-many-in-sequence"))) {
         int64_t expected = 5;
-        TEST_EQ("(seq [let! x 2] [let! y 3] (u32.+ x y))");
+        TEST_EQ("(seq [let! x 2] [let! y 3] (prim.u32.+ x y))");
     }
 
     if (test_start(log, mv_string("let-large-in-sequence"))) {
@@ -119,12 +119,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("labels-loop"))) {
         int64_t expected = 10;
-        TEST_EQ("(labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)])");
+        TEST_EQ("(labels (go-to loop 0) [loop [x] (if (prim.i64.< x 10) (go-to loop (prim.i64.+ x 1)) x)])");
     }
 
     if (test_start(log, mv_string("labels-bool-binding"))) {
         bool expected = false;
-        TEST_EQ("(labels (go-to loop :true 0) [loop [x y] (if x (go-to loop (i64.< y 10) (i64.+ y 1)) x)])");
+        TEST_EQ("(labels (go-to loop :true 0) [loop [x y] (if x (go-to loop (prim.i64.< y 10) (prim.i64.+ y 1)) x)])");
     }
 
     if (test_start(log, mv_string("labels-bool-binding"))) {
@@ -192,41 +192,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("large-dynamic-use"))) {
         int64_t expected[2] = {47, -72};
         TEST_EQ("(bind [ldvar (struct [.x 47] [.y -72])] (use ldvar))");
-    }
-
-    // -----------------------------------------------------
-    // 
-    //      Procedures, Application and all
-    // 
-    // -----------------------------------------------------
-    if (test_start(log, mv_string("proc-const"))) {
-        int64_t expected = -985;
-        TEST_EQ("((proc [(x U64)] -985) 127)");
-    }
-
-    if (test_start(log, mv_string("proc-id"))) {
-        int64_t expected = 127;
-        TEST_EQ("((proc [x] x) 127)");
-    }
-
-    if (test_start(log, mv_string("proc-add"))) {
-        int64_t expected = 5;
-        TEST_EQ("((proc [x y] (u64.+ x y)) 2 3)");
-    }
-
-    if (test_start(log, mv_string("proc-higher-order"))) {
-        int64_t expected = -128;
-        TEST_EQ("((proc [(f (Proc [I64 I64] I64)) x y] f x y) i64.+ -256 128)");
-    }
-
-    if (test_start(log, mv_string("proc-all-id"))) {
-        int64_t expected = -75;
-        TEST_EQ("((all [A] proc [(x A)] x) -75)");
-    }
-
-    if (test_start(log, mv_string("proc-nested"))) {
-        int64_t expected = 5;
-        TEST_EQ("((proc [x y] (let [add proc [a b] (i64.+ a b)] (add x y))) 2 3)");
     }
 
     // -------------------------------------------------------------------------
@@ -301,41 +266,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("cond-three-clauses"))) {
         int64_t expected = 7;
         TEST_EQ("(cond [:false 3] [:true 7] [:true 2])");
-    }
-
-    // -----------------------------------------------------
-    // 
-    //      Array
-    // 
-    // -----------------------------------------------------
-    if (test_start(log, mv_string("1d-array-literal"))) {
-        int64_t expected[] = {1, 2, 3, 4};
-        TEST_EQ("(array {4} [1 2 3 4])");
-    }
-
-    if (test_start(log, mv_string("1d-array-literal-inferred-size"))) {
-        int64_t expected[] = {2, 4, 6, 8};
-        TEST_EQ("(array [2 4 6 8])");
-    }
-
-    if (test_start(log, mv_string("2d-array-literal"))) {
-        int64_t expected[] = {1, 2, 3, 4, 5, 6, 7, 8};
-        TEST_EQ("(array {2 4} [[1 2 3 4] [5 6 7 8]])");
-    }
-
-    if (test_start(log, mv_string("2d-array-literal-inferred-size"))) {
-        int64_t expected[] = {2, 4, 6, 8, 10, 12, 14, 16};
-        TEST_EQ("(array [[2 4 6 8] [10 12 14 16]])");
-    }
-
-    if (test_start(log, mv_string("elt-of-array"))) {
-        int64_t expected = 9;
-        TEST_EQ("(aelt 2 (array [3 7 9 12]))");
-    }
-
-    if (test_start(log, mv_string("elt-of-array"))) {
-        int64_t expected = 3;
-        TEST_EQ("(aelt [1 0] (array [[2 4 6 8] [3 7 9 12]]))");
     }
 
     // -----------------------------------------------------
@@ -506,10 +436,10 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("match-simple"))) {
         int32_t expected = 886;
-        TEST_EQ("(match (SE:simple 1086 -200) [[:simple x y] (i32.+ x y)])");
+        TEST_EQ("(match (SE:simple 1086 -200) [[:simple x y] (prim.i32.+ x y)])");
     }
 
-    RUN("(def add proc [val] match val [[:simple x y] (i32.+ x y)])");
+    RUN("(def add proc [val] match val [[:simple x y] (prim.i32.+ x y)])");
     if (test_start(log, mv_string("match-proc-simple"))) {
         int32_t expected = 886;
         TEST_EQ("(add (SE:simple 1086 -200))");
@@ -518,7 +448,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("match-struct-inner"))) {
         int32_t expected = 900;
         TEST_EQ("(match (:some (struct [.x (is I32 1100)] [.y (is I32 -200)]))\n"
-                 "  [[:some pr] (i32.+ pr.x pr.y)])");
+                 "  [[:some pr] (prim.i32.+ pr.x pr.y)])");
     }
 
     typedef struct {
@@ -588,7 +518,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [_ 127])");
     }
 
-
     if (test_start(log, mv_string("enum-match-smaller-tag"))) {
         int32_t expected = 12389;
         RUN("(def SmallTag Enum 32 [:left U32] [:right U32])");
@@ -597,6 +526,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [[:right e] e])");
     }
 
+    // If we instantiate a Family (like Either or Result) with Unit, then we
+    // need to know that the match can handle 0-size values correctly
+    RUN("(def if-make-maybe proc [b] if b :none (:some 64))");
+    if (test_start(log, mv_string("if-match-proc-some"))) {
+        int32_t expected = 9723;
+        RUN("(def SmallTag Enum [:left Unit] [:right U32])");
+        TEST_EQ("(match (SmallTag:left :unit)\n"
+                "  [[:left l] 9723]"
+                "  [[:right e] e])");
+    }
 
     // -----------------------------------------------------
     // 
@@ -637,102 +576,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("test-offset-point"))) {
         uint64_t expected = 8;
         TEST_EQ("(offset-of y (Struct [.x I64] [.y I64]))");
-    }
-
-    // -----------------------------------------------------
-    ///
-    //  Instances
-    // 
-    // -----------------------------------------------------
-
-    if (test_start(log, mv_string("instance-const"))) {
-        int64_t expected = 77;
-        RUN("(def Inhabited Trait Inhabited [A] [.value A])");
-        // TODO (BUG)
-        // swapping the order of below statements gives an 'ambiguous instance' error?
-        RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
-        RUN("(def i64-inhabited instance (Inhabited I64) [.value 77])");
-
-        TEST_EQ("(get-value {I64} 5)");
-    }
-
-    if (test_start(log, mv_string("instance-multi-val"))) {
-        int64_t expected = -77;
-        RUN("(def MultiInhabited Trait MultiInhabited [A] [.val-1 A] [.val-2 A])");
-        // TODO (BUG)
-        // swapping the order of below statements gives an 'ambiguous instance' error?
-        RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
-        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-1 237] [.val-2 -77])");
-
-        TEST_EQ("(get-second-value {I64} 5)");
-    }
-
-    if (test_start(log, mv_string("instance-out-of-order"))) {
-        int64_t expected = -77;
-        RUN("(def MultiInhabited Trait MultiInhabited [A] [.val-1 A] [.val-2 A])");
-        // TODO (BUG)
-        // swapping the order of below statements gives an 'ambiguous instance' error?
-        RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
-        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-2 -77] [.val-1 237])");
-
-        TEST_EQ("(get-second-value {I64} 5)");
-    }
-
-    if (test_start(log, mv_string("instance-const-single"))) {
-        uint64_t expected = 43;
-        RUN("(def MultiConstInhabited Trait MultiConstInhabited [A] [.val-1 A] [.val-2 U64])");
-        RUN("(def get-snd-const-value all [A] proc {(in (MultiConstInhabited A))} [(x A)] in.val-2)");
-        RUN("(def i64-multi-const-inhabited instance (MultiConstInhabited I64) [.val-1 77] [.val-2 43])");
-
-        TEST_EQ("(get-snd-const-value {I64} 5)");
-    }
-
-    // TODO: enable me!
-    if (test_start(log, mv_string("instance-const-unaligned"))) {
-        int64_t expected = -98;
-        RUN("(def Inhabited Trait Inhabited [A] [.value A])");
-
-        RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
-        RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])");
-        TEST_EQ("(get-value {I8} 5)");
-    }
-
-    if (test_start(log, mv_string("instance-dependent"))) {
-        RUN("(def Addable Trait Addable [A] [.add Proc [A A] A])");
-        RUN("(def ID Distinct ID Family [A] A)");
-        RUN("(def add-i64 instance (Addable I64)"
-            "  [.add i64.+])");
-        RUN("(def add-id instance [A] {(inner (Addable A))} (Addable (ID A))"
-            "  [.add proc [x y] "
-            "    (into (ID A) (inner.add"
-            "      (out-of (ID A) x) "
-            "      (out-of (ID A) y)))])");
-        RUN("(def poly-add all [A] proc {(add (Addable A))} [(x A) (y A)] (add.add x y))");
-
-        int64_t expected = 72;
-        TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");
-    }
-
-    if (test_start(log, mv_string("multi-inline-proc-in-instance"))) {
-        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
-        RUN("(def eql-bool instance (Eql Bool)"
-            "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))]"
-            "  [.not-eql proc [a b] (bool.not (bool.or (bool.and a b) (bool.not (bool.or a b))))])");
-        RUN("(def poly-eq all [A] proc {(eql (Eql A))} [(x A) (y A)] (eql.eql x y))");
-
-        bool expected = false;
-        TEST_EQ("(poly-eq :false :true)");
-    }
-
-    if (test_start(log, mv_string("instance-inline-proc-out-of-order"))) {
-        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
-        RUN("(def eql-bool instance (Eql Bool)"
-            "  [.not-eql proc [a b] (bool.not (bool.or (bool.and a b) (bool.not (bool.or a b))))]"
-            "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))])");
-        RUN("(def poly-eq all [A] proc {(eql (Eql A))} [(x A) (y A)] (eql.eql x y))");
-
-        bool expected = false;
-        TEST_EQ("(poly-eq :false :true)");
     }
 
     // -----------------------------------------------------
@@ -799,6 +642,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // -----------------------------------------------------
     // 
     //      Core functions (notably, load/store)
+    //        TODO: move to prim!
     // 
     // -----------------------------------------------------
     
@@ -813,7 +657,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         uint64_t expected = 8;
-        TEST_EQ("(let [addr alloc (size-of I64)] (load {I64} addr))");
+        TEST_EQ("(let [addr alloc (size-of I64)] (prim.address.load {I64} addr))");
     }
 
     if (test_start(log, mv_string("test-load-i8"))) {
@@ -824,7 +668,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         int8_t expected = -5;
-        TEST_EQ("(let [addr alloc (size-of I8)] (load {I8} addr))");
+        TEST_EQ("(let [addr alloc (size-of I8)] (prim.address.load {I8} addr))");
     }
 
     if (test_start(log, mv_string("test-load-struct"))) {
@@ -835,7 +679,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         set_std_current_allocator(psta);
         IPr expected = {.x = 25, .y = -5};
         *start = expected;
-        TEST_EQ("(let [addr alloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
+        TEST_EQ("(let [addr alloc 16] (prim.address.load {(Struct [.x I64] [.y I64])} addr))");
     }
 
     if (test_start(log, mv_string("test-store-i8"))) {
@@ -845,8 +689,8 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int8_t expected = -5;
 
         set_std_current_allocator(psta);
-        RUN("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
-        TEST_MEM("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
+        RUN("(let [addr alloc (size-of I8)] (prim.address.store {I8} addr -5))");
+        TEST_MEM("(let [addr alloc (size-of I8)] (prim.address.store {I8} addr -5))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -856,7 +700,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 197231987;
 
         set_std_current_allocator(psta);
-        TEST_MEM("(let [addr alloc (size-of I64)] (store {I64} addr 197231987))");
+        TEST_MEM("(let [addr alloc (size-of I64)] (prim.address.store {I64} addr 197231987))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -867,7 +711,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         IPr expected = {.x = -123, .y = 9713};
 
         set_std_current_allocator(psta);
-        TEST_MEM("(let [addr alloc 16] (store addr (struct [.x -123] [.y 9713])))");
+        TEST_MEM("(let [addr alloc 16] (prim.address.store addr (struct [.x -123] [.y 9713])))");
     }
 
 
@@ -891,7 +735,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (prim.address.store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-trivial"))) {
@@ -903,7 +747,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (prim.address.store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-load/store"))) {
@@ -914,8 +758,8 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
-        RUN("(def sl seq [let! dest alloc 8] [let! src alloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
-        TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");
+        RUN("(def sl seq [let! dest alloc 8] [let! src alloc 8] (prim.address.store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
+        TEST_MEM("(unseal [x sl] [A] (prim.address.store x.dest (prim.address.load {A} x.src)))");
     }
 
     set_std_current_allocator(old);

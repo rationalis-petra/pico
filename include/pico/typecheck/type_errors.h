@@ -7,7 +7,7 @@
 
 // ---------------------------------------------------------------------- 
 //
-//                              Typechecking  
+//                              Typecheck/ing  
 //
 // ----------------------------------------------------------------------
 
@@ -46,6 +46,9 @@ _Noreturn void type_error_invalid_import(ImportClause clause, Name bad, bool exi
 _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef proc, TypeCheckContext ctx);
 _Noreturn void type_error_proc_incorrect_num_implicits(SynRef proc, PiType* type, TypeCheckContext ctx);
 _Noreturn void type_error_proc_incorrect_num_args(SynRef proc, PiType* type, TypeCheckContext ctx);
+
+// All
+_Noreturn void type_error_all_incorrect_num_vars(SynRef all, PiType* type, TypeCheckContext ctx);
 
 // Application and All Application
 typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
@@ -96,19 +99,11 @@ _Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstS
 
 // Type Formers
 _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext ctx);
-
-
-// ---------------------------------------------------------------------- 
-//
-//                              Unifictaion  
-//
-// ----------------------------------------------------------------------
-
-// Enum
-UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs, UnifyContext ctx);
-
-// Named
-UnifyResult unify_error_name_has_args_match(PiType* lhs, PiType* rhs, Allocator* a);
+_Noreturn void type_error_kind_must_have_args(SynRef kind, TypeCheckContext ctx);
+_Noreturn void type_error_named_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_distinct_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_opaque_must_have_type(SynRef named, TypeCheckContext ctx);
+_Noreturn void type_error_trait_param_not_type(SynRef trait, size_t idx, TypeCheckContext ctx);
 
 #endif
 

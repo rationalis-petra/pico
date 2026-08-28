@@ -37,29 +37,49 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    const char* num_trait = 
-        "(def Num Trait Num [A]"
+    const char* ring_trait = 
+        "(def Ring Trait Ring [A]"
         "  [.+ Proc [A A] A]"
         "  [.- Proc [A A] A]"
         "  [.* Proc [A A] A]"
-        "  [./ Proc [A A] A]"
         "  [.zero A]"
         "  [.one A])\n";
+    compile_toplevel(ring_trait, module, target, &point, &pi_point, region);
+
+    const char* num_trait = 
+        "(def Num Trait Num [A]"
+        "  {.ring Ring A}"
+        "  [./ Proc [A A] A])";
     compile_toplevel(num_trait, module, target, &point, &pi_point, region);
 
+    const char* real_trait = 
+        "(def Real Trait Real [A]"
+        "  {.num Num A}"
+        "  [.sin Proc [A] A]"
+        "  [.cos Proc [A] A])";
+    compile_toplevel(real_trait, module, target, &point, &pi_point, region);
+
     const char* add_fn =
-        "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)";
+        "(def + all [A] proc {(n (Ring A))} [(x A) (y A)] n.+ x y)";
     compile_toplevel(add_fn, module, target, &point, &pi_point, region);
 
     const char* sub_fn = 
-        "(def - all [A] proc {(n (Num A))} [(x A) (y A)] n.- x y)";
+        "(def - all [A] proc {(n (Ring A))} [(x A) (y A)] n.- x y)";
     compile_toplevel(sub_fn, module, target, &point, &pi_point, region);
 
     const char* mul_fn = 
-        "(def * all [A] proc {(n (Num A))} [(x A) (y A)] n.* x y)";
+        "(def * all [A] proc {(n (Ring A))} [(x A) (y A)] n.* x y)";
     compile_toplevel(mul_fn, module, target, &point, &pi_point, region);
 
     const char* div_fn = 
         "(def / all [A] proc {(n (Num A))} [(x A) (y A)] n./ x y)";
     compile_toplevel(div_fn, module, target, &point, &pi_point, region);
+
+    const char* sin_fn = 
+        "(def sin all [A] proc {(n (Real A))} [(x A)] n.sin x)";
+    compile_toplevel(sin_fn, module, target, &point, &pi_point, region);
+
+    const char* cos_fn = 
+        "(def cos all [A] proc {(n (Real A))} [(x A)] n.cos x)";
+    compile_toplevel(cos_fn, module, target, &point, &pi_point, region);
 }

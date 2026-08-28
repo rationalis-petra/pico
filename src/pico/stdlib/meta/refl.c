@@ -45,7 +45,7 @@ Module* set_std_current_module(Module* md) {
 
 // C implementation (called from pico!)
 typedef struct {
-    uint64_t is_none;
+    uint64_t is_some;
     Module* module;
 } MaybeModule;
 
@@ -69,7 +69,7 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     OStream* current_ostream = get_std_ostream();
     Package* current_package = get_current_package();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
-    Module* parent = module.is_none ? NULL : module.module;
+    Module* parent = module.is_some ? module.module : NULL;
 
     RegionAllocator* ra = make_region_allocator(16384, true, &a);
     load_module_from_istream(sfile, os, filename, current_package, parent, pia, ra);
@@ -103,9 +103,9 @@ Result run_script_c_fun(String filename, MaybeModule mmodule) {
         .type = Err, .error_message = mv_string("failed to open file!"),
       };
     }
-    Module* module = mmodule.is_none
-        ? get_std_current_module()
-        : mmodule.module;
+    Module* module = mmodule.is_some
+        ? mmodule.module
+        : get_std_current_module();
     OStream* current_ostream = get_std_ostream();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
 
@@ -174,8 +174,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // Types 
     // ------------------------------------------------------------------------
     type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
+        .sort = TType,
     };
 
     typep = mk_opaque_type(&pia, "Module", module, mk_prim_type(&pia, Address));
@@ -207,7 +206,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     Segments prepped;    // load-module : Proc [String] Unit
     typep = mk_proc_type(&pia, 2,
                          mk_string_type(&pia),
-                         mk_app_type(&pia, get_maybe_type(), module_type),
+                         mk_type_app(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_load_module_fun(typep, ass, &pia, &ra, &point);
     name = string_to_name(mv_string("load-module"));
@@ -219,7 +218,7 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // run-script : Proc [String] Result
     typep = mk_proc_type(&pia, 2,
                          mk_string_type(&pia),
-                         mk_app_type(&pia, get_maybe_type(), module_type),
+                         mk_type_app(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_run_script_fun(typep, ass, &pia, &ra, &point);
     name = string_to_name(mv_string("run-script"));

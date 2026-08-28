@@ -7,13 +7,13 @@
 //   Expression/Value Formers
 // ------------------------------------------------------------
 
-_Noreturn void array_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx) {
+_Noreturn void tile_incorrect_numterms(RawTree raw, size_t expected, AbstractionICtx ctx) {
     if (raw.branch.nodes.len < expected) {
         PtrArray nodes = mk_ptr_array(4, ctx.gpa);
-        push_ptr(mv_cstr_doc("Not enough terms provided to 'array' term former. Correct usage is either", ctx.gpa), &nodes);
-        push_ptr(mv_cstr_doc("(array {n m ...} [a b c ...]) or (array [a b c ...])", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("Not enough terms provided to 'tile' term former. Correct usage is either", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("(tile {n m ...} [a b c ...]) or (tile [a b c ...])", ctx.gpa), &nodes);
         push_ptr(mv_cstr_doc("where n, m, ... represent the array dimensions, and a, b, c, ... are either values", ctx.gpa), &nodes);
-        push_ptr(mv_cstr_doc("in the case of a one-dimensional array, or subarrays in the case of a multidimensional array.", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("in the case of a one-dimensional tile, or subtiles in the case of a multidimensional tile.", ctx.gpa), &nodes);
         PicoError err = {
             .range = raw.range,
             .message = mv_sep_doc(nodes, ctx.gpa),
@@ -27,10 +27,10 @@ _Noreturn void array_incorrect_numterms(RawTree raw, size_t expected, Abstractio
             .end = raw.branch.nodes.data[raw.branch.nodes.len - 1].range.end,
         };
         PtrArray nodes = mk_ptr_array(4, ctx.gpa);
-        push_ptr(mv_cstr_doc("Too many  terms provided to 'array' term former. Correct usage is either", ctx.gpa), &nodes);
-        push_ptr(mv_cstr_doc("(array {n m ...} [a b c ...]) or (array [a b c ...])", ctx.gpa), &nodes);
-        push_ptr(mv_cstr_doc("where n, m, ... represent the array dimensions, and a, b, c, ... are either values", ctx.gpa), &nodes);
-        push_ptr(mv_cstr_doc("in the case of a one-dimensional array, or subarrays in the case of a multidimensional array.", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("Too many terms provided to 'tile' term former. Correct usage is either", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("(tile {n m ...} [a b c ...]) or (tile [a b c ...])", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("where n, m, ... represent the tile dimensions, and a, b, c, ... are either values", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("in the case of a one-dimensional tile, or subtiles in the case of a multidimensional tile.", ctx.gpa), &nodes);
         PicoError err = {
             .range = extra_values,
             .message = mv_sep_doc(nodes, ctx.gpa),
@@ -39,10 +39,10 @@ _Noreturn void array_incorrect_numterms(RawTree raw, size_t expected, Abstractio
     }
 }
 
-_Noreturn void array_incorrect_dimtype(RawTree raw, AbstractionICtx ctx) {
+_Noreturn void tile_incorrect_dimtype(RawTree raw, AbstractionICtx ctx) {
     PtrArray nodes = mk_ptr_array(2, ctx.gpa);
-    push_ptr(mv_cstr_doc("When providing array dimensions, all values shold be numeric constants, for example:", ctx.gpa), &nodes);
-    push_ptr(mv_cstr_doc("(array {2 3} [[1 2 3] [4 5 6]])", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("When providing tile dimensions, all values shold be numeric constants, for example:", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("(tile {2 3} [[1 2 3] [4 5 6]])", ctx.gpa), &nodes);
     PicoError err = {
         .range = raw.range,
         .message = mv_sep_doc(nodes, ctx.gpa),
@@ -50,7 +50,7 @@ _Noreturn void array_incorrect_dimtype(RawTree raw, AbstractionICtx ctx) {
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void array_incorrect_format(RawTree raw, AbstractionICtx ctx) {
+_Noreturn void tile_incorrect_format(RawTree raw, AbstractionICtx ctx) {
     PtrArray nodes = mk_ptr_array(3, ctx.gpa);
     push_ptr(mv_cstr_doc("When providing arrays, both arrays and subarrays should be lists of values enclosed with", ctx.gpa), &nodes);
     push_ptr(mv_cstr_doc("square brackets. An array or subarray was expected, but the value here does not have the", ctx.gpa), &nodes);
@@ -62,7 +62,7 @@ _Noreturn void array_incorrect_format(RawTree raw, AbstractionICtx ctx) {
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void array_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx) {
+_Noreturn void tile_incorrect_size(RawTree raw, uint64_t expected, AbstractionICtx ctx) {
     PtrArray nodes = mk_ptr_array(4, ctx.gpa);
     push_ptr(mv_cstr_doc("The expected length for this array or subarray is", ctx.gpa), &nodes);
     push_ptr(pretty_u64(expected, ctx.gpa), &nodes);
@@ -75,7 +75,7 @@ _Noreturn void array_incorrect_size(RawTree raw, uint64_t expected, AbstractionI
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void array_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+_Noreturn void tile_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
     Document* message;
     if (raw.branch.nodes.len > 3) {
         message = mv_cstr_doc("aelt type has received too many terms - expect to receive only an index and an array.", ctx.gpa);
@@ -84,6 +84,64 @@ _Noreturn void array_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
     } else {
         message = mv_cstr_doc("aelt is missing both an index and an array.", ctx.gpa);
     }
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void tile_with_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+    Document* message;
+    if (raw.branch.nodes.len < 4) {
+        message = mv_cstr_doc("with loops require at leas 3 terms: the index, shape and body.", ctx.gpa);
+    } else {
+        message = mv_cstr_doc("This with loop is missing a body after the fold: expected (with index shape {:fold fn elt} body)", ctx.gpa);
+    }
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void tile_with_invalid_indexlist(RawTree raw, AbstractionICtx ctx) {
+    Document* message = mv_cstr_doc("The index in a with loop is expected to be a list of names to bind, e.g. (with [i j] [4 4] (* i j))", ctx.gpa);
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void tile_with_invalid_shape(RawTree raw, AbstractionICtx ctx) {
+    Document* message = mv_cstr_doc("The shape in a with loop is expected to be a list of positive number literals, e.g. (with [i j] [4 4] (* i j))", ctx.gpa);
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void tile_with_shape_index_mismatch(RawTree raw, AbstractionICtx ctx) {
+  Document *message =
+      mv_cstr_doc("The index and shape should have the same number of terms, "
+                  "so (with [i j] [2 10] ...) is valid,\n"
+                  " but (with [i j] [2 10 11] ...) or (with [i j] [2] ...) are not.", ctx.gpa);
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void tile_with_fold_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+    Document* message = mv_cstr_doc("The fold in a with-loop expects precisely 2 argumets: a function and a neutral element, e.g. {fold + 0.0}", ctx.gpa);
     
     PicoError err = {
         .range = raw.range,
@@ -140,14 +198,38 @@ _Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, Abstracti
 
 // Array
 // -----
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, bool has_implicit, AbstractionICtx ctx) {
     Document* message;
+    if (raw.branch.nodes.len == 2) {
+        message = mv_cstr_doc("Proc type has an argument list, but is missing a return type.", ctx.gpa);
+    } else if (raw.branch.nodes.len == 2 && has_implicit) {
+        message = mv_cstr_doc("Proc type has an implicit argument list, but is missing an argument list and return type.", ctx.gpa);
+    } else {
+        message = mv_cstr_doc("Proc type is missing a return type.", ctx.gpa);
+    }
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void proc_tyformer_bad_arglist(RawTree raw, bool is_implicit, AbstractionICtx ctx) {
+    Document* message;
+    if (is_implicit) {
+        PtrArray nodes = mk_ptr_array(4, ctx.gpa);
+        push_ptr(mv_cstr_doc("Proc type has a malformed argument list - expecting [ArgTy1 ArgTy2 ...].", ctx.gpa), &nodes);
+        push_ptr(mv_cstr_doc("for regular arguments, or {ImplTy1 ImplTy2 ...} for implicit arugments. ", ctx.gpa), &nodes);
+        message = mv_sep_doc(nodes, ctx.gpa);
+    } else {
+        message = mv_cstr_doc("Proc type has a malformed argument list - expecting [ArgTy1 ArgTy2 ...].", ctx.gpa);
+    }
     if (raw.branch.nodes.len > 3) {
         message = mv_cstr_doc("Proc type has received too many terms - expect to receive only an argument list and return type.", ctx.gpa);
     } else if (raw.branch.nodes.len == 2) {
         message = mv_cstr_doc("Proc type missing return argument.", ctx.gpa);
     } else {
-        message = mv_cstr_doc("Proc type missing both argument list and return argument.", ctx.gpa);
     }
     
     PicoError err = {
@@ -241,6 +323,17 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
     PtrArray nodes = mk_ptr_array(2, ctx.gpa);
     push_ptr(mv_cstr_doc("The 'Trait' type form (Trait <name> [<Type Param>] <field-descriptor>*).", ctx.gpa), &nodes);
     push_ptr(mv_cstr_doc("However, the parameter list provided is invaild.", ctx.gpa), &nodes);
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_hsep_doc(nodes, ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void kind_tyformer_bad_arglist(RawTree raw, AbstractionICtx ctx) {
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_cstr_doc("The 'Kind' type former (Kind [Type Type ...] Type).", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("expects the parameter list to be a list enclosed with '[' and ']' .", ctx.gpa), &nodes);
     PicoError err = {
         .range = raw.range,
         .message = mv_hsep_doc(nodes, ctx.gpa),

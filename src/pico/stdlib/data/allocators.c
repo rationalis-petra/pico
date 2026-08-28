@@ -140,7 +140,7 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
     };
 
     typep = mk_opaque_type(pia, "Arena", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Arena"));
     add_def(module, name, type, &typep, null_segments, NULL);
     e = get_def_internal(name, module);

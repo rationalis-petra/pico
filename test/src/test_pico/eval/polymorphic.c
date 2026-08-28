@@ -1,4 +1,4 @@
-#include "platform/memory/static.h"
+#include "data/option.h"
 
 #include "pico/stdlib/platform/submodules.h"
 
@@ -97,6 +97,39 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     // -------------------------------------------------------------------------
     //
+    //    Structures
+    //
+    // -------------------------------------------------------------------------
+    if (test_start(log, mv_string("poly-struct-pair"))) {
+        RUN("(def Pair Named Pair Family [A B] Struct [.fst A] [.snd B])");
+        typedef struct {int64_t fst; int64_t snd;} Pair;
+
+        Pair expected = {.fst=1329, .snd=198};
+        TEST_EQ("((all [A B] proc [(x A) (y B)] (struct (Pair A B) [.fst x] [.snd y])) 1329 198)");
+    }
+
+    // -------------------------------------------------------------------------
+    //
+    //    Enumerations
+    //
+    // -------------------------------------------------------------------------
+    if (test_start(log, mv_string("poly-enum-val"))) {
+        RUN("(def Maybe Named Maybe Family [A] Enum :none [:some A])");
+
+        I64Option expected = {.type=Some, .val=987};
+        TEST_EQ("((all [A] proc [(v A)] ((Maybe A):some v)) 987)");
+    }
+
+    if (test_start(log, mv_string("poly-enum-constructor"))) {
+        RUN("(def Maybe Named Maybe Family [A] Enum :none [:some A])");
+        typedef struct {int64_t is_some; int64_t val;} Maybe;
+
+        Maybe expected = {.is_some=0, .val=0};
+        TEST_EQ("((all [A] proc [(v A)] (Maybe A):none) 987)");
+    }
+
+    // -------------------------------------------------------------------------
+    //
     //     Polymorphism in Traits/Instances
     //
     // -------------------------------------------------------------------------
@@ -104,26 +137,26 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("poly-trait"))) {
         RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
         RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
-        RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
+        RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Tile [2] A))\n"
             "  [.eql proc [l r]\n"
-            "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
-            "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
+            "      (bool.and (eq.eql (telt 0 l) (telt 0 r))\n"
+            "           (eq.eql (telt 1 l) (telt 1 r)))])\n");
         RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
         bool expected = true;
-        TEST_EQ("(eql (array [1 2]) (array [1 2]))");
+        TEST_EQ("(eql (tile [1 2]) (tile [1 2]))");
     }
 
     if (test_start(log, mv_string("poly-trait-multi-inline-proc"))) {
         RUN("(def Eql Trait Eql [A] [.= Proc [A A] Bool] [.!= Proc [A A] Bool])\n");
         RUN("(def eql-i64 instance (Eql I64) [.= proc [l r] (i64.= l r)] [.!= proc [l r] (i64.!= l r)])\n");
-        RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [1] A))"
-            "  [.= proc [l r] (eq.= (aelt 0 l) (aelt 0 r))]"
-            "  [.!= proc [l r] (eq.!= (aelt 0 l) (aelt 0 r))])");
+        RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Tile [1] A))"
+            "  [.= proc [l r] (eq.= (telt 0 l) (telt 0 r))]"
+            "  [.!= proc [l r] (eq.!= (telt 0 l) (telt 0 r))])");
         RUN("(def eql all [A] proc {(e Eql A)} [l r] (e.= l r))");
         RUN("(def not-eql all [A] proc {(e Eql A)} [l r] (e.!= l r))");
 
         bool expected = false;
-        TEST_EQ("(not-eql (array [#q]) (array [#q]))");
+        TEST_EQ("(not-eql (tile [#q]) (tile [#q]))");
     }
 
     // -------------------------------------------------------------------------
@@ -286,49 +319,74 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] nas.z) {Unit})");
     }
 
+    if (test_start(log, mv_string("struct-poly-project"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        int64_t expected = 7;
+        TEST_EQ("((all [A] proc [(x Con A)] x.v) (struct (Con I64) [.v 7]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-project-small"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        bool expected = true;
+        TEST_EQ("((all [A] proc [(x Con A)] x.v) (struct (Con Bool) [.v :true]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-with-call"))) {
+        RUN("(def Con Family [A] Struct [.v A])");
+        bool expected = true;
+        RUN("(def id all [A] proc [(x A)] x)");
+        TEST_EQ("((all [A] proc [(x Con A)] (id x.v)) (struct (Con Bool) [.v :true]))");
+    }
+
+    if (test_start(log, mv_string("struct-poly-with-mono-access"))) {
+        RUN("(def Extra Family [A] Struct [.v A] [.y I64])");
+        int64_t expected = 3;
+        TEST_EQ("((all [A] proc [(x Extra A)] x.y) (struct (Extra Bool) [.v :true] [.y 3]))");
+    }
+
     // -----------------------------------------------------
     // 
-    //      Array
+    //      Tile
     // 
     // -----------------------------------------------------
 
-    if (test_start(log, mv_string("array-polymorphic-constructor"))) {
+    if (test_start(log, mv_string("tile-polymorphic-constructor"))) {
         int64_t expected[4] = {1, 2, 3, 4};
-        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) 1 2 3 4)");
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] tile {4} [a b c d]) 1 2 3 4)");
     }
 
-    if (test_start(log, mv_string("array-polymorphic-constructor-align!=stack"))) {
+    if (test_start(log, mv_string("tile-polymorphic-constructor-align!=stack"))) {
         int32_t expected[4] = {1, 2, 3, 4};
-        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {I32} 1 2 3 4)");
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] tile {4} [a b c d]) {I32} 1 2 3 4)");
     }
 
-    if (test_start(log, mv_string("array-polymorphic-constructor-align!=size"))) {
+    if (test_start(log, mv_string("tile-polymorphic-constructor-align!=size"))) {
         typedef struct {
             uint64_t v1;
             uint32_t v2;
         } Expected;
         Expected expected[4] = {{.v1 = 1, .v2 = 3}, {.v1 = 2, .v2 = 4}, {.v1 = 5, .v2 = 7}, {.v1 = 6, .v2 = 8}};
         RUN("(def SCT Struct [.v1 U64] [.v2 U32])");
-        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {SCT}"
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] tile {4} [a b c d]) {SCT}"
                 "  (struct [.v1 1] [.v2 3]) (struct [.v1 2] [.v2 4]) (struct [.v1 5] [.v2 7]) (struct [.v1 6] [.v2 8]))");
     }
 
-    if (test_start(log, mv_string("array-polymorphic-element"))) {
-        RUN("(def my-array array [1 2 3 4])");
+    if (test_start(log, mv_string("tile-polymorphic-element"))) {
+        RUN("(def my-tile tile [1 2 3 4])");
         int64_t expected = 3;
-        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+        TEST_EQ("((all [A] proc [(a (Tile [4] A))] telt 2 a) my-tile)");
     }
 
-    if (test_start(log, mv_string("array-polymorphic-element-small"))) {
-        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
+    if (test_start(log, mv_string("tile-polymorphic-element-small"))) {
+        RUN("(def my-tile tile [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 3;
-        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+        TEST_EQ("((all [A] proc [(a (Tile [4] A))] telt 2 a) my-tile)");
     }
 
-    if (test_start(log, mv_string("array-polymorphic-multi-element-access"))) {
-        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
+    if (test_start(log, mv_string("tile-polymorphic-multi-element-access"))) {
+        RUN("(def my-tile tile [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 5;
-        TEST_EQ("((all [A] proc {(n (Num A))} [(a (Array [4] A))] (n.+ (aelt 2 a) (aelt 1 a))) my-array)");
+        TEST_EQ("((all [A] proc [(add Proc [A A] A) (a (Tile [4] A))] (add (telt 2 a) (telt 1 a))) u8.+ my-tile)");
     }
 
     // -----------------------------------------------------
@@ -446,23 +504,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    void* mem = mem_alloc(128, &ra);
-    PiAllocator old = get_std_current_allocator();
-    void* start;
-    {
-        Allocator sta = mk_static_allocator(mem, 128);
-        start = mem_alloc(8, &sta);
-    }
-
     if (test_start(log, mv_string("test-multi-poly-call"))) {
         // Test to ensure that polymorphic calls preserve the stack for a future call
-        Allocator sta = mk_static_allocator(mem, 128);
-        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = -67;
 
-        set_std_current_allocator(psta);
-        RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
-        TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+        RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (address.store {A} addr x))");
+        TEST_EQ("(seq [let! addr (dyn-alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr) (address.load {I64} addr))");
     }
 
     if (test_start(log, mv_string("poly-proc-in-proc"))) {
@@ -472,16 +519,16 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("double-poly-call"))) {
         RUN(
-        "(def svtest proc [(start U64) (end U64) (string String)] seq \n"
-        "  [let! start-byte (local start)]\n"
-        "  [let! index (local 5)]\n"
-        "  (= start (get index))"
+        "(def svtest proc [(start U64) (end U64) (string (Struct [.x I64] [.y I64]))] seq \n"
+        "  [let! start-byte (dyn-alloc (size-of U64))]\n"
+        "  (address.store start-byte start)\n"
+        "  [let! index (dyn-alloc (size-of U64))]\n"
+        "  (address.store index 5)\n"
+        "  (u64.= start (address.load index))"
         "  \n"
         "  string)");
 
-        uint64_t expected = 4;
-        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 \"test\").len)");
+        int64_t expected[2] = {3, 4};
+        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 (struct [.x 3] [.y 4])))");
     }
-
-    set_std_current_allocator(old);
 }

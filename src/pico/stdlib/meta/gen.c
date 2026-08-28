@@ -204,7 +204,7 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // Types 
     // ------------------------------------------------------------------------
     {
-        type = (PiType){.sort = TKind, .kind.nargs = 0};
+        type = (PiType){.sort = TType};
         ModuleEntry* e;
 
 
@@ -245,7 +245,7 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
         range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(&pia, "Syntax");
-        PiType* syn_array = mk_app_type(&pia, get_list_type(), syn_name_ty);
+        PiType* syn_array = mk_type_app(&pia, get_list_type(), syn_name_ty);
         delete_pi_type_p(syn_name_ty, &pia);
 
         typep = mk_named_type(&pia, "Syntax",
@@ -268,7 +268,7 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
 
         delete_pi_type_p(typep, &pia);
 
-        typep = mk_app_type(&pia, get_either_type(), copy_pi_type_p(macro_error_type, &pia), copy_pi_type_p(syntax_type, &pia));
+        typep = mk_type_app(&pia, get_either_type(), copy_pi_type_p(macro_error_type, &pia), copy_pi_type_p(syntax_type, &pia));
         name = string_to_name(mv_string("MacroResult"));
         add_def(module, name, type, &typep, null_segments, NULL);
         e = get_def_internal(name, module);
@@ -281,10 +281,7 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // Values 
     // ------------------------------------------------------------------------
 
-    type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
+    type = (PiType) {.sort = TType};
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
     Segments prepped;

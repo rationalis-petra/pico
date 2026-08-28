@@ -1,4 +1,5 @@
 #include "data/meta/array_impl.h"
+
 #include "platform/window/window.h"
 #include "platform/window/internal.h"
 

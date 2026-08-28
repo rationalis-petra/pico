@@ -1,5 +1,6 @@
 #include "pico/stdlib/core/core.h"
 #include "pico/stdlib/core/kernel.h"
+#include "pico/stdlib/core/prim/prim.h"
 #include "pico/stdlib/core/foreign.h"
 #include "pico/stdlib/core/debug.h"
 #include "pico/stdlib/core/dev.h"
@@ -24,7 +25,9 @@ void add_core_module(Assembler* ass, Target target, Package* base, RegionAllocat
     Module* core = mk_module(header, base, NULL);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_kernel_module(ass, core, subregion);
+    add_kernel_module(core, subregion);
+    reset_subregion(subregion);
+    add_prim_module(ass, target, core, subregion);
     reset_subregion(subregion);
     add_foreign_module(ass, core, subregion);
     reset_subregion(subregion);

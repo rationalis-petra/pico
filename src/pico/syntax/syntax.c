@@ -116,10 +116,12 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("<variant>");
     case SMatch:
         return mv_string("match");
-    case SArray:
-        return mv_string("array");
-    case SArrayElt:
-        return mv_string("array-elt");
+    case STile:
+        return mv_string("tile");
+    case STileElt:
+        return mv_string("tile-elt");
+    case SWithLoop:
+        return mv_string("with");
     case SStructure:
         return mv_string("struct");
     case SProjector:
@@ -182,8 +184,8 @@ String syntax_type_to_string(Syntax_t type) {
         // Types & Type formers
     case SProcType:
         return mv_string("Proc");
-    case SArrayType:
-        return mv_string("Array");
+    case STileType:
+        return mv_string("Tile");
     case SStructType:
         return mv_string("Struct");
     case SEnumType:
@@ -206,6 +208,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("Sealed");
     case STypeFamily:
         return mv_string("Family");
+    case SKind:
+        return mv_string("Kind");
     case SLiftCType:
         return mv_string("Lift");
 
@@ -350,8 +354,16 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         PtrArray arg_nodes = mk_ptr_array(syntax.all.args.len, a);
         push_ptr(mv_style_doc(former_style, mv_str_doc((mk_string("all", a)), a), a), &head_nodes);
         for (size_t i = 0; i < syntax.all.args.len; i++) {
-            Document* arg = mv_style_doc(var_style, mk_str_doc(symbol_to_string(syntax.all.args.data[i], a), a), a);
-            push_ptr(arg, &arg_nodes);
+            SymPtrCell arg = syntax.all.args.data[i];
+            if (arg.val) {
+                PtrArray anodes = mk_ptr_array(2, a);
+                push_ptr(pretty_syntax_internal(*(SynRef*)arg.val, tape, ctx, a), &anodes);
+                push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(arg.key, a), a), a), &anodes);
+                push_ptr(mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(anodes, a), a), a), &arg_nodes);
+            } else {
+                Document* doc = mv_style_doc(var_style, mk_str_doc(symbol_to_string(arg.key, a), a), a);
+                push_ptr(doc, &arg_nodes);
+            }
         }
 
         PtrArray nodes = mk_ptr_array(2, a);
@@ -515,7 +527,7 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SArray: {
+    case STile: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
         U64Array dims = syntax.array.dimensions;
@@ -537,30 +549,63 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
             }
             index.data[dims.len - 1] = inner_len;
 
-            // We are done, now increment the index!
-            size_t level = 1;
-            uint64_t curr_idx = index.data[dims.len - level];
-            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
-                if (level + 1 < dims.len) {
-                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
-                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
-                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
-                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
-                }
+            index.data[dims.len - 1]++;
+            for (size_t i = 0; i < dims.len; i++) {
+                size_t level = dims.len - (i + 1);
+                if (index.data[level] >= dims.data[level]) {
 
-                index.data[dims.len - level] = 0;
-                level++;
-                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+                    // If we are not at the top, then we need to push ourselves
+                    // into the array above us
+                    if (level > 0) {
+                        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*inner_nodes, a), a), array_stack.data[level - 1]);
+                        inner_nodes = array_stack.data[level - 1];
+
+                        PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+                        *arr = mk_ptr_array(dims.data[i], a);
+                        array_stack.data[level] = arr;
+                        index.data[level] = 0;
+                    }
+
+                    size_t new_level = level == 0 ? level : level - 1;
+                    index.data[new_level]++;
+                } else {
+                    break;
+                }
             }
-            index.data[dims.len - level] = curr_idx + 1;
         }
         PtrArray* array_nodes = array_stack.data[0];
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
         out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SArrayElt: {
+    case STileElt: {
         panic(mv_string("not implemented: pretty syntax for array-elt"));
+    }
+    case SWithLoop: {
+        PtrArray nodes = mk_ptr_array(5, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("with", a), a), &nodes);
+        PtrArray var_nodes = mk_ptr_array(syntax.with.vars.len, a);
+        for (size_t i = 0; i < syntax.with.vars.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(syntax.with.vars.data[i]), a), &var_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(var_nodes, a), a), &nodes);
+
+        PtrArray shape_nodes = mk_ptr_array(syntax.with.vars.len, a);
+        for (size_t i = 0; i < syntax.with.shape.len; i++) {
+            push_ptr(pretty_u64(syntax.with.shape.data[i], a), &shape_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(shape_nodes, a), a), &nodes);
+
+        if (syntax.with.fold.type == Some) {
+            PtrArray fold_nodes = mk_ptr_array(3, a);
+            push_ptr(mv_style_doc(former_style, mv_cstr_doc("fold", a), a), &fold_nodes);
+            push_ptr(pretty_syntax_internal(syntax.with.fold.fn, tape, ctx, a), &fold_nodes);
+            push_ptr(pretty_syntax_internal(syntax.with.fold.element, tape, ctx, a), &fold_nodes);
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(fold_nodes, a), a), &nodes);
+        }
+        push_ptr(pretty_syntax_internal(syntax.with.body, tape, ctx, a), &nodes);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
+        break;
     }
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax.structure.fields.len, a);
@@ -913,6 +958,12 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     case SProcType: {
         PtrArray head_nodes = mk_ptr_array(4, a) ;
         push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Proc", a), a), a), &head_nodes);
+
+        PtrArray impl_nodes = mk_ptr_array(syntax.proc_type.implicits.len, a);
+        for (size_t i = 0; i < syntax.proc_type.implicits.len ; i++)  {
+            push_ptr(pretty_syntax_internal(syntax.proc_type.args.data[i], tape, ctx, a), &impl_nodes);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &head_nodes);
         
         PtrArray arg_nodes = mk_ptr_array(syntax.proc_type.args.len, a);
         for (size_t i = 0; i < syntax.proc_type.args.len ; i++)  {
@@ -927,9 +978,9 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case SArrayType: {
+    case STileType: {
         PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Array", a), a), a), &nodes);
+        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Tile", a), a), a), &nodes);
 
         PtrArray dim_nodes = mk_ptr_array(syntax.array_type.dimensions.len, a) ;
         for (size_t i = 0; i < syntax.array_type.dimensions.len; i++)  {
@@ -1050,7 +1101,15 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
 
         PtrArray pnodes = mk_ptr_array(syntax.trait.vars.len, a) ;
         for (size_t i = 0; i < syntax.trait.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(syntax.trait.vars.data[i], a), a), &pnodes);
+            SymPtrCell cell = syntax.trait.vars.data[i];
+            Document* arg = mv_style_doc(var_style, mk_str_doc(symbol_to_string(cell.key, a), a), a);
+            if (cell.val) {
+                PtrArray tyarg_nodes = mk_ptr_array(2, a);
+                push_ptr(arg, &tyarg_nodes);
+                push_ptr(mv_nest_doc(2, pretty_syntax_internal(*(SynRef*)cell.val, tape, ctx, a), a), &tyarg_nodes);
+                arg = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(tyarg_nodes, a), a), a);
+            }
+            push_ptr(arg, &pnodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(pnodes, a), a), &nodes);
 
@@ -1068,10 +1127,18 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         PtrArray nodes = mk_ptr_array(5, a) ;
         push_ptr(mk_str_doc(mv_string("(All ["), a), &nodes);
 
-        SymbolArray arr = syntax.bind_type.bindings;
+        SymPtrAMap arr = syntax.bind_type.bindings;
         PtrArray arg_nodes = mk_ptr_array(arr.len, a);
         for (size_t i = 0; i < arr.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(arr.data[i], a), a), &arg_nodes);
+            if (arr.data[i].val) {
+                PtrArray pnodes = mk_ptr_array(2, a);
+                push_ptr(mk_str_doc(symbol_to_string(arr.data[i].key, a), a), &pnodes);
+                push_ptr(pretty_syntax_internal(*(SynRef*)arr.data[i].val, tape, ctx, a), &pnodes);
+                Document* param = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(pnodes, a), a), a);
+                push_ptr(param, &arg_nodes);
+            } else {
+                push_ptr(mk_str_doc(symbol_to_string(arr.data[i].key, a), a), &arg_nodes);
+            }
         }
         push_ptr(mv_sep_doc(arg_nodes, a), &nodes);
         push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
@@ -1106,10 +1173,33 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         PtrArray nodes = mk_ptr_array(4, a) ;
         push_ptr(mk_str_doc(mv_string("Family"), a), &nodes);
 
-        SymbolArray arr = syntax.bind_type.bindings;
+        SymPtrAMap arr = syntax.bind_type.bindings;
         PtrArray arg_nodes = mk_ptr_array(arr.len, a);
         for (size_t i = 0; i < arr.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(arr.data[i], a), a), &arg_nodes);
+            if (arr.data[i].val) {
+                PtrArray pnodes = mk_ptr_array(2, a);
+                push_ptr(mk_str_doc(symbol_to_string(arr.data[i].key, a), a), &pnodes);
+                push_ptr(pretty_syntax_internal(*(SynRef*)arr.data[i].val, tape, ctx, a), &pnodes);
+                Document* param = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(pnodes, a), a), a);
+                push_ptr(param, &arg_nodes);
+            } else {
+                push_ptr(mk_str_doc(symbol_to_string(arr.data[i].key, a), a), &arg_nodes);
+            }
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+
+        push_ptr(pretty_syntax_internal(syntax.bind_type.body, tape, ctx, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SKind: {
+        PtrArray nodes = mk_ptr_array(4, a) ;
+        push_ptr(mk_str_doc(mv_string("Kind"), a), &nodes);
+
+        SynArray params = syntax.kind_type.params;
+        PtrArray arg_nodes = mk_ptr_array(params.len, a);
+        for (size_t i = 0; i < params.len; i++) {
+            push_ptr(pretty_syntax_internal(params.data[i], tape, ctx, a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
 

@@ -12,7 +12,7 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_import_clause_array(8, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
-    add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 2, "core", "prim");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
     add_import(&imports.clauses, &ra, 2, "data", "slice");
     add_import(&imports.clauses, &ra, 2, "data", "list");
@@ -141,8 +141,8 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "    (set index  (u64.+ 1 ^index))\n"
         "    (set offset (u64.+ len ^offset)))\n"
         "  \n"
-        "  (struct String [.addr (num-to-address (u64.+ ^start-byte "
-        "                           (address-to-num string.addr)))]"
+        "  (struct String [.addr (address.num-to-address (u64.+ ^start-byte "
+        "                           (address.address-to-num string.addr)))]"
         "                 [.len (u64.- ^end-byte ^start-byte)]))";
     compile_toplevel(str_subview, module, target, &point, &pi_point, region);
 
@@ -156,9 +156,9 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  [let! new-bytes (memory.alloc ascii.len)]\n"
         "  (loop [for i from 0 below ascii.len]\n"
         "    [let! byte (list.elt i ascii)]\n"
-        "    [let! dest-address (num-to-address (u64.+ i (address-to-num new-bytes)))]\n"
-        "    (store dest-address byte))\n"
-        "  (store {U8} (num-to-address (u64.+ ascii.len (address-to-num new-bytes))) 0)\n"
+        "    [let! dest-address (address.num-to-address (u64.+ i (address.address-to-num new-bytes)))]\n"
+        "    (address.store dest-address byte))\n"
+        "  (address.store {U8} (address.num-to-address (u64.+ ascii.len (address.address-to-num new-bytes))) 0)\n"
         "  (struct String [.addr new-bytes] [.len (u64.+ ascii.len 1)]))";
     compile_toplevel(from_ascii, module, target, &point, &pi_point, region);
 
@@ -182,6 +182,6 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(str_eql, module, target, &point, &pi_point, region);
 
     const char *str_eq =
-        "(def string-= instance (Eq String) [.= string=] [.!= proc [l r] bool.not (string= l r)] )\n";
+        "(def string-eq instance (Eq String) [.= string=] [.!= proc [l r] bool.not (string= l r)] )\n";
     compile_toplevel(str_eq, module, target, &point, &pi_point, region);
 }
