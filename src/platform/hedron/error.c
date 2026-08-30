@@ -46,7 +46,7 @@ HdError convert_error_type(VkResult desc) {
         return HD_ERROR_FRAGMENTED_POOL;
     case VK_ERROR_UNKNOWN:
         return HD_ERROR_UNKNOWN;
-    case VK_ERROR_VALIDATION_FAILED:
+    case VK_ERROR_VALIDATION_FAILED_EXT:
         return HD_ERROR_VALIDATION_FAILED;
     case VK_ERROR_OUT_OF_POOL_MEMORY:
         return HD_ERROR_OUT_OF_POOL_MEMORY;
