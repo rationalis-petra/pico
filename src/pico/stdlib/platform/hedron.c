@@ -14,9 +14,30 @@
 #include "pico/stdlib/core/kernel.h"
 #include "pico/stdlib/platform/submodules.h"
 
+/**
+ * V2 exposed/shared types
+ */
+static PiType* error_code_ty;
+
 static PiType* surface_ty;
+
+static PiType* instance_ty;
+static PiType* physical_device_ty;
+static PiType* logical_device_ty;
+
+static PiType* alloc_sort_ty;
+static PiType* device_address_ty;
+
 static PiType* shader_module_ty;
 static PiType* pipeline_ty;
+
+/* Dynamic Values
+ */
+
+
+/**
+ * V1 exposed/shared types
+ */
 
 static PiType* index_format_ty;
 static PiType* input_rate_ty;
@@ -62,46 +83,88 @@ static PiType* image_memory_barrier_ty;
 static PiType* semaphore_ty;
 static PiType* fence_ty;
 
+
+// Error
+void build_view_error_string_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1, "error", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), mk_string_ctype(pia));
+    convert_c_fn(view_error_string, &fn_ctype, type, ass, a, point); 
+}
+
 // ----------------------------------------------------------------------------
 //
 //   Context: Instances, Devices, Windows
 // 
 // ----------------------------------------------------------------------------
 
+static HdPtrResult relic_create_hedron_instance() {
+    Allocator* stdalloc = get_std_allocator();
+    return create_hedron_instance(stdalloc);
+}
+
+static void build_create_hedron_instance_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
+    convert_c_fn(relic_create_hedron_instance, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_teardown_hedron_instance_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "instance", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
+    convert_c_fn(teardown_hedron_instance, &fn_ctype, type, ass, a, point); 
+}
+
+static PtrSlice relic_get_physical_devices(HdInstance* instance) {
+    PiAllocator curr = get_std_current_allocator();
+    Allocator alloc = convert_to_callocator(&curr);
+    return get_physical_devices(instance,&alloc);
+}
+
+static void build_get_physical_devices_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1, "instance", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
+    convert_c_fn(relic_get_physical_devices, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_create_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 2,
+                               "physical_device", mk_voidptr_ctype(pia),
+                               "instance", mk_voidptr_ctype(pia),
+                               mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
+    convert_c_fn(create_logical_device, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_destroy_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "logical_device", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_logical_device, &fn_ctype, type, ass, a, point); 
+}
+
 #ifdef WINDOW_SYSTEM
-void build_create_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
+static void build_create_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 2,
+                               "window", mk_voidptr_ctype(pia),
+                               "instance", mk_voidptr_ctype(pia),
+                               mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
     convert_c_fn(create_window_surface, &fn_ctype, type, ass, a, point); 
 }
 
-void build_resize_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+/*
+static void build_resize_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType extent_type = mk_struct_ctype(pia, 2, "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                         "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 2, "window", mk_voidptr_ctype(pia), "extent", extent_type, (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "window", mk_voidptr_ctype(pia),
+                                 "device", mk_voidptr_ctype(pia),
+                                 "extent", extent_type, (CType){.sort = CSVoid});
     convert_c_fn(resize_window_surface, &fn_ctype, type, ass, a, point); 
 }
+*/
 
-void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+static void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
     convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
 }
 #endif
 
-Result_t relic_init_hedron() {
-    Allocator* stdalloc = get_std_allocator();
-    return init_hedron(stdalloc) ? Err : Ok;
-}
-
-void build_init_hedron_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, mk_result_ctype(pia, (CType){.sort = CSVoid}, (CType){.sort = CSVoid}));
-    convert_c_fn(relic_init_hedron, &fn_ctype, type, ass, a, point); 
-}
-
-void build_deinit_hedron_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
-    convert_c_fn(teardown_hedron, &fn_ctype, type, ass, a, point); 
-}
-
+/*
 void build_num_swapchain_images_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia),
                                  mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
@@ -177,7 +240,7 @@ void build_buffer_set_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
      * [RSP-0x8]  | variable stack index (value/ptr)
      * [RSP]      | return address 
      */
-
+/*
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
@@ -546,6 +609,7 @@ void build_acquire_next_image_fn(PiType* type, Assembler* ass, PiAllocator* pia,
     CType fn_ctype = mk_fn_ctype(pia, 2, "surface", mk_voidptr_ctype(pia), "semaphore", mk_voidptr_ctype(pia), ret_type);
     convert_c_fn(acquire_next_image, &fn_ctype, type, ass, a, point); 
 }
+*/
 
 void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
@@ -585,6 +649,107 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
         .data = mk_u8_array(0, &ra),
     };
 
+    /*
+     * ------------------------------------------------------------
+     *
+     * The V2 API is here
+     *
+     * ------------------------------------------------------------
+     */
+
+    /**
+     * Error handling  
+     */
+    type = (PiType) {.sort = TType};
+
+    typep = mk_enum_type(pia, 31,
+                         "not-ready", 0,
+                         "timeout", 0,
+                         "event-set", 0,
+                         "event-reset", 0,
+                         "incomplete", 0,
+                         "error-out-of-host-memory", 0,
+                         "error-out-of-device-memory", 0,
+                         "error-initialization-failed", 0,
+                         "error-device-lost", 0,
+                         "error-memory-map-failed", 0,
+                         "error-layer-not-present", 0,
+                         "error-extension-not-present", 0,
+                         "error-feature-not-present", 0,
+                         "error-incompatible-driver", 0,
+                         "error-too-many-objects", 0,
+                         "error-format-not-supported", 0,
+                         "error-fragmented-pool", 0,
+                         "error-unknown", 0,
+                         "error-validation-failed", 0,
+                         "error-out-of-pool-memory", 0,
+                         "error-invalid-external-handle", 0,
+                         "error-invalid-opaque-capture-address", 0,
+                         "error-fragmentation", 0,
+                         "pipeline-compile-required", 0,
+                         "error-not-permitted", 0,
+                         "error-surface-lost", 0,
+                         "error-native-window-in-use", 0,
+                         "suboptimal", 0,
+                         "error-out-of-date", 0,
+                         "error-incompatible-display", 0,
+                         "incompatible-shader-binary", 0);
+    name = string_to_name(mv_string("ErrorCode"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    error_code_ty = e->value;
+
+    typep = mk_proc_type(pia, 1, error_code_ty, mk_string_type(pia));
+    build_view_error_string_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("view-error-string"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+
+    /** 
+     * Init + teardown
+     * ----------------
+     * Initialization and teardown of a hedron instance.
+     * 
+     * TODO: the init function should return a (Result Instance Err). API calls
+     *   are then expected to set an instance dyntamic variable. We can postpone
+     *   this because it won't affect user code much (just the implementation).
+     * 
+     */
+
+    type = (PiType) {.sort = TType};
+    typep = mk_opaque_type(pia, "Instance", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Instance"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    instance_ty = e->value;
+
+    typep = mk_proc_type(pia, 0, mk_type_app(pia, get_result_type(), instance_ty, error_code_ty));
+    build_create_hedron_instance_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-instance"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, instance_ty, mk_prim_type(pia, Unit));
+    build_teardown_hedron_instance_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-instance"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    /** 
+     * Window System Definitions.
+     * -------------------------
+     *  These allow hedron to interact with a window system, but are only present
+     *  if the 'WINDOW_SYSTEM' component is requested in the build (see default.config).
+     */
     typep = mk_opaque_type(pia, "Surface", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("Surface"));
@@ -593,6 +758,128 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     surface_ty = e->value;
 
+#ifdef WINDOW_SYSTEM
+    typep = mk_proc_type(pia, 2, get_window_ty(), instance_ty, mk_type_app(pia, get_result_type(), surface_ty, error_code_ty));
+    build_create_window_surface_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    /*
+    typep = mk_proc_type(pia, 2, surface_ty, physical_device_ty,
+                         mk_type_app(pia, get_pair_type(), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32)),
+                         mk_prim_type(pia, Unit));
+    build_resize_window_surface_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("resize-window-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    */
+
+    typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, Unit));
+    build_destroy_window_surface_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+#endif
+
+    /** 
+     * Device Management
+     * ----------------
+     * List physical devices, query their properties, select a physical
+     * device/create a logical device. 
+     * 
+     */
+
+    type = (PiType) {.sort = TType};
+    typep = mk_opaque_type(pia, "PhysicalDevice", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("PhysicalDevice"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    physical_device_ty = e->value;
+
+    type = (PiType) {.sort = TType};
+    typep = mk_opaque_type(pia, "LogicalDevice", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("LogicalDevice"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    logical_device_ty = e->value;
+
+    typep = mk_proc_type(pia, 1, instance_ty, mk_type_app(pia, get_slice_type(), physical_device_ty));
+    build_get_physical_devices_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("get-physical-devices"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, physical_device_ty, instance_ty, mk_type_app(pia, get_result_type(), logical_device_ty, error_code_ty));
+    build_create_logical_device_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-logical-device"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, logical_device_ty, mk_prim_type(pia, Unit));
+    build_destroy_logical_device_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-logical-device"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    /**
+     *  Memory Allocation: 
+     *  - Can allocate 3 types of memory
+     *    - GPU memory that requires explicit copy operations
+     *    - Mapped memory that visible for both, but optimized for CPU writes/GPU reads.
+     *      Reading from this memory is legal, but extremely slow.
+     *    - Mapped memory that visible for both, but and optimized for
+     *      bidirectional communication. Slower 1-way than mapped memory. 
+     * 
+     *  Hedron divides these into two types of allocations:
+     *  - GPU only allocation (returns a DeviceAddress)
+     *  - Shared allocation (returns an Address, can get associated Device Address)
+     */
+    type = (PiType) {.sort = TType};
+
+    typep = mk_enum_type(pia, 2, "default", 0, "writeback", 0);
+    name = string_to_name(mv_string("AllocSort"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    alloc_sort_ty = e->value;
+
+    typep = mk_opaque_type(pia, "DeviceAddress", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("DeviceAddress"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    device_address_ty = e->value;
+
+
+    // struct GpuPipeline;
+    // struct GpuTexture;
+    // struct GpuDepthStencilState;
+    // struct GpuBlendState;
+    // struct GpuQueue;
+    // struct GpuCommandBuffer;
+    // struct GpuSemaphore;
+    // - 
+
+    /**
+     * The V1 API Is here
+     */
+
+    /*
     typep = mk_opaque_type(pia,"ShaderModule", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("ShaderModule"));
@@ -951,50 +1238,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
     e = get_def_internal(name, module);
     fence_ty = e->value;
-
-#ifdef WINDOW_SYSTEM
-    typep = mk_proc_type(pia, 1, get_window_ty(), surface_ty);
-    build_create_window_surface_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("create-window-surface"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 2, surface_ty, 
-                         mk_type_app(pia, get_pair_type(), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32)),
-                         mk_prim_type(pia, Unit));
-    build_resize_window_surface_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("resize-window-surface"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, Unit));
-    build_destroy_window_surface_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("destroy-window-surface"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-#endif
-
-    typep = mk_proc_type(pia, 0, mk_type_app(pia, get_result_type(), mk_prim_type(pia, Unit), mk_prim_type(pia, Unit)));
-    build_init_hedron_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("init"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
-    build_deinit_hedron_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("de-init"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, UInt_32));
     build_num_swapchain_images_fn(typep, ass, pia, &ra, &point);
@@ -1466,6 +1709,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    */
 }
 
 #endif

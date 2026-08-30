@@ -1,12 +1,59 @@
 #ifndef __PLATFORM_HEDRON_HEDRON_H
 #define __PLATFORM_HEDRON_HEDRON_H
 
+#include "data/result.h"
 #include "data/option.h"
 #include "data/slice.h"
 #include "platform/memory/allocator.h"
 
-#include "pico/data/client/list.h"
 #include <stdbool.h>
+
+/**
+ * V2 API
+ */
+typedef enum : uint64_t {
+    HD_NOT_READY,
+    HD_TIMEOUT,
+    HD_EVENT_SET,
+    HD_EVENT_RESET,
+    HD_INCOMPLETE,
+    HD_ERROR_OUT_OF_HOST_MEMORY,
+    HD_ERROR_OUT_OF_DEVICE_MEMORY,
+    HD_ERROR_INITIALIZATION_FAILED,
+    HD_ERROR_DEVICE_LOST,
+    HD_ERROR_MEMORY_MAP_FAILED,
+    HD_ERROR_LAYER_NOT_PRESENT,
+    HD_ERROR_EXTENSION_NOT_PRESENT,
+    HD_ERROR_FEATURE_NOT_PRESENT,
+    HD_ERROR_INCOMPATIBLE_DRIVER,
+    HD_ERROR_TOO_MANY_OBJECTS,
+    HD_ERROR_FORMAT_NOT_SUPPORTED,
+    HD_ERROR_FRAGMENTED_POOL,
+    HD_ERROR_UNKNOWN,
+    HD_ERROR_VALIDATION_FAILED,
+    HD_ERROR_OUT_OF_POOL_MEMORY,
+    HD_ERROR_INVALID_EXTERNAL_HANDLE,
+    HD_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS,
+    HD_ERROR_FRAGMENTATION,
+    HD_PIPELINE_COMPILE_REQUIRED,
+    HD_ERROR_NOT_PERMITTED,
+    HD_ERROR_SURFACE_LOST,
+    HD_ERROR_NATIVE_WINDOW_IN_USE,
+    HD_SUBOPTIMAL,
+    HD_ERROR_OUT_OF_DATE,
+    HD_ERROR_INCOMPATIBLE_DISPLAY,
+    HD_INCOMPATIBLE_SHADER_BINARY,
+} HdError;
+
+String view_error_string(HdError error);
+
+typedef struct {
+    Result_t type;
+    union {
+        void* val;
+        HdError error;
+    };
+} HdPtrResult;
 
 // forward-declaration of window (platform/window/window.h)
 struct PlWindow;
@@ -14,32 +61,57 @@ struct PlWindow;
 typedef struct {
     uint32_t width;
     uint32_t height;
-} Extent;
+} HdExtent;
 
-// ----------------------------------------------------------------------------
-//
-//   Context: Instances, Devices, Windows
-// 
-// ----------------------------------------------------------------------------
+// Instances
+typedef struct HdInstance HdInstance;
+HdPtrResult create_hedron_instance(Allocator* a);
+void teardown_hedron_instance(HdInstance* instance);
 
-typedef struct HedronSurface HedronSurface;
+// Window System Interaction Surfaces
+typedef struct HdSurface HdSurface;
+HdPtrResult create_window_surface(struct PlWindow* window, HdInstance* instance);
+void destroy_window_surface(HdSurface* surface);
+
+// Physical & Logical Devices
+typedef struct HdPhysicalDevice HdPhysicalDevice;
+typedef struct HdLogicalDevice HdLogicalDevice;
+PtrSlice get_physical_devices(HdInstance* instance, Allocator* a);
+
+HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance);
+void destroy_logical_device(HdLogicalDevice* device);
+
+/*
+void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
+*/
+
+// Queues
+// ------------
+// Queue types
+// - Graphics (for drawing) (also guarantees can do transfer!)
+// - Compute (for compute shaders)
+// - Transfer (for transferring memory)
+// - Video Decode
+// - Video Encode
+
+// Memory
+// ------------
+typedef struct {
+    uint64_t val;
+} DeviceAddress;
+
+
+/**
+ * V1 API
+ */
+
+/*
+
 typedef struct HedronShaderModule HedronShaderModule;
 typedef struct HedronPipeline HedronPipeline;
 
-// Global Utility - supported, setup & teardown
-int init_hedron(Allocator* a);
-void teardown_hedron();
-
-// Window System Interaction Surfaces 
-HedronSurface* create_window_surface(struct PlWindow* window);
-void resize_window_surface(HedronSurface* surface, Extent extent);
-void destroy_window_surface(HedronSurface*);
-
-uint32_t num_swapchain_images(HedronSurface*);
-
 HedronShaderModule* create_shader_module(U8Slice code);
 void destroy_shader_module(HedronShaderModule* module);
-
 
 // ----------------------------------------------------------------------------
 //
@@ -201,14 +273,14 @@ SLICE_TYPE(AttributeDescription, AttributeDescription)
 SLICE_TYPE(PushConstantRange, PushConstantRange)
 
 typedef struct {
-    /** TODO: determine which values can become Maybes? or have an
-        empty/defalud structure? */
+    // TODO: determine which values can become Maybes? or have an
+    //    empty/defalud structure? 
     PtrSlice descriptor_set_layouts;
     BindingDescriptionSlice bdesc;
     AttributeDescriptionSlice adesc;
     PushConstantRangeSlice push_const_ranges;
     PtrSlice shaders;
-    HedronSurface* surface;
+    HdSurface* surface;
 } PipelineInfo;
 
 HedronPipeline *create_pipeline(PipelineInfo pinfo);
@@ -238,7 +310,7 @@ typedef struct {
     ImageResultType type;
     uint32_t image;
 } ImageResult;
-ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore);
+ImageResult acquire_next_image(HdSurface* surface, HedronSemaphore* semaphore);
 
 // ----------------------------------------------------------------------------
 //
@@ -305,7 +377,7 @@ void free_command_buffer(HedronCommandPool* pool, HedronCommandBuffer* buffer);
 
 // Command buffer usage
 void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairSlice wait, PtrSlice signals);
-void queue_present(HedronSurface* surface, HedronSemaphore* wait, uint32_t image_index);
+void queue_present(HdSurface* surface, HedronSemaphore* wait, uint32_t image_index);
 void queue_wait_idle();
 
 void command_begin(HedronCommandBuffer* buffer, CommandBufferUsage usage);
@@ -313,7 +385,7 @@ void command_end(HedronCommandBuffer* buffer);
 
 void reset_command_buffer(HedronCommandBuffer* buffer);
 
-void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surface, uint32_t image_index);
+void command_begin_render_pass(HedronCommandBuffer* buffer, HdSurface* surface, uint32_t image_index);
 void command_end_render_pass(HedronCommandBuffer* commands);
 
 // Synchronization: memory barriers
@@ -337,7 +409,7 @@ void command_bind_vertex_buffers(HedronCommandBuffer* commands, PtrSlice buffers
 
 void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format);
 
-void command_set_surface(HedronCommandBuffer *commands, HedronSurface *surface);
+void command_set_surface(HedronCommandBuffer *commands, HdSurface *surface);
 void command_draw(HedronCommandBuffer *commands, uint32_t vertex_count,
                   uint32_t instance_count, uint32_t first_vertex,
                   uint32_t first_instance);
@@ -348,5 +420,6 @@ void command_draw_indexed(HedronCommandBuffer *commands,
                           uint32_t first_index,
                           int32_t vertex_offset,
                           uint32_t first_instance);
+*/
 
 #endif

@@ -4,133 +4,12 @@
 
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
+#include "platform/hedron/internal.h"
 #include "platform/signals.h"
 #include "data/string.h"
+
+#include "pico/data/client/allocator.h"
  
-#ifndef WINDOW_SYSTEM
-#define NO_PLATFORM_AVAILABLE
-#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
-#define VK_USE_PLATFORM_XLIB_KHR
-#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
-#define VK_USE_PLATFORM_WAYLAND_KHR
-#elif OS_FAMILY == WINDOWS
-#define VK_USE_PLATFORM_WIN32_KHR
-#else 
-#error "unrecognized OS"
-#endif
-
-#include <vulkan/vulkan.h>
-#include "platform/window/internal.h"
-
-struct HedronSurface {
-    VkSurfaceKHR surface;
-    // presentation queue family;
-    uint32_t present_family;
-
-    // swapchain details
-    uint32_t image_count;
-    VkFormat format;
-    VkExtent2D extent;
-    VkPresentModeKHR mode;
-    VkSwapchainKHR swapchain;
-
-    uint32_t num_images;
-    VkImage* swapchain_images;
-    VkImageView* image_views;
-
-    // Render passes and framebuffers
-    // these are likely to be detached later
-    VkRenderPass renderpass;
-
-    uint32_t num_buffers;
-    VkFramebuffer* buffers;
-};
-
-typedef struct {
-    VkSurfaceCapabilitiesKHR capabilities;
-    uint32_t num_formats;
-    VkSurfaceFormatKHR* formats;
-
-    uint32_t num_present_modes;
-    VkPresentModeKHR* present_modes;
-} SwapChainSupportDetails;
-
-struct HedronShaderModule {
-    VkShaderModule module;
-};
-
-struct HedronPipeline {
-    VkPipelineLayout layout;
-    VkPipeline pipeline;
-};
-
-struct HedronDescriptorSetLayout {
-    VkDescriptorSetLayout layout;
-};
-
-struct HedronBuffer {
-    VkBuffer vk_buffer;
-    VkDeviceMemory device_memory;
-    uint64_t size;
-};
-
-struct HedronImage {
-    VkImage vk_image;
-    VkDeviceMemory image_memory;
-};
-
-struct HedronImageView {
-    VkImageView vk_image_view;
-};
-
-struct HedronSampler {
-    VkSampler vk_sampler;
-};
-
-
-struct HedronDescriptorSet {
-    VkDescriptorSet vk_set;
-};
-
-struct HedronDescriptorPool {
-    VkDescriptorPool pool;
-    HedronDescriptorSet* sets;
-    uint32_t num_sets;
-};
-
-struct HedronCommandPool {
-    VkCommandPool pool;
-    PtrArray buffers;
-};
-
-struct HedronCommandBuffer {
-    VkCommandBuffer buffer;
-};
-
-struct HedronFence {
-    VkFence fence;
-};
-
-struct HedronSemaphore {
-    VkSemaphore semaphore;
-};
-
-typedef enum {
-    QUEUE_GRAPHICS = 0x1,
-    QUEUE_PRESENT = 0x2,
-} QueueFamilyFlags;
-
-typedef struct  {
-    uint32_t available;
-    uint32_t graphics_family;
-    // uint32_t present_family; TODO: check if we want graphics/present family different? 
-} QueueFamilyIndices;
-
-static VkInstance rl_vk_instance;
-static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
-static VkDevice logical_device = VK_NULL_HANDLE;
-static Allocator* hd_alloc;
-static PiAllocator hd_pi_alloc;
 
 // -----------------------------------------------------------------------------
 //
@@ -138,6 +17,8 @@ static PiAllocator hd_pi_alloc;
 // 
 // -----------------------------------------------------------------------------
 
+
+/*
 VkDescriptorType convert_descriptor_type(DescriptorType desc) {
     VkDescriptorType vk_desc = 0;
     switch (desc) {
@@ -210,6 +91,7 @@ VkImageLayout convert_image_layout(ImageLayout layout) {
     }
     return vk_layout;
 }
+
 VkAccessFlagBits convert_access_flags(Access access) {
     VkAccessFlagBits vk_access = 0;
     switch (access) {
@@ -229,251 +111,6 @@ VkAccessFlagBits convert_access_flags(Access access) {
         break;
     } 
     return vk_access;
-}
-
-#ifndef WINDOW_SYSTEM
-const uint32_t num_required_extensions = 1;
-const char *required_extensions[] = {
-    VK_KHR_SURFACE_EXTENSION_NAME,
-};
-#else
-const uint32_t num_required_extensions = 2;
-const char *required_extensions[] = {
-    VK_KHR_SURFACE_EXTENSION_NAME,
-    // No window extension needed.
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
-    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
-    VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-#elif OS_FAMILY == WINDOWS
-    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-#else 
-#error "unrecognized OS!"
-#endif
-};
-#endif
-
-const uint32_t num_required_device_extensions = 1;
-const char *required_device_extensions[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
-};
-
-
-// Validation layers, which are used when compiling in debug mode 
-const uint32_t num_required_validation_layers = 1;
-const char* required_validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
-#ifdef DEBUG
-const bool enable_validation = true;
-#else 
-const bool enable_validation = false;
-#endif
-
-bool check_validation_layer_support(Allocator* a) {
-    bool layer_found = false;
-    uint32_t layer_count;
-    vkEnumerateInstanceLayerProperties(&layer_count, NULL);
-
-    VkLayerProperties* available_layers = mem_alloc(layer_count * sizeof(VkLayerProperties), a);
-    vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
-
-    for (size_t i = 0; i < num_required_validation_layers; i++) {
-        String layer_name = mv_string(required_validation_layers[i]);
-
-        for (size_t j = 0; j < layer_count; j++) {
-            String available_layer_name = mv_string(available_layers[j].layerName);
-            if (string_cmp(layer_name, available_layer_name) == 0) {
-                layer_found = true;
-                break;
-            }
-        }
-
-        if (!layer_found) {
-            mem_free(available_layers, a);
-            return false;
-        }
-    }
-
-    mem_free(available_layers, a);
-    return layer_found;
-}
-
-VkResult create_instance(Allocator* a) {
-    if (enable_validation && !check_validation_layer_support(a)) {
-          panic(mv_string("Expected validation layer support, but none present!"));
-    }
-
-    VkApplicationInfo app_info = (VkApplicationInfo){};
-    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info.pApplicationName = "Relic";
-    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.pEngineName = "No Engine";
-    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_0;
-
-    VkInstanceCreateInfo create_info = (VkInstanceCreateInfo){};
-    create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    create_info.pApplicationInfo = &app_info;
-
-    create_info.enabledExtensionCount = num_required_extensions;
-    create_info.ppEnabledExtensionNames = required_extensions;
-
-    if (enable_validation) {
-        create_info.enabledLayerCount = num_required_validation_layers;
-        create_info.ppEnabledLayerNames = required_validation_layers;
-    } else {
-        create_info.enabledLayerCount = 0;
-    }
-
-    // TODO (FEATURE): see 'Message Calback' for the vk validation layers in vulkan-tutorial.com
-
-    return vkCreateInstance(&create_info, NULL, &rl_vk_instance);
-}
-
-QueueFamilyIndices find_queue_families(VkPhysicalDevice device) {
-    QueueFamilyIndices indices = (QueueFamilyIndices){};
-    uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, NULL);
-
-    VkQueueFamilyProperties* queue_families = mem_alloc(queue_family_count * sizeof(VkQueueFamilyProperties), hd_alloc);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families);
-
-    for (uint32_t i = 0; i < queue_family_count; i++) {
-        VkQueueFamilyProperties queue_family = queue_families[i];
-        if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.available |= QUEUE_GRAPHICS;
-            indices.graphics_family = i;
-        }
-    }
-
-    mem_free(queue_families, hd_alloc);
-    return indices;
-}
-
-bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
-    uint32_t extension_count;
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
-
-    VkExtensionProperties* available_extensions = mem_alloc(extension_count * sizeof(VkExtensionProperties), a);
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, available_extensions);
-
-    // TODO : do we need to handle repeated extensions? perhaps replace with a set?
-    size_t supported_extension_count = 0;
-
-    for (size_t i = 0; i < num_required_device_extensions; i++) {
-        String req_name = mv_string(required_device_extensions[i]);
-        for (size_t j = 0; j < extension_count; j++) {
-            String ext_name = mv_string(available_extensions[j].extensionName);
-            if (string_cmp(ext_name, req_name) == 0) {
-                supported_extension_count++;
-                break;
-            }
-        }
-    }
-
-    mem_free(available_extensions, a);
-    return supported_extension_count == num_required_device_extensions;
-}
-
-bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
-    VkPhysicalDeviceProperties device_properties;
-    VkPhysicalDeviceFeatures device_features;
-    vkGetPhysicalDeviceProperties(device, &device_properties);
-    vkGetPhysicalDeviceFeatures(device, &device_features);
-
-    QueueFamilyIndices indices = find_queue_families(device);
-    const uint32_t required_indices = QUEUE_GRAPHICS;
-
-    const bool extensions_supported = check_device_extension_support(device, a);
-
-    // TODO: move some (or all) of these checks into the hedron API
-    return (device_features.geometryShader
-            && device_features.samplerAnisotropy 
-            && extensions_supported
-            && (indices.available & required_indices));
-}
-
-VkResult pick_physical_device(Allocator* a) {
-    uint32_t device_count = 0;
-    vkEnumeratePhysicalDevices(rl_vk_instance, &device_count, NULL);
-    if (device_count == 0) {
-        panic(mv_string("failed to find GPUs with Vulkan support"));
-    }
-
-    VkPhysicalDevice* devices = mem_alloc(device_count * sizeof(VkPhysicalDevice), a);
-    vkEnumeratePhysicalDevices(rl_vk_instance, &device_count, devices);
-
-    // TODO (FEAT): score devices & pick "best" device.
-    for (size_t i = 0; i < device_count; i++) {
-        if (is_device_suitable(devices[i], a)) {
-            physical_device = devices[i];
-            break;
-        }
-    }
-
-    if (physical_device == VK_NULL_HANDLE) {
-        panic(mv_string("failed to find a suitable GPU!"));
-    }
-
-    mem_free(devices, a);
-    return VK_SUCCESS;
-}
-
-VkResult create_logical_device(Allocator* a) {
-    QueueFamilyIndices indices = find_queue_families(physical_device);
-    VkDeviceQueueCreateInfo queue_create_info = {};
-    queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex = indices.graphics_family;
-    queue_create_info.queueCount = 1;
-
-    float queue_priority = 1.0f;
-    queue_create_info.pQueuePriorities = &queue_priority;
-
-    VkDeviceCreateInfo create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
-    create_info.pQueueCreateInfos = &queue_create_info;
-    create_info.queueCreateInfoCount = 1;
-
-    // TODO: add extensions + device features to public (relic) API
-    VkPhysicalDeviceFeatures device_features = {
-        .samplerAnisotropy = VK_TRUE,
-    };
-    create_info.pEnabledFeatures = &device_features;
-
-    // Note: technically, in modern Vulkan implementations, this will probably do nothing
-    // However, it is a good idea to do this anyway as it allows us to support validation
-    // layers on older vulkan implementations.
-    create_info.enabledExtensionCount = num_required_device_extensions;
-    create_info.ppEnabledExtensionNames = required_device_extensions;
-
-    // Device layers are generally considered legacy and should be set to 0 in
-    // modern vulkan.
-    create_info.enabledLayerCount = 0;
-
-    return vkCreateDevice(physical_device, &create_info, NULL, &logical_device);
-}
-
-int init_hedron(Allocator* a) {
-    hd_alloc = a;
-    hd_pi_alloc = convert_to_pallocator(a);
-    VkResult result = create_instance(a);
-    if (result != VK_SUCCESS) return 1;
-
-    // TODO: setup_debug_messenger();
-
-    result = pick_physical_device(a);
-    if (result != VK_SUCCESS) return 1;
-
-    result = create_logical_device(a);
-    if (result != VK_SUCCESS) return 1;
-
-    return 0;
-} 
-
-void teardown_hedron() {
-    vkDestroyDevice(logical_device, NULL);
-    vkDestroyInstance(rl_vk_instance, NULL);
 }
 
 SwapChainSupportDetails query_swapchain_support_details(VkPhysicalDevice device, VkSurfaceKHR surface, Allocator* a) {
@@ -553,20 +190,35 @@ VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t wi
     }
 }
 
-void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, uint32_t width, uint32_t height, HedronSurface* hd_surface) {
+//void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, uint32_t width, uint32_t height, HdSurface* hd_surface) {
+HdSwapchain* create_swapchain(HdSurface* surface, HdLogicalDevice* device, HdSwapchainInfo info) {
+    // TODO: return error/value
+    // TODO: do we need to confirm that the swapchain extension is supported?
+    //       possibly: check in debug mode.
+    bool swap_chain_ok = false;
+    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(device->physical_device, surface->surface, hd_alloc);
+    swap_chain_ok = (swap_chain_details.num_formats != 0) && (swap_chain_details.num_present_modes != 0);
+    if (!swap_chain_ok) {
+        free_swapchain_details(swap_chain_details, hd_alloc);
+        return NULL;
+    }
+
     VkSurfaceFormatKHR surface_format = choose_swap_surface_format(swap_chain_details.formats, swap_chain_details.num_formats);
     VkPresentModeKHR mode = choose_swap_present_mode(swap_chain_details.present_modes, swap_chain_details.num_present_modes);
     // TODO: push extent back to window!
-    VkExtent2D extent = choose_swap_extent(swap_chain_details.capabilities, width, height);
+    VkExtent2D extent = choose_swap_extent(swap_chain_details.capabilities, info.width, info.height);
 
-    uint32_t image_count = swap_chain_details.capabilities.minImageCount + 1;
+    uint32_t image_count = info.num_images;
+    if (image_count < swap_chain_details.capabilities.minImageCount) {
+        image_count = swap_chain_details.capabilities.minImageCount;
+    }
     if (swap_chain_details.capabilities.maxImageCount > 0 && image_count > swap_chain_details.capabilities.maxImageCount) {
         image_count = swap_chain_details.capabilities.maxImageCount;
     }
 
     VkSwapchainCreateInfoKHR create_info = (VkSwapchainCreateInfoKHR){};
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    create_info.surface = surface;
+    create_info.surface = surface->surface;
 
     create_info.minImageCount = image_count;
     create_info.imageFormat = surface_format.format;
@@ -623,16 +275,20 @@ void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR s
         }
     }
 
-    hd_surface->swapchain = swap_chain;
-    hd_surface->mode = mode;
-    hd_surface->format = surface_format.format;
-    hd_surface->extent = extent;
-    hd_surface->num_images = image_count;
-    hd_surface->swapchain_images = images;
-    hd_surface->image_views = image_views;
+    HdSwapchain* chain = mem_alloc(sizeof(HdSwapchain), hd_alloc);
+    *chain = (HdSwapchain) {
+      .swapchain = swap_chain,
+      .mode = mode,
+      .format = surface_format.format,
+      .extent = extent,
+      .num_images = image_count,
+      .swapchain_images = images,
+      .image_views = image_views,
+    };
+    return chain;
 }
 
-void create_renderpass(HedronSurface *surface) {
+void create_renderpass(HdSurface *surface, HdSwapchain) {
     VkAttachmentDescription colour_attachment = (VkAttachmentDescription){
         .format = surface->format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -681,11 +337,11 @@ void create_renderpass(HedronSurface *surface) {
     surface->renderpass = render_pass;
 }
 
-void create_framebuffers(HedronSurface *surface) {
-    VkFramebuffer* buffers = mem_alloc(surface->num_images * sizeof(VkFramebuffer), hd_alloc);
-    for (size_t i = 0; i < surface->num_images; i++) {
+void create_framebuffers(HdSurface *surface, HdSwapchain* swapchain) {
+    VkFramebuffer* buffers = mem_alloc(swapchain->num_images * sizeof(VkFramebuffer), hd_alloc);
+    for (size_t i = 0; i < swapchain->num_images; i++) {
         VkImageView attachments[] = {
-            surface->image_views[i]
+            swapchain->image_views[i]
         };
 
         VkFramebufferCreateInfo framebuffer_info = (VkFramebufferCreateInfo) {
@@ -693,8 +349,8 @@ void create_framebuffers(HedronSurface *surface) {
             .renderPass = surface->renderpass,
             .attachmentCount = 1,
             .pAttachments = attachments,
-            .width = surface->extent.width,
-            .height = surface->extent.height,
+            .width = swapchain->extent.width,
+            .height = swapchain->extent.height,
             .layers = 1,
         };
 
@@ -702,126 +358,55 @@ void create_framebuffers(HedronSurface *surface) {
             panic(mv_string("failed to create framebuffer!"));
         }
     }
-    surface->num_buffers = surface->num_images;
+    surface->num_buffers = swapchain->num_images;
     surface->buffers = buffers;
 }
 
-void cleanup_swap_chain(HedronSurface *surface) {
-    for (size_t i = 0; i < surface->num_buffers; i++) {
-        vkDestroyFramebuffer(logical_device, surface->buffers[i], NULL);
+void cleanup_swap_chain(HdSwapchain* swapchain) {
+    for (size_t i = 0; i < swapchain->num_buffers; i++) {
+        vkDestroyFramebuffer(logical_device, swapchain->buffers[i], NULL);
     }
-    mem_free(surface->buffers, hd_alloc);
-    for (size_t i = 0; i < surface->num_images; i++) {
-        vkDestroyImageView(logical_device, surface->image_views[i], NULL);
+    mem_free(swapchain->buffers, hd_alloc);
+    for (size_t i = 0; i < swapchain->num_images; i++) {
+        vkDestroyImageView(logical_device, swapchain->image_views[i], NULL);
     }
-    mem_free(surface->image_views, hd_alloc);
-    vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
+    mem_free(swapchain->image_views, hd_alloc);
+    vkDestroySwapchainKHR(logical_device, swapchain->swapchain, NULL);
 }
 
-#ifdef WINDOW_SYSTEM
-HedronSurface *create_window_surface(struct PlWindow *window) {
-    VkSurfaceKHR surface;
-
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
-    VkXlibSurfaceCreateInfoKHR create_info = (VkXlibSurfaceCreateInfoKHR){
-        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-        .dpy = get_x11_display(),
-        .window = window->x11_window,
-    };
-
-    VkResult result = vkCreateXlibSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS) return NULL;
-
-#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
-    VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
-    create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-    create_info.display = get_wl_display();
-    create_info.surface = window->surface;
-
-    VkResult result = vkCreateWaylandSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS) return NULL;
-
-    // TODO: check for present support on graphics queue
-
-#elif OS_FAMILY == WINDOWS
-    VkWin32SurfaceCreateInfoKHR create_info = (VkWin32SurfaceCreateInfoKHR) {
-        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-        .hwnd = window->impl,
-        .hinstance = GetModuleHandle(NULL),
-    };
-
-    VkResult result = vkCreateWin32SurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS) return NULL;
-#else
-#error "unrecognized OS"
-#endif
-
-
-    // TODO: postpone device selection until AFTER surface creation!
-    // TODO: possibly the graphics and present families are different?
-    VkBool32 present_support = false;
-
-    QueueFamilyIndices indices = find_queue_families(physical_device);
-    vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, indices.graphics_family, surface, &present_support);
-
-    if (!present_support) {
-        return NULL;
-    }
-
-    // TODO: do we need to confirm that the swapchain extension is supported?
-    //       possibly: check in debug mode.
-    bool swap_chain_ok = false;
-    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(physical_device, surface, hd_alloc);
-    swap_chain_ok = (swap_chain_details.num_formats != 0) && (swap_chain_details.num_present_modes != 0);
-    if (!swap_chain_ok) {
-        // TODO (FEATURE): proper error type
-        vkDestroySurfaceKHR(rl_vk_instance, surface, NULL);
-        free_swapchain_details(swap_chain_details, hd_alloc);
-        return NULL;
-    }
-
-    // The surface is populated with swapchain details by create_swapchain
-
-
-    //create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, struct Window *window, HedronSurface* hd_surface) {
-    HedronSurface* hd_surface = mem_alloc(sizeof(HedronSurface), hd_alloc);
-    create_swapchain(swap_chain_details, surface, window->width, window->height, hd_surface);
-    free_swapchain_details(swap_chain_details, hd_alloc);
-
-    create_renderpass(hd_surface);
-    create_framebuffers(hd_surface);
-
-    hd_surface->surface = surface;
-    hd_surface->present_family = indices.graphics_family;
-    return hd_surface;
-}
-#endif
-
-void resize_window_surface(HedronSurface* surface, Extent extent) {
+void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent) {
     vkDeviceWaitIdle(logical_device);
 
     cleanup_swap_chain(surface);
-    mem_free(surface->swapchain_images, hd_alloc);
+    mem_free(swapchain->swapchain_images, hd_alloc);
 
-    uint32_t width = extent.width;
-    uint32_t height = extent.height;
+    SwapchainInfo info = {
+      .width = extent.width,
+      .height = extent.height,
+      .num_images = swapchain->swapchain_images
+    }
 
-    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(physical_device, surface->surface, hd_alloc);
+    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(device->device, surface->surface, hd_alloc);
     create_swapchain(swap_chain_details, surface->surface, width, height, surface);
     create_framebuffers(surface);
     free_swapchain_details(swap_chain_details, hd_alloc);
 }
 
-void destroy_window_surface(HedronSurface *surface) {
-    cleanup_swap_chain(surface);
-    vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
-    vkDestroyRenderPass(logical_device, surface->renderpass, NULL);
-    mem_free(surface->swapchain_images, hd_alloc);
-    mem_free(surface, hd_alloc);
+bool can_draw_to(HdPhysicalDevice* device, HdSurface* surface) {
+  // TODO: may want to delete this method or update it to also check swapchain
+  // support. I feel like given we check swapchain support separately, there is
+  // an extremely low likelihood that we also need to do this check.
+  VkBool32 present_support = false;
+
+  QueueFamilyIndices indices = find_queue_families(device->device);
+  // TODO: error handling
+  vkGetPhysicalDeviceSurfaceSupportKHR(device->device, indices.graphics_family, surface->surface, &present_support);
+
+  return present_support;
 }
 
-uint32_t num_swapchain_images(HedronSurface* surface) {
-    return surface->num_images;
+void destroy_swapchain(HdSwapchain* swapchain) {
+  mem_free(swapchain->swapchain_images, hd_alloc);
 }
 
 HedronShaderModule* create_shader_module(U8Slice code) {
@@ -943,7 +528,10 @@ PtrSlice alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* la
         panic(mv_string("failed to allocate descriptor sets!"));
     };
 
-    AddrPiList descriptor_sets = mk_addr_list(set_count, &hd_pi_alloc);
+    PtrSlice descriptor_sets = {
+        .len = set_count,
+        .data = call_alloc(set_count * sizeof(HedronDescriptorSet*), &hd_pi_alloc),
+    };
     for (size_t i = 0; i < set_count; i++) {
         HedronDescriptorSet* hd_set = &pool->sets[pool->num_sets + i];
         descriptor_sets.data[i] = hd_set;
@@ -953,7 +541,7 @@ PtrSlice alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* la
 
     mem_free(vk_layouts, hd_alloc);
     mem_free(vk_descriptor_sets, hd_alloc);
-    return (PtrSlice){.data = descriptor_sets.data, .len = descriptor_sets.len};
+    return descriptor_sets;
 }
 
 void update_descriptor_sets(HedronWriteDescriptorSetSlice writes, HedronCopyDescriptorSetSlice copies) {
@@ -1089,8 +677,8 @@ HedronPipeline* create_pipeline(PipelineInfo pinfo) {
         };
     }
 
-    /** TODO: if len is 0 then may cause bugs/be undefined? but having len == 0
-        is legit... */
+    // TODO: if len is 0 then may cause bugs/be undefined? but having len == 0
+    //       is legit...
     VkPushConstantRange constant_ranges[pinfo.push_const_ranges.len == 0 ? 1 : pinfo.push_const_ranges.len];
     for (size_t i = 0; i < pinfo.push_const_ranges.len; i++) {
         VkShaderStageFlagBits shader_stage = convert_shader_type(pinfo.push_const_ranges.data[i].stage);
@@ -1874,6 +1462,6 @@ void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count,
     vkCmdDrawIndexed(commands->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
+*/
+
 #endif
-
-
