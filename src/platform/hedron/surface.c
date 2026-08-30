@@ -16,11 +16,7 @@ HdPtrResult create_window_surface(struct PlWindow *window, HdInstance* instance)
     };
 
     VkResult result = vkCreateXlibSurfaceKHR(instance->vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS)
-      return (HdPtrResult) {
-          .type = Err,
-          .error = convert_error_type(result),
-      };
+    CHECK_RESULT(result);
 
 #elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
     VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
@@ -29,11 +25,7 @@ HdPtrResult create_window_surface(struct PlWindow *window, HdInstance* instance)
     create_info.surface = window->surface;
 
     VkResult result = vkCreateWaylandSurfaceKHR(instance->vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS)
-      return (HdPtrResult) {
-          .type = Err,
-          .error = convert_error_type(result),
-      };
+    CHECK_RESULT(result);
 
     // TODO: check for present support on graphics queue
 
@@ -45,11 +37,7 @@ HdPtrResult create_window_surface(struct PlWindow *window, HdInstance* instance)
     };
 
     VkResult result = vkCreateWin32SurfaceKHR(instance->vk_instance, &create_info, NULL, &surface);
-    if (result != VK_SUCCESS)
-      return (HdPtrResult) {
-          .type = Err,
-          .error = convert_error_type(result),
-      };
+    CHECK_RESULT(result);
 #else
 #error "unrecognized OS"
 #endif
@@ -59,6 +47,7 @@ HdPtrResult create_window_surface(struct PlWindow *window, HdInstance* instance)
     *hd_surface = (HdSurface) {
         .instance = instance,
         .surface = surface,
+        .window = window,
     };
     return (HdPtrResult) {
         .type = Ok,

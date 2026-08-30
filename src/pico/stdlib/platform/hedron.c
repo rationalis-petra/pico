@@ -19,26 +19,27 @@
  */
 static PiType* error_code_ty;
 
-static PiType* surface_ty;
 
 static PiType* instance_ty;
+
+static PiType* surface_ty;
+
 static PiType* physical_device_ty;
 static PiType* logical_device_ty;
+
+static PiType* swapchain_ty;
 
 static PiType* alloc_sort_ty;
 static PiType* device_address_ty;
 
-static PiType* shader_module_ty;
-static PiType* pipeline_ty;
 
-/* Dynamic Values
- */
 
 
 /**
  * V1 exposed/shared types
  */
 
+/*
 static PiType* index_format_ty;
 static PiType* input_rate_ty;
 static PiType* input_format_ty;
@@ -82,6 +83,7 @@ static PiType* image_memory_barrier_ty;
 
 static PiType* semaphore_ty;
 static PiType* fence_ty;
+*/
 
 
 // Error
@@ -111,31 +113,6 @@ static void build_teardown_hedron_instance_fn(PiType* type, Assembler* ass, PiAl
     convert_c_fn(teardown_hedron_instance, &fn_ctype, type, ass, a, point); 
 }
 
-static PtrSlice relic_get_physical_devices(HdInstance* instance) {
-    PiAllocator curr = get_std_current_allocator();
-    Allocator alloc = convert_to_callocator(&curr);
-    return get_physical_devices(instance,&alloc);
-}
-
-static void build_get_physical_devices_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "instance", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
-    convert_c_fn(relic_get_physical_devices, &fn_ctype, type, ass, a, point); 
-}
-
-static void build_create_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2,
-                               "physical_device", mk_voidptr_ctype(pia),
-                               "instance", mk_voidptr_ctype(pia),
-                               mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
-    convert_c_fn(create_logical_device, &fn_ctype, type, ass, a, point); 
-}
-
-static void build_destroy_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1,
-                                 "logical_device", mk_voidptr_ctype(pia),
-                                 (CType){.sort = CSVoid});
-    convert_c_fn(destroy_logical_device, &fn_ctype, type, ass, a, point); 
-}
 
 #ifdef WINDOW_SYSTEM
 static void build_create_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -163,6 +140,54 @@ static void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllo
     convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
 }
 #endif
+
+
+static PtrSlice relic_get_physical_devices(HdInstance* instance) {
+    PiAllocator curr = get_std_current_allocator();
+    Allocator alloc = convert_to_callocator(&curr);
+    return get_physical_devices(instance,&alloc);
+}
+
+static void build_get_physical_devices_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1, "instance", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
+    convert_c_fn(relic_get_physical_devices, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_create_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 2,
+                               "physical_device", mk_voidptr_ctype(pia),
+                               "instance", mk_voidptr_ctype(pia),
+                               mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
+    convert_c_fn(create_logical_device, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_destroy_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "logical_device", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_logical_device, &fn_ctype, type, ass, a, point); 
+}
+
+// ----------------------------------------------------------------------------
+//
+//   Swapchain
+// 
+// ----------------------------------------------------------------------------
+
+void build_create_swapchain_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "device", mk_voidptr_ctype(pia),
+                                 "surface", mk_voidptr_ctype(pia),
+                                 mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
+    convert_c_fn(create_swapchain, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_swapchain_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "swapchain", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_swapchain, &fn_ctype, type, ass, a, point); 
+}
 
 /*
 void build_num_swapchain_images_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -836,6 +861,35 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    /** 
+     * Swapchain
+     * ----------------
+     * 
+     */
+
+    type = (PiType) {.sort = TType};
+    typep = mk_opaque_type(pia, "Swapchain", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Swapchain"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    swapchain_ty = e->value;
+
+    typep = mk_proc_type(pia, 2, logical_device_ty, surface_ty, mk_type_app(pia, get_result_type(), swapchain_ty, error_code_ty));
+    build_create_swapchain_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-swapchain"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, swapchain_ty, mk_prim_type(pia, Unit));
+    build_destroy_swapchain_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-swapchain"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
     /**
      *  Memory Allocation: 
      *  - Can allocate 3 types of memory

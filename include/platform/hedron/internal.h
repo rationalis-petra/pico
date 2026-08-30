@@ -17,6 +17,7 @@
 #include "platform/window/internal.h"
 
 HdError convert_error_type(VkResult desc);
+#define CHECK_RESULT(result) {if (result != VK_SUCCESS) { return (HdPtrResult) { .type = Err, .error = convert_error_type(result),};}};
 
 // Instance & Devices
 struct HdInstance {
@@ -40,9 +41,20 @@ struct HdLogicalDevice {
 // Surfaces
 struct HdSurface {
     VkSurfaceKHR surface;
+    PlWindow* window;
     HdInstance* instance;
 };
 
+// Swapchain
+struct HdSwapchain {
+    VkSwapchainKHR swapchain;
+    HdLogicalDevice* device;
+    HdExtent extent;
+    uint32_t num_images;
+    VkImage* images;
+    VkImageView* image_views;
+    VkSemaphore* render_complete_semaphores;
+};
 /*
 struct HdSurface {
     VkSurfaceKHR surface;
@@ -53,9 +65,6 @@ struct HdSurface {
     // Render passes and framebuffers
     // these are likely to be detached later
     VkRenderPass renderpass;
-
-    uint32_t num_buffers;
-    VkFramebuffer* buffers;
 };
 
 struct HdSwapchain {

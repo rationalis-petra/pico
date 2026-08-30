@@ -81,6 +81,16 @@ PtrSlice get_physical_devices(HdInstance* instance, Allocator* a);
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance);
 void destroy_logical_device(HdLogicalDevice* device);
 
+// Swapchain
+// Under this API, the swapchain is considered an operating system concern. From
+// the perspective of the API, we only care about getting a texture we can
+// render into from the swapchain.
+// TODO: determine how much complexity from the swapchain we want here, or
+// whether we want it elsewhere? (window api?)
+typedef struct HdSwapchain HdSwapchain;
+HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surfaceimages);
+void destroy_swapchain(HdSwapchain* swapchain);
+
 /*
 void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
 */

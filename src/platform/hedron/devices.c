@@ -211,17 +211,15 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     
     VkDevice vk_ldevice;
     VkResult res = vkCreateDevice(device->device, &create_info, NULL, &vk_ldevice);
-    if (res != VK_SUCCESS) {
-        return (HdPtrResult) {.type = Err, .error = convert_error_type(res)};
-    } else {
-        HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
-        *ldevice = (HdLogicalDevice) {
-            .device = vk_ldevice,
-            .physical_device = device->device,
-            .gpa = instance->gpa,
-        };
-        return (HdPtrResult) {.type = Ok, .val = ldevice};
-    }
+    CHECK_RESULT(res);
+
+    HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
+    *ldevice = (HdLogicalDevice) {
+        .device = vk_ldevice,
+        .physical_device = device->device,
+        .gpa = instance->gpa,
+    };
+    return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
 void destroy_logical_device(HdLogicalDevice* device) {
