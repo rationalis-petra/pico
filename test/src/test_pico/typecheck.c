@@ -109,6 +109,24 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("struct-missing-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.x I64])");
+    }
+
+    /*
+     * TODO: move the below test to abstraction: it is an abstraction failure test
+    if (test_start(log, mv_string("struct-duplicate-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.x I64] [.y I64] [.y I64])");
+    }
+    */
+
+    if (test_start(log, mv_string("struct-incorrect-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p I64] [.y I64])");
+    }
+
     //  Variant/Match Typechecking
     // -------------------------
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
