@@ -95,6 +95,30 @@ void destroy_swapchain(HdSwapchain* swapchain);
 void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
 */
 
+// Memory
+// ------------
+// Three types of generic memory
+//   - GPU only memmory (must use commands to copy from/to)
+//   - Shared memory
+//     - Default: fast for host to write, slow for host to read
+//     - Writeback: 
+typedef struct {
+    uint64_t val;
+} DeviceAddress;
+
+typedef struct {
+   void* host;
+   DeviceAddress device;
+} SharedAddress;
+
+typedef enum { Memory_Default, Memory_Readback } MemoryType;
+
+SharedAddress alloc_shared_memory(size_t size, size_t align, MemoryType type, HdLogicalDevice* device);
+void free_shared_memory(SharedAddress address, HdLogicalDevice* device);
+
+DeviceAddress alloc_device_memory(size_t size, size_t align, HdLogicalDevice* device);
+void free_device_memory(DeviceAddress address, HdLogicalDevice* device);
+
 // Queues
 // ------------
 // Queue types
@@ -103,13 +127,6 @@ void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysica
 // - Transfer (for transferring memory)
 // - Video Decode
 // - Video Encode
-
-// Memory
-// ------------
-typedef struct {
-    uint64_t val;
-} DeviceAddress;
-
 
 /**
  * V1 API
@@ -147,13 +164,6 @@ typedef enum {
     Nearest = 0, // Matches Vulkan spec
     Linear = 1,  // Matches Vulkan Spec
 } ImageFilterType;
-
-typedef struct HedronBuffer HedronBuffer;
-
-HedronBuffer* create_buffer(BufferType type, uint64_t size);
-void destroy_buffer(HedronBuffer* buffer);
-
-void set_buffer_data(HedronBuffer* buffer, void* data);
 
 typedef struct HedronImage HedronImage;
 typedef struct HedronImageView HedronImageView;

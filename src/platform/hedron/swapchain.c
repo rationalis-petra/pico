@@ -1,6 +1,5 @@
 #ifdef USE_VULKAN
 
-#include "platform/signals.h"
 #include "platform/hedron/hedron.h"
 #include "platform/hedron/internal.h"
 
@@ -29,10 +28,10 @@ static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, Hd
 }
 
 // Present mode affects the possibility of screentearing/stalling
+/*
 static VkPresentModeKHR choose_swap_present_mode(HdLogicalDevice *device, HdSurface *surface) {
    //(VkPresentModeKHR* available_present_modes, uint32_t num_modes) {
 
-/*
     uint32_t num_formats;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
                                          surface->surface,
@@ -49,12 +48,12 @@ static VkPresentModeKHR choose_swap_present_mode(HdLogicalDevice *device, HdSurf
             return present_mode;
         }
     }
-*/
 
     // FIFO is guaranteed to be available by the vulkan standard
     // No screen-tearing, but may stall.
     return VK_PRESENT_MODE_FIFO_KHR;
 }
+*/
 
 static uint32_t clamp(uint32_t val, uint32_t min, uint32_t max) {
     if (val < min) return min;

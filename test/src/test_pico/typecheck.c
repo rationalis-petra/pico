@@ -95,6 +95,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    //  Structure Typechecking
+    // -------------------------
     if (test_start(log, mv_string("Default struct from field constraints"))) {
         RUN("(def i64-fn proc [(x I64) (y I64)] x)");
         PiAllocator current_old = get_std_current_allocator();
@@ -107,6 +109,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    //  Variant/Match Typechecking
+    // -------------------------
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
         // We deduce that Right A has A = address (from use of address-to-num)
         // We deduce that Left V  has V = U64 (as must be same return type as right)

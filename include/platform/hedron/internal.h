@@ -1,3 +1,4 @@
+#include "data/meta/array_header.h"
 #include "platform/machine_info.h"
 
 #ifndef WINDOW_SYSTEM
@@ -32,10 +33,20 @@ struct HdPhysicalDevice {
     VkPhysicalDevice device;
 };
 
+typedef struct HdAllocation HdAllocation;
+ARRAY_HEADER(HdAllocation, hdalloc, HdAllocation)
+
 struct HdLogicalDevice {
     VkDevice device;
     VkPhysicalDevice physical_device;
     Allocator* gpa;
+
+    // We keep track of allocations in the device because we only provide
+    // device/host addresses via the API, but vulkan requires that we keep track
+    // of more state.
+    // TODO: Use a mutex to lock the allocations, ensuring that num_allocations
+    //       + allocations stay coherent when hammered by multiple threads.
+    HdAllocationArray allocations;
 };
 
 // Surfaces
@@ -55,38 +66,10 @@ struct HdSwapchain {
     VkImageView* image_views;
     VkSemaphore* render_complete_semaphores;
 };
+
+// Memory 
+// Hedron exposes a clean memory API: 
 /*
-struct HdSurface {
-    VkSurfaceKHR surface;
-    HdInstance* instance;
-    // presentation queue family;
-    uint32_t present_family;
-
-    // Render passes and framebuffers
-    // these are likely to be detached later
-    VkRenderPass renderpass;
-};
-
-struct HdSwapchain {
-    uint32_t image_count;
-    VkFormat format;
-    VkExtent2D extent;
-    VkPresentModeKHR mode;
-    VkSwapchainKHR swapchain;
-
-    uint32_t num_images;
-    VkImage* swapchain_images;
-    VkImageView* image_views;
-};
-
-typedef struct {
-    VkSurfaceCapabilitiesKHR capabilities;
-    uint32_t num_formats;
-    VkSurfaceFormatKHR* formats;
-
-    uint32_t num_present_modes;
-    VkPresentModeKHR* present_modes;
-} SwapChainSupportDetails;
 
 struct HedronShaderModule {
     VkShaderModule module;

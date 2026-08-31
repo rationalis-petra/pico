@@ -11,10 +11,9 @@
 //   
 //  
 
-const uint32_t num_required_device_extensions = 4;
+const uint32_t num_required_device_extensions = 3;
 const char *required_device_extensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
     VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
     //VK_EXT_MESH_SHADER_EXTENSION_NAME, // Note: not supported on laptop :(
@@ -79,7 +78,8 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     // TODO: move some (or all) of these checks into the hedron API
     return (supported_features_13.dynamicRendering
             && supported_features_12.timelineSemaphore // needed?? 
-            && supported_features_12.descriptorIndexing // NGAPI
+            && supported_features_12.descriptorIndexing  // NGAPI
+            && supported_features_12.bufferDeviceAddress // NGAPI
             && supported_features_13.synchronization2
             && extensions_supported);
 }
@@ -178,7 +178,8 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       .pNext = &features_13,
       .timelineSemaphore = VK_TRUE,
-      .descriptorIndexing = VK_TRUE, // NGAPI
+      .descriptorIndexing = VK_TRUE,  // NGAPI
+      .bufferDeviceAddress = VK_TRUE, // NGAPI
     };
     VkPhysicalDeviceFeatures2 features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -217,6 +218,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
         .physical_device = device->device,
+        .allocations = mk_hdalloc_array(8, instance->gpa),
         .gpa = instance->gpa,
     };
     return (HdPtrResult) {.type = Ok, .val = ldevice};
@@ -224,6 +226,11 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
 
 void destroy_logical_device(HdLogicalDevice* device) {
     vkDestroyDevice(device->device, NULL);
+    // TODO: make this a debug only panic/add debugging facility
+    if (device->allocations.len != 0) {
+        panic(mv_string("You haven't freed all device/shared memory that was allocated."));
+    }
+    sdelete_hdalloc_array(device->allocations);
     mem_free(device, device->gpa);
 }
 
