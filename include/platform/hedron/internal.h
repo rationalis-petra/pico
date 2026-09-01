@@ -39,7 +39,7 @@ ARRAY_HEADER(HdAllocation, hdalloc, HdAllocation)
 struct HdLogicalDevice {
     VkDevice device;
     VkPhysicalDevice physical_device;
-    Allocator* gpa;
+    Allocator* gpa; // Allocator is accessed often, so keep it high up.
 
     // We keep track of allocations in the device because we only provide
     // device/host addresses via the API, but vulkan requires that we keep track
@@ -47,7 +47,19 @@ struct HdLogicalDevice {
     // TODO: Use a mutex to lock the allocations, ensuring that num_allocations
     //       + allocations stay coherent when hammered by multiple threads.
     HdAllocationArray allocations;
+
+    // Every graphics/compute pipeline shares the same layout, so instead of
+    // wasting resources (and memory) recreating the pipeline layout every time,
+    // they are cached here: 
+    VkPipelineLayout compute_pipeline_layout;
+    VkPipelineLayout graphics_pipeline_layout;
+    VkDescriptorSetLayout descriptor_set_layout; // part of pipeline, needs cleanup
+    uint64_t max_sampled_images; // TODO: check datatype (uint32_t?)
 };
+
+// called during device creation
+void initialize_pipeline_layouts(HdLogicalDevice* device);
+void deinitialize_pipeline_layouts(HdLogicalDevice* device);
 
 // Surfaces
 struct HdSurface {
@@ -67,67 +79,3 @@ struct HdSwapchain {
     VkSemaphore* render_complete_semaphores;
 };
 
-// Memory 
-// Hedron exposes a clean memory API: 
-/*
-
-struct HedronShaderModule {
-    VkShaderModule module;
-};
-
-struct HedronPipeline {
-    VkPipelineLayout layout;
-    VkPipeline pipeline;
-};
-
-struct HedronDescriptorSetLayout {
-    VkDescriptorSetLayout layout;
-};
-
-struct HedronBuffer {
-    VkBuffer vk_buffer;
-    VkDeviceMemory device_memory;
-    uint64_t size;
-};
-
-struct HedronImage {
-    VkImage vk_image;
-    VkDeviceMemory image_memory;
-};
-
-struct HedronImageView {
-    VkImageView vk_image_view;
-};
-
-struct HedronSampler {
-    VkSampler vk_sampler;
-};
-
-struct HedronDescriptorSet {
-    VkDescriptorSet vk_set;
-};
-
-struct HedronDescriptorPool {
-    VkDescriptorPool pool;
-    HedronDescriptorSet* sets;
-    uint32_t num_sets;
-};
-
-struct HedronCommandPool {
-    VkCommandPool pool;
-    PtrArray buffers;
-};
-
-struct HedronCommandBuffer {
-    VkCommandBuffer buffer;
-};
-
-struct HedronFence {
-    VkFence fence;
-};
-
-struct HedronSemaphore {
-    VkSemaphore semaphore;
-};
-
-*/

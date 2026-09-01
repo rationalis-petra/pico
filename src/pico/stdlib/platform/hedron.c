@@ -19,7 +19,6 @@
  */
 static PiType* error_code_ty;
 
-
 static PiType* instance_ty;
 
 static PiType* surface_ty;
@@ -194,6 +193,13 @@ void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia,
     convert_c_fn(relic_free_device_memory, &fn_ctype, type, ass, a, point); 
 }
 
+//   Textures 
+// ---------
+// (TODO)
+
+//   Pipelines 
+// -------------
+
 /*
   void build_create_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(pia, 1, "code", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
@@ -203,18 +209,6 @@ void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia,
   void build_destroy_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(pia, 1, "module", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
   convert_c_fn(destroy_shader_module, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_create_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType arg_ctype = mk_struct_ctype(pia, 6,
-  "resource_describe", mk_slice_ctype(pia),
-  "binder_describe", mk_slice_ctype(pia),
-  "attrib_describe", mk_slice_ctype(pia),
-  "push_constants", mk_slice_ctype(pia),
-  "shaders", mk_slice_ctype(pia),
-  "surface", mk_voidptr_ctype(pia));
-  CType fn_ctype = mk_fn_ctype(pia, 1, "info", arg_ctype, mk_voidptr_ctype(pia));
-  convert_c_fn(create_pipeline, &fn_ctype, type, ass, a, point); 
   }
 
   void build_destroy_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -429,13 +423,6 @@ void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia,
   "height", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
   (CType){.sort = CSVoid});
   convert_c_fn(command_copy_buffer_to_image, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_bind_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, "command_buffer", mk_voidptr_ctype(pia),
-  "pipeline", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_bind_pipeline, &fn_ctype, type, ass, a, point); 
   }
 
   void build_command_push_constants_fn(PiType *type, Assembler *ass, PiAllocator *pia, Allocator *a, ErrorPoint *point) {
@@ -893,8 +880,18 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // struct GpuPipeline;
-    // struct GpuTexture;
+    /** 
+     * Textures 
+     * ----------
+     * TODO
+     */
+
+    /** 
+     * Pipeline 
+     * ----------
+     * A pipeline is simply a series of shaders that get executed.
+     */
+
     // struct GpuDepthStencilState;
     // struct GpuBlendState;
     // struct GpuQueue;
@@ -902,454 +899,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     // struct GpuSemaphore;
     // - 
 
-    /**
-     * The V1 API Is here
-     */
-
-    /*
-      typep = mk_opaque_type(pia, "Image", module, mk_prim_type(pia, Address));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("Image"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      image_ty = e->value;
-
-      typep = mk_enum_type(pia, 1, "r8-g8-b8-a8-srgb", 0);
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("ImageFormat"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      image_format_ty = e->value;
-
-      typep = mk_opaque_type(pia, "CommandPool", module, mk_prim_type(pia, Address));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("CommandPool"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      command_pool_ty = e->value;
-
-      typep = mk_opaque_type(pia, "CommandBuffer", module, mk_prim_type(pia, Address));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("CommandBuffer"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      command_buffer_ty = e->value;
-
-      typep = mk_named_type(pia, "MemoryBarrier", mk_struct_type(pia, 0));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("MemoryBarrier"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      memory_barrier_ty = e->value;
-
-      typep = mk_named_type(pia, "BufferMemoryBarrier", mk_struct_type(pia, 0));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("BufferMemoryBarrier"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      buffer_memory_barrier_ty = e->value;
-
-      typep = mk_named_type(pia, "ImageMemoryBarrier",
-      mk_struct_type(pia, 5,
-      "old-layout", image_layout_ty,
-      "new-layout", image_layout_ty,
-      "source-access-mask", access_flag_ty,
-      "destination-access-mask", access_flag_ty,
-      "image", image_ty));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("ImageMemoryBarrier"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      image_memory_barrier_ty = e->value;
-
-      typep = mk_struct_type(pia, 3,
-      "binding", mk_prim_type(pia, UInt_32),
-      "stride", mk_prim_type(pia, UInt_32),
-      "input-rate", input_rate_ty);
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("BindingDescription"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      binder_desc_ty = e->value;
-
-      typep = mk_struct_type(pia, 3,
-      "stage", shader_stage_ty,
-      "offset", mk_prim_type(pia, UInt_32),
-      "size", mk_prim_type(pia, UInt_32));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("PushConstantRange"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      push_const_range_ty = e->value;
-
-      typep = mk_opaque_type(pia, "Semaphore", module, mk_prim_type(pia, Address));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("Semaphore"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      semaphore_ty = e->value;
-
-      typep = mk_opaque_type(pia, "Fence", module, mk_prim_type(pia, Address));
-      type = (PiType) {.sort = TType};
-      name = string_to_name(mv_string("Fence"));
-      add_def(module, name, type, &typep, null_segments, NULL);
-      clear_assembler(ass);
-      e = get_def_internal(name, module);
-      fence_ty = e->value;
-
-
-      // ------------------------------------------------------------------------
-      //
-      // Data contract (vertex/input formats, etc.)
-      // 
-      // ------------------------------------------------------------------------
-
-      typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), image_format_ty, image_ty);
-      build_create_image_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-image"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, image_ty, mk_prim_type(pia, Unit));
-      build_destroy_image_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-image"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, image_ty, image_format_ty, image_view_ty);
-      build_create_image_view_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-image-view"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, image_view_ty, mk_prim_type(pia, Unit));
-      build_destroy_image_view_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-image-view"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-
-      typep = mk_proc_type(pia, 1, mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_8)), shader_module_ty);
-      build_create_shader_module_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-shader-module"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, shader_module_ty, mk_prim_type(pia, Unit));
-      build_destroy_shader_module_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-shader-module"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 0, command_pool_ty);
-      build_create_command_pool_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-command-pool"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, command_pool_ty, mk_prim_type(pia, Unit));
-      build_destroy_command_pool_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-command-pool"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, command_pool_ty, command_buffer_ty);
-      build_create_command_buffer_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-command-buffer"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, 
-      command_pool_ty,
-      command_buffer_ty,
-      mk_prim_type(pia, Unit));
-      build_free_command_buffer_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("free-command-buffer"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 4, 
-      command_buffer_ty,
-      mk_type_app(pia, get_maybe_type(), fence_ty),
-      mk_type_app(pia, get_slice_type(), mk_type_app(pia, get_pair_type(), semaphore_ty, pipeline_stage_ty)), 
-      mk_type_app(pia, get_slice_type(), semaphore_ty),
-      mk_prim_type(pia, Unit));
-      build_queue_submit_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("queue-submit"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 3, surface_ty,
-      semaphore_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
-      build_queue_present_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("queue-present"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
-      build_queue_wait_idle_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("queue-wait-idle"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, command_buffer_ty, command_buffer_usage_ty, mk_prim_type(pia, Unit));
-      build_command_begin_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-begin"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
-      build_command_end_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-end"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
-      build_reset_command_buffer_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("reset-command-buffer"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 3, command_buffer_ty,
-      surface_ty,
-      mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, Unit));
-      build_command_begin_renderpass_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-begin-renderpass"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
-      build_command_end_renderpass_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-end-renderpass"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 6, 
-      command_buffer_ty,
-      pipeline_stage_ty,
-      pipeline_stage_ty,
-      mk_type_app(pia, get_slice_type(), memory_barrier_ty),
-      mk_type_app(pia, get_slice_type(), buffer_memory_barrier_ty),
-      mk_type_app(pia, get_slice_type(), image_memory_barrier_ty),
-      mk_prim_type(pia, Unit));
-      build_command_pipeline_barrier_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-pipeline-barrier"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 5, 
-      command_buffer_ty,
-      buffer_ty,
-      image_ty,
-      mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, Unit));
-      build_command_copy_buffer_to_image_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-copy-buffer-to-image"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, command_buffer_ty, pipeline_ty, mk_prim_type(pia, Unit));
-      build_command_bind_pipeline_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-bind-pipeline"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 6, command_buffer_ty, pipeline_ty, shader_stage_ty,
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, Address), mk_prim_type(pia, Unit)); 
-      build_command_push_constants_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-push-constants"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 3, command_buffer_ty,
-      pipeline_ty, 
-      descriptor_set_ty, 
-      mk_prim_type(pia, Unit));
-      build_command_bind_descriptor_set_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-bind-descriptor-set"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, command_buffer_ty, buffer_ty, mk_prim_type(pia, Unit));
-      build_command_bind_vertex_buffer_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-bind-vertex-buffer"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, command_buffer_ty, mk_type_app(pia, get_slice_type(), buffer_ty), mk_prim_type(pia, Unit));
-      build_command_bind_vertex_buffers_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-bind-vertex-buffers"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 3, command_buffer_ty, buffer_ty, index_format_ty, mk_prim_type(pia, Unit));
-      build_command_bind_index_buffer_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-bind-index-buffer"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, command_buffer_ty, surface_ty, mk_prim_type(pia, Unit));
-      build_command_set_surface_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-set-surface"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 5, command_buffer_ty,
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, Unit));
-      build_command_draw_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-draw"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 6, command_buffer_ty,
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, Int_32),
-      mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
-      build_command_draw_indexed_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("command-draw-indexed"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 0, semaphore_ty);
-      build_create_semaphore_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-semaphore"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, semaphore_ty, mk_prim_type(pia, Unit));
-      build_destroy_semaphore_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-semaphore"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 0, fence_ty);
-      build_create_fence_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("create-fence"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
-      build_destroy_fence_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("destroy-fence"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
-      build_wait_for_fence_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("wait-for-fence"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
-      build_reset_fence_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("reset-fence"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
-      build_wait_for_device_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("wait-for-device"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-
-      typep = mk_proc_type(pia, 2, surface_ty, semaphore_ty,
-      mk_enum_type(pia, 2,
-      "image", 1, mk_prim_type(pia, UInt_32),
-      "resized", 0));
-      build_acquire_next_image_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("acquire-next-image"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-    */
 }
 
 #endif

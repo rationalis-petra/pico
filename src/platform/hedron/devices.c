@@ -11,11 +11,12 @@
 //   
 //  
 
-const uint32_t num_required_device_extensions = 3;
+const uint32_t num_required_device_extensions = 4;
 const char *required_device_extensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+    VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, // NGAPI
     //VK_EXT_MESH_SHADER_EXTENSION_NAME, // Note: not supported on laptop :(
 };
 
@@ -45,9 +46,13 @@ bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
 }
 
 bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+        .pNext = NULL
+    };
     VkPhysicalDeviceVulkan14Features supported_features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-      .pNext = NULL,
+      .pNext = &desc_buffer_features,
     };
     VkPhysicalDeviceVulkan13Features supported_features_13 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -58,15 +63,13 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       .pNext = &supported_features_13,
     };
-    /* This was not present in tutorial? Add?
     VkPhysicalDeviceVulkan11Features supported_features_11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .pNext = &supported_features_12,
     };
-    */
     VkPhysicalDeviceFeatures2 supported_features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-      .pNext = &supported_features_12,
+      .pNext = &supported_features_11,
     };
     vkGetPhysicalDeviceFeatures2(device, &supported_features);
 
@@ -76,10 +79,13 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     const bool extensions_supported = check_device_extension_support(device, a);
 
     // TODO: move some (or all) of these checks into the hedron API
-    return (supported_features_13.dynamicRendering
+    return (desc_buffer_features.descriptorBuffer
+            && supported_features_13.dynamicRendering
             && supported_features_12.timelineSemaphore // needed?? 
             && supported_features_12.descriptorIndexing  // NGAPI
             && supported_features_12.bufferDeviceAddress // NGAPI
+            && supported_features_12.descriptorBindingPartiallyBound
+            && supported_features_12.descriptorBindingVariableDescriptorCount
             && supported_features_13.synchronization2
             && extensions_supported);
 }
@@ -162,10 +168,30 @@ uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
 }
 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
-    // Supported Features
+// 1. Prepare descriptor buffer properties struct
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buffer_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+        .pNext = NULL
+    };
+
+    // 2. Chain into standard PhysicalDeviceProperties2
+    VkPhysicalDeviceProperties2 device_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &desc_buffer_props
+    };
+
+    // 3. Query physical device
+    vkGetPhysicalDeviceProperties2(device->device, &device_props);
+    uint64_t max_sampled_images = desc_buffer_props.maxResourceDescriptorBufferBindings;
+
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+        .descriptorBuffer = VK_TRUE,
+        .pNext = NULL
+    };
     VkPhysicalDeviceVulkan14Features features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-      .pNext = NULL,
+      .pNext = &desc_buffer_features,
     };
     VkPhysicalDeviceVulkan13Features features_13 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -178,8 +204,10 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       .pNext = &features_13,
       .timelineSemaphore = VK_TRUE,
-      .descriptorIndexing = VK_TRUE,  // NGAPI
-      .bufferDeviceAddress = VK_TRUE, // NGAPI
+      .descriptorIndexing = VK_TRUE,
+      .bufferDeviceAddress = VK_TRUE,
+      .descriptorBindingPartiallyBound = VK_TRUE,
+      .descriptorBindingVariableDescriptorCount = VK_TRUE,
     };
     VkPhysicalDeviceFeatures2 features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -218,13 +246,21 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
         .physical_device = device->device,
-        .allocations = mk_hdalloc_array(8, instance->gpa),
         .gpa = instance->gpa,
+
+        .allocations = mk_hdalloc_array(8, instance->gpa),
+
+        .max_sampled_images = max_sampled_images,
+        .compute_pipeline_layout = VK_NULL_HANDLE,
+        .graphics_pipeline_layout = VK_NULL_HANDLE,
     };
+
+    initialize_pipeline_layouts(ldevice);
     return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
 void destroy_logical_device(HdLogicalDevice* device) {
+    deinitialize_pipeline_layouts(device);
     vkDestroyDevice(device->device, NULL);
     // TODO: make this a debug only panic/add debugging facility
     if (device->allocations.len != 0) {

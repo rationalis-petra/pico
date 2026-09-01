@@ -6,10 +6,10 @@
 #include "platform/hedron/internal.h"
 
 typedef enum {
-    GpuAlloc_Default,
+    GpuAllocDefault,
     // Memory_Desriptor, // internal only, add after/with images?
-    GpuAlloc_Readback,
-    GpuAlloc_Gpu,
+    GpuAllocReadback,
+    GpuAllocGpu,
 } AllocationType;
 
 struct HdAllocation {
@@ -133,7 +133,7 @@ static HdAllocation do_vk_allocation(size_t size, size_t align,
 
 static HdAllocation create_allocation(size_t size, size_t align, AllocationType type, HdLogicalDevice* device) {
     switch (type) {
-    case GpuAlloc_Default: {
+    case GpuAllocDefault: {
         // default: it may be used for basically anything, so we flag it as
         // such. On modern GPUs, expect minimal extra cost.
         // TODO: in theroy we only need a subset of these flags, investigate
@@ -160,7 +160,7 @@ static HdAllocation create_allocation(size_t size, size_t align, AllocationType 
         //case GpuAlloc_Descriptor:
         return do_vk_allocation(size, align, usage, properties, device);
     }
-    case GpuAlloc_Readback: {
+    case GpuAllocReadback: {
         /** Note: reference had, why less usage?
         auto usage =
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
@@ -178,7 +178,7 @@ static HdAllocation create_allocation(size_t size, size_t align, AllocationType 
             VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         return do_vk_allocation(size, align, usage, properties, device);
     }
-    case GpuAlloc_Gpu: {
+    case GpuAllocGpu: {
         // Like Default, but with an additional 'acceleration structure storage
         // bit' flag.
         VkBufferUsageFlags2KHR usage = 
@@ -213,9 +213,9 @@ void free_allocation(HdAllocation allocation, HdLogicalDevice* device) {
 }
 
 SharedAddress alloc_shared_memory(size_t size, size_t align, MemoryType type, HdLogicalDevice* device) {
-    AllocationType atype = type == Memory_Readback
-        ? GpuAlloc_Readback
-        : GpuAlloc_Default;
+    AllocationType atype = type == MemoryWriteback
+        ? GpuAllocReadback
+        : GpuAllocDefault;
     HdAllocation hda = create_allocation(size, align, atype, device);
     // TODO: acquire lock
     push_hdalloc(hda, &device->allocations);
@@ -245,7 +245,7 @@ void free_shared_memory(SharedAddress address, HdLogicalDevice* device) {
 }
 
 DeviceAddress alloc_device_memory(size_t size, size_t align, HdLogicalDevice* device) {
-    HdAllocation hda = create_allocation(size, align, GpuAlloc_Gpu, device);
+    HdAllocation hda = create_allocation(size, align, GpuAllocGpu, device);
     // TODO: acquire lock
     push_hdalloc(hda, &device->allocations);
     // TODO: release lock
