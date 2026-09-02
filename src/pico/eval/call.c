@@ -101,7 +101,7 @@ void call_unit_fn(void *function, Allocator *a) {
     int64_t out;
     __asm__ __volatile__(
                          // save nonvolatile registers
-                         "stp %%rbp       \n" // Nonvolatile on System V + Win64
+                         "push %%rbp       \n" // Nonvolatile on System V + Win64
                          "push %%rbx       \n" // Nonvolatile on System V + Win64
                          "push %%rdi       \n" // Nonvolatile on Win 64
                          "push %%rsi       \n" // Nonvolatile on Win 64
