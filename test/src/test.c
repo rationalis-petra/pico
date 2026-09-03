@@ -6,7 +6,7 @@
  *   • Expected values/comparison operation
  *   • Description of the intent of a test
  * • Run as many suites as possible? - report failure
- *  • Indicate which suite (if any) is responsible for any failures (segfault etc.)
+ *  • InDicate which suite (if any) is responsible for any failures (segfault etc.)
  * • Reporting:
  *   • Fine-grained as possible 
  *   • Control over what gets reported, how (console, file, html, etc.)
@@ -74,11 +74,6 @@ int main(int argc, char** argv) {
     delete_test_log(log, stdalloc);
     delete_formatted_ostream(cos, stdalloc);
 
-    // Cleanup
-    clear_symbols();
-    thread_clear_dynamic_vars();
-    clear_dynamic_vars();
-
     return out;
 }
 
@@ -127,24 +122,24 @@ void all_suites(TestLog *log, Allocator *a, CodegenBackend backend) {
         suite_end(log);
     }
 
-#ifdef AARCH_64
+#if ARCH == AARCH64
     if (test_start(log, mv_string("aarch64-fail"))) {
         test_fail(log);
     }
 #endif
 
-    // If the assembler is broken, all tests from this point forward should be
-    // skipped as incorrect assembly will be generated, potentially producing
-    // false positives
-    if (!all_passed(log)) return;
+    test_barrier(log);
 
     // Initialization order here is not important
-    Allocator* stdalloc = get_std_allocator();
-    init_ctypes();
-    init_symbols(stdalloc);
-    init_dynamic_vars(stdalloc);
-    thread_init_dynamic_vars();
-    init_codegen(backend, stdalloc);
+    // TODO: this isn't suite setup, use a different check?
+    if (suite_setup(log)) {
+        Allocator* stdalloc = get_std_allocator();
+        init_ctypes();
+        init_symbols(stdalloc);
+        init_dynamic_vars(stdalloc);
+        thread_init_dynamic_vars();
+        init_codegen(backend, stdalloc);
+    }
 
     if (suite_start(log, mv_string("pvm"))) {
         run_pvm_tests(log, a);
@@ -154,5 +149,12 @@ void all_suites(TestLog *log, Allocator *a, CodegenBackend backend) {
     if (suite_start(log, mv_string("pico"))) {
         run_pico_tests(log, a);
         suite_end(log);
+    }
+
+    if (suite_teardown(log)) {
+      // Cleanup
+      clear_symbols();
+      thread_clear_dynamic_vars();
+      clear_dynamic_vars();
     }
 }

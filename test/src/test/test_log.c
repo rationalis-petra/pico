@@ -77,11 +77,25 @@ void suite_end(TestLog *log) {
     mem_free(str, log->gpa);
 }
 
+bool suite_setup(TestLog* log) {
+    return !log->barrier_check_failed;
+}
+
+bool suite_teardown(TestLog* log) {
+    return !log->barrier_check_failed;
+}
+
 bool test_start(TestLog* log, String name) {
-    log->in_test = true;
-    log->current_test = name;
-    log->test_count++;
-    return true;
+    if (log->barrier_check_failed) {
+        log->test_count++;
+        log->skipped_tests++;
+        return false;
+    } else {
+        log->in_test = true;
+        log->current_test = name;
+        log->test_count++;
+        return true;
+    }
 }
 
 void test_pass(TestLog* log) {
@@ -157,6 +171,10 @@ void test_fail(TestLog* log) {
 void delete_test_log(TestLog* log, Allocator* a) {
     sdelete_ptr_array(log->current_suites);
     mem_free(log, a);
+}
+
+void test_barrier(TestLog* log) { 
+    log->barrier_check_failed |= log->failed_tests > 0;
 }
 
 Logger* get_structured_logger(TestLog *log) {

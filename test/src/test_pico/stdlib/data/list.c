@@ -12,7 +12,9 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     Allocator ra = ra_to_gpa(region);
     PiAllocator pregion = convert_to_pallocator(&ra);
 
-    RUN("(def list-1 (list.init {I64} 5 10))");
+    if (suite_setup(log)) {
+        RUN("(def list-1 (list.init {I64} 5 10))");
+    }
     if (test_start(log, mv_string("list-len"))) {
         int64_t expected = 5;
         TEST_EQ("list-1.len");
@@ -81,7 +83,9 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     }
 
     // Free the data associated with the lists generated durin the test
-    RUN("(list.de-init list-1)");
-    RUN("(list.de-init list-2)");
-    RUN("(delete list-3)");
+    if (suite_teardown(log)) {
+        RUN("(list.de-init list-1)");
+        RUN("(list.de-init list-2)");
+        RUN("(delete list-3)");
+    }
 }

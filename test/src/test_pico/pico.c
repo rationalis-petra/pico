@@ -20,30 +20,34 @@ void run_pico_tests(TestLog* log, Allocator* a) {
     Allocator exec = mk_executable_allocator(stdalloc);
     RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
 
-    Package* base = get_base_package();
-    if (initialized == 0) {
-        RegionAllocator* subregion = make_subregion(region); 
-        Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
-        PiAllocator module_allocator = convert_to_pallocator(stdalloc);
+    Target target = {};
+    Package* base = NULL;
+    if (suite_setup(log)) {
+        base = get_base_package();
+        if (initialized == 0) {
+            RegionAllocator* subregion = make_subregion(region); 
+            Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
+            PiAllocator module_allocator = convert_to_pallocator(stdalloc);
 
-        base = base_package_core_only(ass_base, stdalloc, &module_allocator, subregion);
+            base = base_package_core_only(ass_base, stdalloc, &module_allocator, subregion);
 
-        delete_assembler(ass_base);
-        release_subregion(subregion);
-        initialized++;
+            delete_assembler(ass_base);
+            release_subregion(subregion);
+            initialized++;
+        }
+
+        Target target = (Target) {
+            .target = mk_assembler(current_cpu_feature_flags(), &exec),
+            .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
+            .data_aux = mem_alloc(sizeof(U8Array), a),
+        };
+        *target.data_aux = mk_u8_array(256, a);
+
+        Module* module = get_module(string_to_name(mv_string("user")), base);
+
+        set_std_current_module(module);
+        set_current_package(base);
     }
-
-    Target target = (Target) {
-        .target = mk_assembler(current_cpu_feature_flags(), &exec),
-        .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
-        .data_aux = mem_alloc(sizeof(U8Array), a),
-    };
-    *target.data_aux = mk_u8_array(256, a);
-
-    Module* module = get_module(string_to_name(mv_string("user")), base);
-
-    set_std_current_module(module);
-    set_current_package(base);
 
     if (suite_start(log, mv_string("parse"))) {
         RegionAllocator* subregion = make_subregion(region);
@@ -66,7 +70,7 @@ void run_pico_tests(TestLog* log, Allocator* a) {
         suite_end(log);
     }
 
-    if (initialized <= 1) {
+    if (suite_setup(log) && initialized <= 1) {
         RegionAllocator* subregion = make_subregion(region); 
         Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
         PiAllocator module_allocator = convert_to_pallocator(stdalloc);
@@ -77,12 +81,15 @@ void run_pico_tests(TestLog* log, Allocator* a) {
         release_subregion(subregion);
         initialized++;
     }
+
     if (suite_start(log, mv_string("stdlib"))) {
         run_pico_stdlib_tests(log, target, stdalloc);
         suite_end(log);
     }
 
-    sdelete_u8_array(*target.data_aux);
-    mem_free(target.data_aux, a);
-    release_executable_allocator(exec);
+    if (suite_teardown(log)) {
+        sdelete_u8_array(*target.data_aux);
+        mem_free(target.data_aux, a);
+        release_executable_allocator(exec);
+    }
 }

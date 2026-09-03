@@ -9,6 +9,38 @@
 
 #include "components/logging/structured_logging.h"
 
+
+/**
+ *  Test Log
+ * -----------
+ * The test log manages test state for the entire application.
+ * Functions such as suite_start and test_start return booleans 
+ * which are true if the test/test-suite should be run, and false
+ * otherwise.
+ * 
+ * TestLog log = mk_test_log(...);
+ * // Any setup of global state that is necessary
+ * finish_setup(...);
+ * if (suite_start(log, mv_string("my suit name")) {
+ *   if (suite_setup(log)) {
+ *      // Suite setup (optional)
+ *   }
+ *   if (test_start(log, mv_string("my test name")) {
+ *      // Test code
+ *      if (result == expected_value) {
+ *        test_pass(log);
+ *      } else {
+ *        test_fail(log);
+ *      }
+ *   }
+ * 
+ *   if (suite_teardown(log)) {
+ *      // Suite teardown (optional)
+ *   }
+ * }
+ * 
+ */
+
 typedef struct {
     bool show_fails;
     bool show_passes;
@@ -28,6 +60,8 @@ typedef struct {
     String current_test;
     PtrArray current_suites;
 
+    bool barrier_check_failed;
+
     size_t test_count;
     size_t skipped_tests;
     size_t passed_tests;
@@ -40,11 +74,21 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
 void finish_setup(TestLog* log);
 void delete_test_log(TestLog* log, Allocator* a);
 
+/**
+ * If any tests before the barrier have failed, then assume
+ * that all future tests should be skipped. Note that suites
+ * still run (so we can count skipped tests), it's just the 
+ * tests that don't.
+ */
+void test_barrier(TestLog* log);  
+
 // Return true if all tests run thus far have passed, and false otherwise.
 bool all_passed(TestLog* log);
 
 bool suite_start(TestLog* log, String name);
 void suite_end(TestLog* log);
+bool suite_setup(TestLog* log);
+bool suite_teardown(TestLog* log);
 
 bool test_start(TestLog* log, String name);
 
