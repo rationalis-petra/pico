@@ -9,54 +9,19 @@ typedef enum Option_t : uint64_t {
     Some
 } Option_t;
 
-typedef struct {
-    Option_t type;
-    void* val;
-} PtrOption;
+#define OPTION_TYPE(otype, prefix) typedef struct { Option_t type; otype val;} prefix##Option;
 
-typedef struct {
-    Option_t type;
-    uint8_t val;
-} U8Option;
+OPTION_TYPE(void*, Ptr);
+OPTION_TYPE(uint8_t, U8);
+OPTION_TYPE(uint16_t, U16);
+OPTION_TYPE(uint32_t, U32);
+OPTION_TYPE(uint64_t, U64);
 
-typedef struct {
-    Option_t type;
-    uint16_t val;
-} U16Option;
+OPTION_TYPE(int8_t, I8);
+OPTION_TYPE(int16_t, I16);
+OPTION_TYPE(int32_t, I32);
+OPTION_TYPE(int64_t, I64);
 
-typedef struct {
-    Option_t type;
-    uint32_t val;
-} U32Option;
-
-typedef struct {
-    Option_t type;
-    uint64_t val;
-} U64Option;
-
-typedef struct {
-    Option_t type;
-    int8_t val;
-} I8Option;
-
-typedef struct {
-    Option_t type;
-    int16_t val;
-} I16Option;
-
-typedef struct {
-    Option_t type;
-    int32_t val;
-} I32Option;
-
-typedef struct {
-    Option_t type;
-    int64_t val;
-} I64Option;
-
-typedef struct {
-    Option_t type;
-    String val;
-} StringOption;
+OPTION_TYPE(String, String);
 
 #endif

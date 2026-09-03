@@ -141,8 +141,9 @@ void call_unit_fn(void *function, Allocator *a) {
                            , "r" (dvars)
                            // Clobbers are either registers we change (output cannot be trusted)
                            // or registers we don't want compiler to assign to input values
-                         : "rax", "r13", "r14", "r15");
+                         : "rax", "r12", "r13", "r14", "r15");
 #elif ARCH == AARCH64
+    int64_t out;
     panic(mv_string("not implemented: unit call for aarch64"));
 #else
     #error "Unsupported ARCH"
@@ -241,7 +242,8 @@ void* call_instance_fn(void *function, U64Array types, PtrArray implicits, size_
           // or registers we don't want compiler to assign to input values
         : "rbx", "rax", "r12", "r13", "r14", "r15");
 #elif ARCH == AARCH64
-    panic(mv_string("not implemented: unit call for aarch64"));
+    void* out;
+    panic(mv_string("not implemented: instance call for aarch64"));
 #else
     #error "Unsupported ARCH"
 #endif

@@ -1904,8 +1904,11 @@ void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiA
         //       refactor plan, this comment can safely be deleted.
         break;
 
-    // Kinds (higher kinds not supported)
-    case TKind: break;
+    case TType:
+    case TConstraint:
+    case TKind:
+    case TSort:
+        break;
     default: {
         Allocator a = convert_to_callocator(pia);
         PtrArray nodes = mk_ptr_array(4, &a);

@@ -64,4 +64,12 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     const char* geq_fn =
         "(def >= all [A] proc {(ord (Ord A))} [(x A) (y A)] ord.>= x y)";
     compile_toplevel(geq_fn, module, target, &point, &pi_point, region);
+
+    const char* min_fn =
+        "(def min all [A] proc {(ord (Ord A))} [(x A) (y A)] (if (ord.< x y) x y))";
+    compile_toplevel(min_fn, module, target, &point, &pi_point, region);
+
+    const char* max_fn =
+        "(def min all [A] proc {(ord (Ord A))} [(x A) (y A)] (if (ord.> x y) x y))";
+    compile_toplevel(max_fn, module, target, &point, &pi_point, region);
 }
