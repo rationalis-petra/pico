@@ -87,6 +87,7 @@ _Noreturn void type_error_struct_extra_field(PiType* type, SynRef strct, TypeChe
 
 // Projector
 _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef proj, TypeCheckContext ctx);
+_Noreturn void type_error_proj_missing_field(PiType* type, SynRef proj, TypeCheckContext ctx);
 
 // Instance
 _Noreturn void type_error_instance_invalid_type(PiType* type, Range range, TypeCheckContext ctx);

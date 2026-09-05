@@ -1,7 +1,6 @@
 #ifdef USE_VULKAN
 
 #include "platform/signals.h"
-#include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
 #include "platform/memory/std_allocator.h"
 
@@ -9,7 +8,6 @@
 
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
-#include "pico/codegen/backend-direct/internal.h"
 
 #include "pico/stdlib/core/kernel.h"
 #include "pico/stdlib/platform/submodules.h"
@@ -31,6 +29,12 @@ static PiType* swapchain_ty;
 static PiType* alloc_sort_ty;
 static PiType* device_address_ty;
 static PiType* shared_address_ty;
+
+static PiType* pipeline_ty;
+
+static PiType* queue_ty;
+static PiType* semaphore_ty;
+static PiType* command_buffer_ty;
 
 //  Errors
 // --------
@@ -200,350 +204,127 @@ void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia,
 //   Pipelines 
 // -------------
 
-/*
-  void build_create_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "code", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
-  convert_c_fn(create_shader_module, &fn_ctype, type, ass, a, point); 
-  }
+HdPipeline* relic_create_compute_pipeline(U32Slice compute_IR) {
+  HdLogicalDevice* device = get_current_device();
+  return create_compute_pipeline(compute_IR, device);
+}
 
-  void build_destroy_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "module", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_shader_module, &fn_ctype, type, ass, a, point); 
-  }
+void build_create_compute_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1, "compute_ir", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
+  convert_c_fn(relic_create_compute_pipeline, &fn_ctype, type, ass, a, point); 
+}
 
-  void build_destroy_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+//HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
+//HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshletIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
+
+void relic_destroy_pipeline(HdPipeline* pipeline) {
+  HdLogicalDevice* device = get_current_device();
+  destroy_pipeline(pipeline, device);
+}
+
+void build_destroy_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(pia, 1, "pipeline", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_pipeline, &fn_ctype, type, ass, a, point); 
-  }
+  convert_c_fn(relic_destroy_pipeline, &fn_ctype, type, ass, a, point); 
+}
 
-  // ----------------------------------------------------------------------------
-  //
-  // Data contract (vertex/input formats, etc.)
-  // 
-  // ----------------------------------------------------------------------------
+//   Semaphores 
+// -------------
 
+HdSemaphore* create_semaphore(HdLogicalDevice* device, uint64_t init_value);
+void wait_semaphore(HdLogicalDevice* device, HdSemaphore* sema, uint64_t value);
+void destroy_semaphore(HdLogicalDevice* device, HdSemaphore* sema);
 
-  void build_create_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, 
-  "width", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
-  "height", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
-  "format", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
-  mk_voidptr_ctype(pia));
+HdSemaphore* relic_create_semaphore(uint64_t initial_val) {
+    HdLogicalDevice* device = get_current_device();
+    return create_semaphore(device, initial_val);
+}
 
-  convert_c_fn(create_image, &fn_ctype, type, ass, a, point); 
-  }
+void build_create_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "initial_value", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(relic_create_semaphore, &fn_ctype, type, ass, a, point); 
+}
 
-  void build_destroy_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, 
-  "image", mk_voidptr_ctype(pia), 
-  (CType){.sort = CSVoid});
+void relic_wait_semaphore(HdSemaphore* semaphore, uint64_t initial_val) {
+    HdLogicalDevice* device = get_current_device();
+    wait_semaphore(device, semaphore, initial_val);
+}
 
-  convert_c_fn(destroy_image, &fn_ctype, type, ass, a, point); 
-  }
+void build_wait_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "semaphore", mk_voidptr_ctype(pia),
+                                 "value", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(relic_wait_semaphore, &fn_ctype, type, ass, a, point); 
+}
 
-  void build_create_image_view_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, 
-  "image", mk_voidptr_ctype(pia),
-  "format", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
-  mk_voidptr_ctype(pia));
+void relic_destroy_semaphore(HdSemaphore* semaphore) {
+    HdLogicalDevice* device = get_current_device();
+    destroy_semaphore(device, semaphore);
+}
 
-  convert_c_fn(create_image_view, &fn_ctype, type, ass, a, point); 
-  }
+void build_destroy_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "semaphore", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
+    convert_c_fn(relic_destroy_semaphore, &fn_ctype, type, ass, a, point); 
+}
 
-  void build_destroy_image_view_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, 
-  "image", mk_voidptr_ctype(pia), 
-  (CType){.sort = CSVoid});
+//   Queues 
+// -------------
 
-  convert_c_fn(destroy_image_view, &fn_ctype, type, ass, a, point); 
-  }
+HdQueue* relic_get_queue() {
+    HdLogicalDevice* device = get_current_device();
+    return get_queue(device);
+}
 
-  void build_create_sampler_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, 
-  "enable-anisotropy", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CChar,}),
-  "min-filter", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
-  "mag-filter", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
-  mk_voidptr_ctype(pia));
+void build_get_queue_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
+    convert_c_fn(relic_get_queue, &fn_ctype, type, ass, a, point); 
+}
 
-  convert_c_fn(create_sampler, &fn_ctype, type, ass, a, point); 
-  }
+void build_start_recording_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "queue", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
+    convert_c_fn(start_recording_commands, &fn_ctype, type, ass, a, point); 
+}
 
-  void build_destroy_sampler_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, 
-  "sampler", mk_voidptr_ctype(pia), 
-  (CType){.sort = CSVoid});
+void build_submit_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 4,
+                               "queue", mk_voidptr_ctype(pia),
+                               "commands", mk_slice_ctype(pia),
+                               "semaphore", mk_voidptr_ctype(pia),
+                               "value", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                               (CType){.sort = CSVoid});
+    convert_c_fn(submit_commands, &fn_ctype, type, ass, a, point); 
+}
 
-  convert_c_fn(destroy_sampler, &fn_ctype, type, ass, a, point); 
-  }
+//   Commands 
+// -------------
 
-  // Descriptor Sets
-  // ----------------------------------
-
-  void build_create_descriptor_set_layout(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "binding_descriptions", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
-  convert_c_fn(create_descriptor_set_layout, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_destroy_descriptor_set_layout(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "layout", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_descriptor_set_layout, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_create_descriptor_pool(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, "sizes", mk_slice_ctype(pia), "max-sets", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), mk_voidptr_ctype(pia));
-  convert_c_fn(create_descriptor_pool, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_destroy_descriptor_pool(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "pool", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_descriptor_pool, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_alloc_descriptor_sets(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3,
-  "set_count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "descriptor_set_layouts", mk_voidptr_ctype(pia),
-  "pool", mk_voidptr_ctype(pia),
-  mk_slice_ctype(pia));
-  convert_c_fn(alloc_descriptor_sets, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_update_descriptor_sets(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(pia, 2,
-  "writes", mk_slice_ctype(pia),
-  "copies", mk_slice_ctype(pia),
-  (CType){.sort = CSVoid});
-                                 
-  convert_c_fn(update_descriptor_sets, &fn_ctype, type, ass, a, point); 
-  }
+                               "commands", mk_voidptr_ctype(pia),
+                               "pipeline", mk_voidptr_ctype(pia),
+                               (CType){.sort = CSVoid});
+    convert_c_fn(set_pipeline, &fn_ctype, type, ass, a, point); 
+}
 
-  // -----------------------------------------------------------------------------
-  //
-  //                                      Commands
-  //
-  // -----------------------------------------------------------------------------
+void relic_dispatch(HdCommandBuffer* cb, void* data, UVec3 grid_dimensions) {
+    HdLogicalDevice* device = get_current_device();
+    dispatch(device, cb, data, grid_dimensions);
+}
 
-  void build_create_command_pool_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
-  convert_c_fn(create_command_pool, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_destroy_command_pool_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "pool", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_command_pool, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_create_command_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "pool", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
-  convert_c_fn(create_command_buffer, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_free_command_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2,
-  "pool", mk_voidptr_ctype(pia),
-  "buffer",  mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(free_command_buffer, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_queue_submit_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType ptr_option = mk_struct_ctype(pia, 2,
-  "optional", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-  "ptr", mk_voidptr_ctype(pia));
-  CType fn_ctype = mk_fn_ctype(pia, 4, "buffer", mk_voidptr_ctype(pia),
-  "fence", ptr_option,
-  "wait", mk_slice_ctype(pia),
-  "signal", mk_slice_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(queue_submit, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_queue_present_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, "surface", mk_voidptr_ctype(pia),
-  "wait", mk_voidptr_ctype(pia),
-  "index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  (CType){.sort = CSVoid});
-  convert_c_fn(queue_present, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_queue_wait_idle_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
-  convert_c_fn(queue_wait_idle, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_begin_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, 
-  "buffer", mk_voidptr_ctype(pia), 
-  "usage", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_begin, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_end_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "buffer", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(command_end, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_reset_command_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "buffer", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(reset_command_buffer, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_begin_renderpass_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, "buffer", mk_voidptr_ctype(pia),
-  "surface", mk_voidptr_ctype(pia),
-  "image_index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_begin_render_pass, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_end_renderpass_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "buffer", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(command_end_render_pass, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_pipeline_barrier_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 6, 
-  "commands", mk_voidptr_ctype(pia), 
-  "source_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}), 
-  "dest_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}) ,
-  "memory_barriers", mk_slice_ctype(pia), 
-  "buffer_memory_barriers", mk_slice_ctype(pia), 
-  "image_memory_barriers", mk_slice_ctype(pia), 
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_pipeline_barrier, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_copy_buffer_to_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 5, 
-  "commands", mk_voidptr_ctype(pia), 
-  "buffer", mk_voidptr_ctype(pia), 
-  "image", mk_voidptr_ctype(pia),
-  "width", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-  "height", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_copy_buffer_to_image, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_push_constants_fn(PiType *type, Assembler *ass, PiAllocator *pia, Allocator *a, ErrorPoint *point) {
-  CType fn_ctype = mk_fn_ctype(pia, 6, "command_buffer", mk_voidptr_ctype(pia),
-  "pipeline", mk_voidptr_ctype(pia),
-  "shader_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}), 
-  "offset", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-  "size", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-  "value", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_push_constants, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_bind_descriptor_set_fn(PiType *type, Assembler *ass, PiAllocator *pia, Allocator *a, ErrorPoint *point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, "command_buffer", mk_voidptr_ctype(pia),
-  "pipeline", mk_voidptr_ctype(pia),
-  "descriptor_set", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_bind_descriptor_set, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_bind_vertex_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, "command_buffer", mk_voidptr_ctype(pia),
-  "buffer", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_bind_vertex_buffer, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_bind_vertex_buffers_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, "command_buffer", mk_voidptr_ctype(pia),
-  "buffers", mk_slice_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_bind_vertex_buffers, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_bind_index_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 3, "command_buffer", mk_voidptr_ctype(pia),
-  "buffer", mk_voidptr_ctype(pia),
-  "datatype", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_bind_index_buffer, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_set_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2, "buffer", mk_voidptr_ctype(pia),
-  "surface", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_set_surface, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 5, "buffer", mk_voidptr_ctype(pia),
-  "vertex-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "instance-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "first-vertex", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "first-instance", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_draw, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_command_draw_indexed_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 6, "buffer", mk_voidptr_ctype(pia),
-  "index-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "instance-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "first-index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  "vertex-offset", mk_primint_ctype((CPrimInt){.is_signed = Signed, .prim = CInt}),
-  "first-instance", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-  (CType){.sort = CSVoid});
-  convert_c_fn(command_draw_indexed, &fn_ctype, type, ass, a, point); 
-  }
-
-  // -----------------------------------------------------------------------------
-  //
-  //                                Syncrhonisation
-  //
-  // -----------------------------------------------------------------------------
-
-  void build_create_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
-  convert_c_fn(create_semaphore, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_destroy_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "semaphore", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_semaphore, &fn_ctype, type, ass, a, point); 
-  }
-  void build_create_fence_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
-  convert_c_fn(create_fence, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_destroy_fence_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "fence", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-  convert_c_fn(destroy_fence, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_wait_for_fence_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "fence", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(wait_for_fence, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_reset_fence_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "fence", mk_voidptr_ctype(pia),
-  (CType){.sort = CSVoid});
-  convert_c_fn(reset_fence, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_wait_for_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
-  convert_c_fn(wait_for_device, &fn_ctype, type, ass, a, point); 
-  }
-
-  void build_acquire_next_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType ret_type = mk_struct_ctype(pia, 2, "type", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
-  "image", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
-    
-  CType fn_ctype = mk_fn_ctype(pia, 2, "surface", mk_voidptr_ctype(pia), "semaphore", mk_voidptr_ctype(pia), ret_type);
-  convert_c_fn(acquire_next_image, &fn_ctype, type, ass, a, point); 
-  }
-*/
+void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType dims = mk_struct_ctype(pia, 3,
+                                 "x", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "y", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "z", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 3,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "data", mk_voidptr_ctype(pia),
+                                 "dimenstions", dims,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(relic_dispatch, &fn_ctype, type, ass, a, point); 
+}
 
 void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
@@ -582,14 +363,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
         .code = mk_u8_array(0, &ra),
         .data = mk_u8_array(0, &ra),
     };
-
-    /*
-     * ------------------------------------------------------------
-     *
-     * The V2 API is here
-     *
-     * ------------------------------------------------------------
-     */
 
     /**
      * Error handling  
@@ -889,16 +662,153 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     /** 
      * Pipeline 
      * ----------
-     * A pipeline is simply a series of shaders that get executed.
+     * A pipeline is simply a series of shaders that get executed, and (in the
+     * case of a graphics pipeline), the rasterizer state that the shaders use.
+     */
+    type = (PiType) {.sort = TType};
+
+    typep = mk_opaque_type(pia, "Pipeline", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Pipeline"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    pipeline_ty = e->value;
+
+    typep = mk_proc_type(pia, 1, mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)), pipeline_ty);
+    build_create_compute_pipeline_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-compute-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, pipeline_ty, mk_prim_type(pia, Unit));
+    build_destroy_pipeline_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+
+    /**
+     * Semaphores
+     * -----------
+     * 
+     */ 
+    type = (PiType) {.sort = TType};
+
+    typep = mk_opaque_type(pia, "Semaphore", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Semaphore"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    semaphore_ty = e->value;
+
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), semaphore_ty);
+    build_create_semaphore_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-semaphore"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    void wait_semaphore(HdLogicalDevice* device, HdSemaphore* sema, uint64_t value);
+
+    typep = mk_proc_type(pia, 2, semaphore_ty, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Unit));
+    build_wait_semaphore_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("wait-semaphore"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, semaphore_ty, mk_prim_type(pia, Unit));
+    build_destroy_semaphore_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-semaphore"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    /**
+     * Queues
+     * ----------
+     * Queues are an underdeveloped part of the API, primarily as they were
+     * underspecified by Aaltonen, so we are starting very basic and adding
+     * features only when necessary.
+     *
+     */
+    type = (PiType) {.sort = TType};
+
+    typep = mk_opaque_type(pia, "Queue", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Queue"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    queue_ty = e->value;
+
+    typep = mk_opaque_type(pia, "CommandBuffer", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("CommandBuffer"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    command_buffer_ty = e->value;
+
+    typep = mk_proc_type(pia, 0, queue_ty);
+    build_get_queue_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("get-queue"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, queue_ty, command_buffer_ty);
+    build_start_recording_commands_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("start-recording"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 4,
+                         queue_ty,
+                         mk_type_app(pia, get_slice_type(), command_buffer_ty),
+                         semaphore_ty,
+                         mk_prim_type(pia, UInt_64),
+                         mk_prim_type(pia, Unit));
+    build_submit_commands_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("submit-commands"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    /**
+     * Commands
+     * ----------
+     *
      */
 
-    // struct GpuDepthStencilState;
-    // struct GpuBlendState;
-    // struct GpuQueue;
-    // struct GpuCommandBuffer;
-    // struct GpuSemaphore;
-    // - 
+    typep = mk_proc_type(pia, 2, command_buffer_ty, pipeline_ty, mk_prim_type(pia, Unit));
+    build_set_pipeline_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("set-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
+    PiType *wave_dims = mk_struct_type(pia, 3,
+                                       "x", mk_prim_type(pia, UInt_32),
+                                       "y", mk_prim_type(pia, UInt_32),
+                                       "z", mk_prim_type(pia, UInt_32));
+    typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), wave_dims, mk_prim_type(pia, Unit));
+    build_dispatch_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("dispatch"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 }
 
 #endif

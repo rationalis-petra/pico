@@ -207,7 +207,28 @@ typedef struct HdPipeline HdPipeline;
 HdPipeline* create_compute_pipeline(U32Slice computeIR, HdLogicalDevice* device);
 HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
 HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshletIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
-void free_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
+void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
+
+// State Objects
+// --------------
+typedef enum {
+  OpNever,
+  OpLess,
+  OpEqual,
+  OpLessEqual,
+  OpGreater,
+  OpNotEqual,
+  OpGreaterEqual,
+  OpAlways
+} HdOP;
+
+// Semaphores
+// -----------
+// 
+typedef struct HdSemaphore HdSemaphore;
+HdSemaphore* create_semaphore(HdLogicalDevice* device, uint64_t init_value);
+void wait_semaphore(HdLogicalDevice* device, HdSemaphore* sema, uint64_t value);
+void destroy_semaphore(HdLogicalDevice* device, HdSemaphore* sema);
 
 // Queues
 // ------------
@@ -217,6 +238,65 @@ void free_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
 // - Transfer (for transferring memory)
 // - Video Decode
 // - Video Encode
+// In Vulkan, queues are created at the same time as devices. 
+// The Hedron API creates a single queue associated with the device, 
+// so 'get queue' just gets THE singular queue handle. In the future, this
+// should be expanded, but with caution, only introducing extra complecity if it
+// is justified.
+typedef struct HdQueue HdQueue;
+HdQueue* get_queue(HdLogicalDevice* device);
 
+typedef struct HdCommandBuffer HdCommandBuffer;
+
+HdCommandBuffer* start_recording_commands(HdQueue* queue);
+void submit_commands(HdQueue* queue, PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value);
+
+// Commands
+// ---------
+// 
+// TODO: stage meshlet shader??
+// TODO: stage acceleration structure??
+typedef enum {
+  StageTransfer,
+  StageCompute,
+  StageRasterColourOut,
+  StagePixelShader,
+  StageVertexShader
+} HdStage;
+
+// TODO: acceleration structure.
+typedef enum {
+  HazardDrawArguments = 0x1,
+  HazardDescriptors = 0x2,
+  HAZARD_DEPTH_STENCIL = 0x4
+} HdHazardFlags; 
+
+// TODO: investigate what signals need adding (if any)
+typedef enum {
+  SignalAtomicSet,
+  SignalAtomicMax,
+  SignalAtomicOr
+} HdSignal;
+
+/*
+ * These are for signalling GPU/GPU dependencies. The barrier is for use within
+ * a command buffer recording, whereas (I think) the signal after/wait before
+ * can be used between queues? (maybe??)
+ */
+void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags hazards);
+void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
+void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdOP op, HdHazardFlags hazards, uint64_t mask);
+
+void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline);
+//void set_depth_stencil_state(HdCommandBuffer* cb, GpuDepthStencilState state);
+//void set_blend_state(HdCommandBuffer* cb, GpuBlendState state); 
+
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+} UVec3;
+void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* dataGpu, UVec3 gridDimensions);
+void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* gridDimensionsGpu);
 
 #endif

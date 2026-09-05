@@ -214,7 +214,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .pNext = &features_12,
     };
 
-    size_t graphics_family = get_graphics_queue(device->device, instance->gpa);
+    uint32_t graphics_family = get_graphics_queue(device->device, instance->gpa);
 
     float queue_priority = 1.0f;
     VkDeviceQueueCreateInfo queue_create_info = {
@@ -242,11 +242,21 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     VkResult res = vkCreateDevice(device->device, &create_info, NULL, &vk_ldevice);
     CHECK_RESULT(res);
 
+    VkDeviceQueueInfo2 queue_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+        .flags = 0,
+        .queueFamilyIndex = graphics_family,
+        .queueIndex = 0,
+    };
+
     HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
         .physical_device = device->device,
         .gpa = instance->gpa,
+
+        .usable_buffers = mk_ptr_array(8, instance->gpa),
+        .pending_buffers = mk_sem_bufs_amap(8, instance->gpa),
 
         .allocations = mk_hdalloc_array(8, instance->gpa),
 
@@ -255,19 +265,43 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
         .graphics_pipeline_layout = VK_NULL_HANDLE,
     };
 
+
+    VkQueue vk_queue = VK_NULL_HANDLE;
+    vkGetDeviceQueue2(vk_ldevice, &queue_info, &vk_queue);
+    HdQueue queue = {
+        .queue = vk_queue,
+        .device = ldevice,
+    };
+    ldevice->queue = queue;
+
     initialize_pipeline_layouts(ldevice);
     return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
 void destroy_logical_device(HdLogicalDevice* device) {
     deinitialize_pipeline_layouts(device);
-    vkDestroyDevice(device->device, NULL);
     // TODO: make this a debug only panic/add debugging facility
     if (device->allocations.len != 0) {
         panic(mv_string("You haven't freed all device/shared memory that was allocated."));
     }
+    for (size_t i = 0; i < device->usable_buffers.len; i++) {
+        HdCommandBuffer* buffer = device->usable_buffers.data[i];
+        vkDestroyCommandPool(device->device, buffer->pool, NULL);
+        mem_free(buffer, device->gpa);
+    }
+    sdelete_ptr_array(device->usable_buffers);
+    for (size_t i = 0; i < device->pending_buffers.len; i++) {
+        PendingBufferArray arr = device->pending_buffers.data[i].val;
+        // TODO: panic/report error if arr.len > 0 - all pending buffest ought
+        // to be deleted.
+        sdelete_pbuf_array(arr);
+    }
+    sdelete_sem_bufs_amap(device->pending_buffers);
     sdelete_hdalloc_array(device->allocations);
+
+    vkDestroyDevice(device->device, NULL);
     mem_free(device, device->gpa);
+
 }
 
 

@@ -565,6 +565,31 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef ref, TypeCheckC
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_proj_missing_field(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    Syntax proj = get_syntax(ref, ctx.tape);
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
+    push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj.projector.field), a), a), &nodes);
+    push_ptr(mv_cstr_doc("however, this field does not exist on the type", a), &nodes);
+    push_ptr(pretty_type(get_type(proj.projector.val, ctx.tape), default_ptp, a),  &nodes);
+    if (type->sort == TStruct) {
+        PtrArray fields = mk_ptr_array(type->structure.fields.len, a);
+        push_ptr(mv_cstr_doc("Avaliable fields are:", a), &nodes);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(type->structure.fields.data[i].key), a), &nodes);
+        }
+        push_ptr(mv_sep_doc(fields, a), &nodes);
+    }
+    
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // Instance
 _Noreturn void type_error_instance_invalid_type(PiType *type, Range range, TypeCheckContext ctx) {
     Allocator* a = ctx.a;

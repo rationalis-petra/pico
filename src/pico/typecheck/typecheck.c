@@ -1133,9 +1133,9 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     ret_ty = source_type.structure.fields.data[i].val;
                 }
             }
+
             if (ret_ty == NULL) {
-                err.message = mv_cstr_doc("Field not found in struct!", a);
-                throw_pi_error(point, err);
+                type_error_proj_missing_field(&source_type, ref, ctx);
             }
             set_type(ref, ret_ty, ctx.tape);;
 

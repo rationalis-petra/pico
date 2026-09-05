@@ -6,11 +6,6 @@
 
 
 // Pipeline
-struct HdPipeline {
-    VkPipeline pipeline;
-    VkPipelineBindPoint bind_point;
-};
-
 typedef enum {
     ComputePipeline,
     GraphicsPipeline,
@@ -67,11 +62,18 @@ void initialize_pipeline_layouts(HdLogicalDevice* device) {
 
     // Compute
     {
-        VkPushConstantRange pushConstantRange = {
-            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-            .offset = 0,
-            .size = sizeof(VkDeviceAddress),
-        };
+      VkPushConstantRange pushConstantRange = {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        // Guaranteed by the vulkan spec.
+        .size = 128,
+        /* TODO:
+         *  We want our own shading language which allows the main to take
+         *  values of arbitrary type, compiling to use push-constatns behind the
+         *  scenes.
+         *  Make this grow to device size/limit?
+         */
+      };
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -176,6 +178,8 @@ HdPipeline* create_compute_pipeline(U32Slice compute_IR, HdLogicalDevice* device
 
     HdPipeline* out = mem_alloc(sizeof(HdPipeline), device->gpa);
     *out = (HdPipeline) {
+        .pipeline = pipeline,
+        .bind_point = VK_PIPELINE_BIND_POINT_COMPUTE,
     };
     return out;
 }
@@ -235,7 +239,7 @@ HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshlet_IR, U32Slice pixel
     return hd_pipeline;
 }
 
-void free_pipeline(HdPipeline* pipeline, HdLogicalDevice* device) {
+void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device) {
     vkDestroyPipeline(device->device, pipeline->pipeline, NULL);
     mem_free(pipeline, device->gpa);
 }
