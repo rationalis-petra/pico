@@ -23,12 +23,13 @@ void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* data, UVec3 gr
     VkPipelineLayout layout = cb->current_pipeline->bind_point == VK_PIPELINE_BIND_POINT_COMPUTE
         ? device->compute_pipeline_layout
         : device->graphics_pipeline_layout;
+    
     vkCmdPushConstants(
         cb->buffer,
         layout,
         VK_SHADER_STAGE_COMPUTE_BIT,
         0,
-        sizeof(VkDeviceAddress) * 4,
+        cb->current_pipeline->data_size,
         data);
 
     vkCmdDispatch(cb->buffer,

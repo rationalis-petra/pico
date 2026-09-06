@@ -204,7 +204,7 @@ typedef struct {
 } HdRasterDescription;
 
 typedef struct HdPipeline HdPipeline;
-HdPipeline* create_compute_pipeline(U32Slice computeIR, HdLogicalDevice* device);
+HdPipeline* create_compute_pipeline(U32Slice computeIR, size_t data_size, HdLogicalDevice* device);
 HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
 HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshletIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
 void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);

@@ -204,13 +204,16 @@ void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia,
 //   Pipelines 
 // -------------
 
-HdPipeline* relic_create_compute_pipeline(U32Slice compute_IR) {
+HdPipeline* relic_create_compute_pipeline(U32Slice compute_IR, size_t data_size) {
   HdLogicalDevice* device = get_current_device();
-  return create_compute_pipeline(compute_IR, device);
+  return create_compute_pipeline(compute_IR, data_size, device);
 }
 
 void build_create_compute_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 1, "compute_ir", mk_slice_ctype(pia), mk_voidptr_ctype(pia));
+  CType fn_ctype = mk_fn_ctype(pia, 2,
+                               "compute_ir", mk_slice_ctype(pia),
+                               "data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                               mk_voidptr_ctype(pia));
   convert_c_fn(relic_create_compute_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
@@ -674,7 +677,10 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     pipeline_ty = e->value;
 
-    typep = mk_proc_type(pia, 1, mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)), pipeline_ty);
+    typep = mk_proc_type(pia, 2,
+                         mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)),
+                         mk_prim_type(pia, UInt_64),
+                         pipeline_ty);
     build_create_compute_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-compute-pipeline"));
     fn_segments.code = get_instructions(ass);

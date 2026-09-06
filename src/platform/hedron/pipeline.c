@@ -124,7 +124,7 @@ void deinitialize_pipeline_layouts(HdLogicalDevice* device) {
 }
 
 const char* universal_entry_point = "main";
-HdPipeline* create_compute_pipeline(U32Slice compute_IR, HdLogicalDevice* device) {
+HdPipeline* create_compute_pipeline(U32Slice compute_IR, size_t data_size, HdLogicalDevice* device) {
     //VulkanDevice* vulkanDevice = device->vulkanDevice;
     // TODO: extract static sampler info from complied shader. This will reqiure 
     //       replacing the U32Slice with a richer shader datatype.
@@ -180,6 +180,7 @@ HdPipeline* create_compute_pipeline(U32Slice compute_IR, HdLogicalDevice* device
     *out = (HdPipeline) {
         .pipeline = pipeline,
         .bind_point = VK_PIPELINE_BIND_POINT_COMPUTE,
+        .data_size = data_size,
     };
     return out;
 }

@@ -129,6 +129,7 @@ struct HdSwapchain {
 struct HdPipeline {
     VkPipeline pipeline;
     VkPipelineBindPoint bind_point;
+    size_t data_size;
 };
 
 // Semaphores
