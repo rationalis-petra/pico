@@ -837,7 +837,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                         args_size += ADDRESS_SIZE;;
                         generate_stack_size_of(RAX, aty, env, ass, a, point);
                         build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
-                        build_binary_op(Mov, reg(RDX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+                        build_binary_op(Mov, reg(RDX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
                         generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
                     } else {
 
@@ -853,7 +853,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 
                 // Copy down the function itself & call
                 // TODO (BUG!!): This is returning 0x0 for division
-                build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RCX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
                 build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
                 data_stack_shrink(env, args_size);
 
@@ -1112,7 +1112,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         args_size += ADDRESS_SIZE;
                 
         // Copy down the function itself & call
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         build_binary_op(Add, reg(RSP, sz_64), imma(args_size), ass, a, point);
 

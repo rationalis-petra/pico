@@ -19,7 +19,7 @@
 #include "app/help_string.h"
 #include "app/repl.h"
 
-static const char* version = "0.2.8";
+static const char* version = "0.2.9";
 
 int main(int argc, char** argv) {
   // Setup

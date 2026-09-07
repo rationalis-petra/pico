@@ -17,4 +17,8 @@ void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     panic(mv_string("Not implemented: bd_generate_type_expr"));
 }
 
+InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData data, Allocator* a) {
+    panic(mv_string("Not implemented: bd_generate_instance_closures"));
+}
+
 #endif

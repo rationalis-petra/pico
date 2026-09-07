@@ -1055,7 +1055,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             // Check if any fields are missing when a new struct is being created
             // error message:
-            if (get_type(untyped.structure.base, ctx.tape)->sort == TKind) {
+            if (get_type(untyped.structure.base, ctx.tape)->sort == TType) {
                 SymbolArray missing_fields = mk_symbol_array(4, a);
                 for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                     Symbol field = struct_type->structure.fields.data[i].key;
@@ -1133,9 +1133,9 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     ret_ty = source_type.structure.fields.data[i].val;
                 }
             }
+
             if (ret_ty == NULL) {
-                err.message = mv_cstr_doc("Field not found in struct!", a);
-                throw_pi_error(point, err);
+                type_error_proj_missing_field(&source_type, ref, ctx);
             }
             set_type(ref, ret_ty, ctx.tape);;
 

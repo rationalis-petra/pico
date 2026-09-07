@@ -33,12 +33,6 @@ int main(int argc, char** argv) {
     }
 #endif
 
-#ifdef USE_VULKAN
-    if (init_hedron(stdalloc)) {
-        st_write_string(mv_string("Warning: failed to init hedron!\n"), cout);
-    }
-#endif
-
     thread_init_dynamic_vars();
 
     /** TODO: current package/module?? */
@@ -56,10 +50,6 @@ int main(int argc, char** argv) {
     // Cleanup
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
-
-#ifdef USE_VULKAN
-    teardown_hedron();
-#endif
 
 #ifdef WINDOW_SYSYTEM
     pl_teardown_window_system();
