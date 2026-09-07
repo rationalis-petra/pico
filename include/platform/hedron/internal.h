@@ -14,6 +14,7 @@
 #endif
 
 #define MAX_COLOUR_ATTACHMENTS 8
+//#define VK_NO_PROTOTYPES
 
 #include <vulkan/vulkan.h>
 
@@ -92,13 +93,8 @@ struct HdLogicalDevice {
 
     HdQueue queue;
 
-    // Every graphics/compute pipeline shares the same layout, so instead of
-    // wasting resources (and memory) recreating the pipeline layout every time,
-    // they are cached here: 
-    VkPipelineLayout compute_pipeline_layout;
-    VkPipelineLayout graphics_pipeline_layout;
-    VkDescriptorSetLayout descriptor_set_layout; // part of pipeline, needs cleanup
-    uint64_t max_sampled_images; // TODO: check datatype (uint32_t?)
+    // function pointers for extensions we need go here.
+    PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
 };
 
 // called during device creation

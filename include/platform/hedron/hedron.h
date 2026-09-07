@@ -386,8 +386,8 @@ typedef struct {
     uint32_t y;
     uint32_t z;
 } UVec3;
-void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* dataGpu, UVec3 gridDimensions);
-void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* gridDimensionsGpu);
+void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* dataGpu, UVec3 group_count);
+//void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* group_count_device);
 
 void begin_render_pass(HdCommandBuffer* cb, HdRenderDesc desc);
 void end_render_pass(HdCommandBuffer* cb);

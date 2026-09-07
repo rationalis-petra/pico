@@ -18,24 +18,22 @@ void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline) {
     vkCmdBindPipeline(cb->buffer, pipeline->bind_point, pipeline->pipeline);
 }
 
-void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* data, UVec3 gridDimensions) {
-    //VkDeviceAddress address = reinterpret_cast<VkDeviceAddress>(dataGpu);
-    VkPipelineLayout layout = cb->current_pipeline->bind_point == VK_PIPELINE_BIND_POINT_COMPUTE
-        ? device->compute_pipeline_layout
-        : device->graphics_pipeline_layout;
-    
-    vkCmdPushConstants(
-        cb->buffer,
-        layout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        cb->current_pipeline->data_size,
-        data);
+void emit_root_data(HdCommandBuffer* commands, void* data) {
+    const VkPushDataInfoEXT info = {
+        .sType = VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT,
+        .data = {
+            .address = data,
+            .size = commands->current_pipeline->data_size,
+        },
+    };
+    commands->device->vkCmdPushDataEXT(commands->buffer, &info);
+}
 
-    vkCmdDispatch(cb->buffer,
-        gridDimensions.x,
-        gridDimensions.y,
-        gridDimensions.z);
+void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* data, UVec3 group_count) {
+    // TODO: input validation with debug layers
+
+    emit_root_data(cb, data);
+    vkCmdDispatch(cb->buffer, group_count.x, group_count.y, group_count.z);
 }
 
 #endif

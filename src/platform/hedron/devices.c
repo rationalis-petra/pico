@@ -174,21 +174,6 @@ uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
 }
 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
-// 1. Prepare descriptor buffer properties struct
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buffer_props = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
-        .pNext = NULL
-    };
-
-    // 2. Chain into standard PhysicalDeviceProperties2
-    VkPhysicalDeviceProperties2 device_props = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &desc_buffer_props
-    };
-
-    // 3. Query physical device
-    vkGetPhysicalDeviceProperties2(device->device, &device_props);
-    uint64_t max_sampled_images = desc_buffer_props.maxResourceDescriptorBufferBindings;
     // Enable feature on physical device features chain during device creation
     // Chain deviceFeatures2 into VkDeviceCreateInfo::pNext
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
@@ -269,9 +254,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
 
         .allocations = mk_hdalloc_array(8, instance->gpa),
 
-        .max_sampled_images = max_sampled_images,
-        .compute_pipeline_layout = VK_NULL_HANDLE,
-        .graphics_pipeline_layout = VK_NULL_HANDLE,
+        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vk_ldevice, "vkCmdPushDataEXT")
     };
 
 
@@ -283,12 +266,10 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     };
     ldevice->queue = queue;
 
-    initialize_pipeline_layouts(ldevice);
     return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
 void destroy_logical_device(HdLogicalDevice* device) {
-    deinitialize_pipeline_layouts(device);
     // TODO: make this a debug only panic/add debugging facility
     if (device->allocations.len != 0) {
         panic(mv_string("You haven't freed all device/shared memory that was allocated."));
