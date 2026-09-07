@@ -13,6 +13,7 @@
 #error "unrecognized OS"
 #endif
 
+#define MAX_COLOUR_ATTACHMENTS 8
 
 #include <vulkan/vulkan.h>
 
@@ -21,9 +22,6 @@
 
 #include "platform/hedron/hedron.h"
 #include "platform/window/internal.h"
-
-HdError convert_error_type(VkResult desc);
-#define CHECK_RESULT(result) {if (result != VK_SUCCESS) { return (HdPtrResult) { .type = Err, .error = convert_error_type(result),};}};
 
 // Instance & Devices
 struct HdInstance {
@@ -136,3 +134,12 @@ struct HdPipeline {
 struct HdSemaphore {
     VkSemaphore semaphore;
 };
+
+// Conversions & Utility, used by internal functions
+HdError convert_error_type(VkResult desc);
+#define CHECK_RESULT(result) {if (result != VK_SUCCESS) { return (HdPtrResult) { .type = Err, .error = convert_error_type(result),};}};
+
+VkCullModeFlags cull_to_vk(HdCull cull);
+VkCullModeFlags blend_factor_to_vk(HdBlendFactor blend);
+VkBlendOp blend_op_to_vk(HdBlendOp op);
+VkFormat format_to_vk(HdFormat format);

@@ -11,12 +11,13 @@
 //   
 //  
 
-const uint32_t num_required_device_extensions = 4;
+const uint32_t num_required_device_extensions = 5;
 const char *required_device_extensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-    VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, // NGAPI
+    VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, 
+    VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
     //VK_EXT_MESH_SHADER_EXTENSION_NAME, // Note: not supported on laptop :(
 };
 
@@ -46,10 +47,16 @@ bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
 }
 
 bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_heap_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
         .pNext = NULL
     };
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+        .pNext = &descriptor_heap_features,
+    };
+
+// Chain shaderObjectFeatures into your VkDeviceCreateInfo pNext
     VkPhysicalDeviceVulkan14Features supported_features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
       .pNext = &desc_buffer_features,
@@ -73,17 +80,16 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     };
     vkGetPhysicalDeviceFeatures2(device, &supported_features);
 
-    //VkPhysicalDeviceProperties device_properties;
-    //vkGetPhysicalDevicePropertiers(device, &device_properties);
-
     const bool extensions_supported = check_device_extension_support(device, a);
 
     // TODO: move some (or all) of these checks into the hedron API
     return (desc_buffer_features.descriptorBuffer
+            && supported_features_14.maintenance5
             && supported_features_13.dynamicRendering
-            && supported_features_12.timelineSemaphore // needed?? 
-            && supported_features_12.descriptorIndexing  // NGAPI
-            && supported_features_12.bufferDeviceAddress // NGAPI
+            && supported_features_12.timelineSemaphore
+            && supported_features_12.scalarBlockLayout
+            && supported_features_12.descriptorIndexing
+            && supported_features_12.bufferDeviceAddress
             && supported_features_12.descriptorBindingPartiallyBound
             && supported_features_12.descriptorBindingVariableDescriptorCount
             && supported_features_13.synchronization2
@@ -183,7 +189,8 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     // 3. Query physical device
     vkGetPhysicalDeviceProperties2(device->device, &device_props);
     uint64_t max_sampled_images = desc_buffer_props.maxResourceDescriptorBufferBindings;
-
+    // Enable feature on physical device features chain during device creation
+    // Chain deviceFeatures2 into VkDeviceCreateInfo::pNext
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .descriptorBuffer = VK_TRUE,
@@ -191,6 +198,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     };
     VkPhysicalDeviceVulkan14Features features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+      .maintenance5 = VK_TRUE,
       .pNext = &desc_buffer_features,
     };
     VkPhysicalDeviceVulkan13Features features_13 = {
@@ -206,6 +214,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .timelineSemaphore = VK_TRUE,
       .descriptorIndexing = VK_TRUE,
       .bufferDeviceAddress = VK_TRUE,
+      .scalarBlockLayout = VK_TRUE,
       .descriptorBindingPartiallyBound = VK_TRUE,
       .descriptorBindingVariableDescriptorCount = VK_TRUE,
     };

@@ -129,7 +129,7 @@ void free_device_memory(DeviceAddress address, HdLogicalDevice* device);
 typedef enum {
   CullCCW,
   CullCW,
-  CullALL,
+  CullAll,
   CullNone,
 } HdCull;
 
@@ -138,75 +138,118 @@ typedef enum {
   BlendSubtract,
   BlendRevSubtract,
   BlendMin,
-  BlendMax
-} HdBlend;
+  BlendMax,
+} HdBlendOp;
 
 typedef enum {
   FactorZero,
   FactorOne,
   FactorSrcColour,
-  factorDstColour,
+  FactorDstColour,
   FactorSrcAlpha,
+  FactorDstAlpha,
   FactorOneMinusSrcColour,
   FactorOneMinusDstColour,
   FactorOneMinusSrcAlpha,
-  FactorDstAlpha,
-  FactorOneMinus_Dst_Alpha,
-  // TODO: check this is all of them
-} HdFactor;
+  FactorOneMinusDstAlpha,
+  FactorSrcAlphaSaturate,
+} HdBlendFactor;
 
 typedef enum {
-  TriangleList,
-  TriangleStrip,
-  TriangleFan,
-} HdTopology;
-
-typedef enum {
-  FormatNone,
-  FormatRGBA8Unorm,
-  FormatD32Float,
-  FormatRG11B10Float,
-  FormatRGB10A2Unorm,
-  FormatRGB32Float,
-  FormatRG32Float,
-  FormatRGBA32Float,
-  FormatRGBA16Float, // TODO: fill out rest of list? 
+  Format_R8_SRGB,
+  Format_RG8_SRGB,
+  Format_RGB8_SRGB,
+  Format_RGBA8_SRGB,
+  Format_BGRA8_SRGB,
+  Format_RGBA4_SRGB,
+  Format_R5G5B5A1_UNORM,
+  Format_R5G6B5_UNORM,
+  Format_R8_UNORM,
+  Format_RG8_UNORM,
+  Format_RGB8_UNORM,
+  Format_RGBA8_UNORM,
+  Format_BRGA8_UNORM,
+  Format_R16_UNORM,
+  Format_RG16_UNORM,
+  Format_RGB16_UNORM,
+  Format_RGBA16_UNORM,
+  Format_R8_UInt,
+  Format_RG8_UInt,
+  Format_RGB8_UInt,
+  Format_RGBA8_UInt,
+  Format_BRGA8_UInt,
+  Format_R16_UInt,
+  Format_RG16_UInt,
+  Format_RGB16_UInt,
+  Format_RGBA16_UInt,
+  Format_R32_UInt,
+  Format_RG32_UInt,
+  Format_RGB32_UInt,
+  Format_RGBA32_UInt,
+  Format_R16_Float,
+  Format_RG16_Float,
+  Format_RGB16_Float,
+  Format_RGBA16_Float,
+  Format_R32_Float,
+  Format_RG32_Float,
+  Format_RGB32_Float,
+  Format_RGBA32_Float,
+  Format_RGB10A2_UNorm,
+  Format_RG11B10_Float,
+  Format_D16_UNorm,
+  Format_D24_UNorm_S8_UInt,
+  Format_D32_Float,
+  Format_S8_UInt,
+  Format_D32_Float_S8_UInt,
+  Format_EAC_RG,
+  Format_ASTC_4X4_SRGB,
+  Format_ASTC_4X4_UNorm,
+  Format_BC3_SRGB,
+  Format_BC3_UNorm,
+  Format_BC5_RG,
+  Format_BC7_SRGB,
+  Format_BC7_UNorm,
+  FormatUndefined,
 } HdFormat;
+OPTION_TYPE(HdFormat, HdFormat);
+
+typedef struct {
+    HdBlendFactor source;
+    HdBlendFactor destination;
+    HdBlendOp operation;
+} BlendComponentState;
+
+typedef struct {
+    BlendComponentState colour;
+    BlendComponentState alpha;
+} HdBlendState;
+OPTION_TYPE(HdBlendState, HdBlendState);
 
 typedef struct {
     HdFormat format;
-    uint8_t writeMask;
+    HdBlendStateOption blend;
+    uint8_t write_mask;
 } HdColourTarget;
 SLICE_TYPE(HdColourTarget, HdColourTarget);
 
 typedef struct {
-    HdBlend colorOp;
-    HdFactor srcColourFactor;
-    HdFactor dstColourFactor;
-    HdBlend alphaOp;
-    HdFactor srcAlphaFactor;
-    HdFactor dstAlphaFactor;
-    uint8_t colorWriteMask;
-} HdBlendDescription;
-OPTION_TYPE(HdBlendDescription, HdBlendDescription);
+    float constant;
+    float clamp;
+    float slope;
+} HdDepthBias;
+OPTION_TYPE(HdDepthBias, HdDepthBias);
 
 typedef struct {
-    HdTopology topology;
     HdCull cull;
-    bool alphaToCoverage;
-    bool supportDualSourceBlending;
-    uint8_t sampleCount;
-    HdFormat depthFormat;
-    HdFormat stencilFormat;
-    
-    HdColourTargetSlice colorTargets;
-    HdBlendDescriptionOption blendstate; // optional embedded blend state
+    HdFormatOption depth_format;
+    HdDepthBiasOption depth_bias;
+    HdFormatOption stencil_format;
+    HdColourTargetSlice colour_targets;
 } HdRasterDescription;
 
 typedef struct HdPipeline HdPipeline;
 HdPipeline* create_compute_pipeline(U32Slice computeIR, size_t data_size, HdLogicalDevice* device);
-HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
-HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshletIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
+HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, bool is_meshlet, size_t data_size, HdLogicalDevice* device);
 void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
 
 // State Objects
@@ -220,7 +263,7 @@ typedef enum {
   OpNotEqual,
   OpGreaterEqual,
   OpAlways
-} HdOP;
+} HdCompOp;
 
 // Semaphores
 // -----------
@@ -278,6 +321,53 @@ typedef enum {
   SignalAtomicOr
 } HdSignal;
 
+typedef enum {
+    LOpLoad,
+    LOpClear,
+    LOpDiscard,
+} LoadOp;
+
+typedef enum {
+    SOpStore,
+    SOpDiscard,
+} StoreOp;
+
+typedef struct {
+    float x;
+    float y;
+    float z;
+    float w;
+} Vec4f;
+
+typedef struct RenderView RenderView;
+typedef struct {
+    RenderView* render_view;
+    LoadOp load;
+    StoreOp store;
+    Vec4f clear;
+} HdColourAttachment;
+SLICE_TYPE(HdColourAttachment, ColourAttachment)
+
+typedef struct {
+    RenderView* render_view;
+    LoadOp load;
+    StoreOp store;
+    float clear;
+} HdDepthAttachment;
+
+typedef struct {
+    RenderView* render_view;
+    LoadOp load;
+    StoreOp store;
+    uint8_t clear;
+} HdStencilAttachment;
+
+typedef struct {
+    ColourAttachmentSlice colours;
+    HdDepthAttachment depth;
+    HdStencilAttachment stencil;
+} HdRenderDesc;
+
 /*
  * These are for signalling GPU/GPU dependencies. The barrier is for use within
  * a command buffer recording, whereas (I think) the signal after/wait before
@@ -285,7 +375,7 @@ typedef enum {
  */
 void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags hazards);
 void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
-void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdOP op, HdHazardFlags hazards, uint64_t mask);
+void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
 
 void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline);
 //void set_depth_stencil_state(HdCommandBuffer* cb, GpuDepthStencilState state);
@@ -298,5 +388,9 @@ typedef struct {
 } UVec3;
 void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* dataGpu, UVec3 gridDimensions);
 void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* gridDimensionsGpu);
+
+void begin_render_pass(HdCommandBuffer* cb, HdRenderDesc desc);
+void end_render_pass(HdCommandBuffer* cb);
+
 
 #endif

@@ -30,6 +30,16 @@ static PiType* alloc_sort_ty;
 static PiType* device_address_ty;
 static PiType* shared_address_ty;
 
+static PiType* format_ty;
+static PiType* cull_ty;
+static PiType* blend_op_ty;
+static PiType* blend_factor_ty;
+static PiType* blend_component_state_ty;
+static PiType* blend_state_ty;
+static PiType* colour_target_ty;
+static PiType* depth_bias_ty;
+static PiType* raster_description_ty;
+
 static PiType* pipeline_ty;
 
 static PiType* queue_ty;
@@ -217,8 +227,46 @@ void build_create_compute_pipeline_fn(PiType* type, Assembler* ass, PiAllocator*
   convert_c_fn(relic_create_compute_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
-//HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
-//HdPipeline* create_graphics_meshlet_pipeline(U32Slice meshletIR, U32Slice pixelIR, HdRasterDescription desc, HdLogicalDevice* device);
+typedef struct {
+  uint64_t tag;
+  U32Slice ir;
+} EitherVertexMeshIR;
+
+HdPipeline* relic_create_graphics_pipeline(EitherVertexMeshIR first_stage, U32Slice pixelIR, HdRasterDescription desc, size_t data_size) {
+  HdLogicalDevice* device = get_current_device();
+  return create_graphics_pipeline(first_stage.ir, pixelIR, desc, first_stage.tag, data_size, device);
+}
+
+void build_create_graphics_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType depth_bias_ctype = mk_struct_ctype(pia, 3,
+                                           "constant", (CType){.sort = CSFloat},
+                                           "clamp", (CType){.sort = CSFloat},
+                                           "slope", (CType){.sort = CSFloat});
+  CType depth_bias_option_ctype = mk_struct_ctype(pia, 2,
+                                            "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                             "depth_bias", depth_bias_ctype);
+  CType format_option_ctype = mk_struct_ctype(pia, 2,
+                                              "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                             "val", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+  CType raster_desc_ctype = mk_struct_ctype(pia, 5,
+                                            "cull", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                            "depth_format", format_option_ctype,
+                                            "depth_bias", depth_bias_option_ctype,
+                                            "stencil_format", format_option_ctype,
+                                            "colour_targets", mk_slice_ctype(pia));
+  CType first_stage_ctype = mk_struct_ctype(pia, 2,
+                                            "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                            "ir", mk_union_ctype(pia, 2, 
+                                                                 "vertex", mk_slice_ctype(pia),
+                                                                 "meshlet", mk_slice_ctype(pia)));
+  CType fn_ctype = mk_fn_ctype(pia, 4,
+                               "first_stage_ir", first_stage_ctype,
+                               "pixel_ir", mk_slice_ctype(pia),
+                               "raster-description", raster_desc_ctype,
+                               "data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                               mk_voidptr_ctype(pia));
+  convert_c_fn(relic_create_graphics_pipeline, &fn_ctype, type, ass, a, point); 
+}
 
 void relic_destroy_pipeline(HdPipeline* pipeline) {
   HdLogicalDevice* device = get_current_device();
@@ -372,7 +420,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      */
     type = (PiType) {.sort = TType};
 
-    typep = mk_enum_type(pia, 31,
+    typep = mk_named_type(pia, "ErrorCode", mk_enum_type(pia, 31,
                          "not-ready", 0,
                          "timeout", 0,
                          "event-set", 0,
@@ -403,7 +451,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          "suboptimal", 0,
                          "error-out-of-date", 0,
                          "error-incompatible-display", 0,
-                         "incompatible-shader-binary", 0);
+                         "incompatible-shader-binary", 0));
     name = string_to_name(mv_string("ErrorCode"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -663,12 +711,166 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      */
 
     /** 
-     * Pipeline 
+     * Pipelines
      * ----------
      * A pipeline is simply a series of shaders that get executed, and (in the
      * case of a graphics pipeline), the rasterizer state that the shaders use.
      */
     type = (PiType) {.sort = TType};
+
+    typep = mk_named_type(pia, "Format", mk_enum_type(pia, 53,
+                         "r8-srgb", 0,
+                         "rg8-srgb", 0,
+                         "rgb8-srgb", 0,
+                         "rgba8-srgb", 0,
+                         "bgra8-srgb", 0,
+                         "rgba4-srgb", 0,
+                         "r5g5b5a1-unorm", 0,
+                         "r5g6b5-unorm", 0,
+                         "r8-unorm", 0,
+                         "rg8-unorm", 0,
+                         "rgb8-unorm", 0,
+                         "rgba8-unorm", 0,
+                         "brga8-unorm", 0,
+                         "r16-unorm", 0,
+                         "rg16-unorm", 0,
+                         "rgb16-unorm", 0,
+                         "rgba16-unorm", 0,
+                         "r8-uint", 0,
+                         "rg8-uint", 0,
+                         "rgb8-uint", 0,
+                         "rgba8-uint", 0,
+                         "brga8-uint", 0,
+                         "r16-uint", 0,
+                         "rg16-uint", 0,
+                         "rgb16-uint", 0,
+                         "rgba16-uint", 0,
+                         "r32-uint", 0,
+                         "rg32-uint", 0,
+                         "rgb32-uint", 0,
+                         "rgba32-uint", 0,
+                         "r16-float", 0,
+                         "rg16-float", 0,
+                         "rgb16-float", 0,
+                         "rgba16-float", 0,
+                         "r32-float", 0,
+                         "rg32-float", 0,
+                         "rgb32-float", 0,
+                         "rgba32-float", 0,
+                         "rgb10,a2-unorm", 0,
+                         "rg11b10,-float", 0,
+                         "d16-unorm", 0,
+                         "d24-unorm-s8-uint", 0,
+                         "d32-float", 0,
+                         "s8-uint", 0,
+                         "d32-float-s8-uint", 0,
+                         "eac-rg", 0,
+                         "astc-4x4-srgb", 0,
+                         "astc-4x4-unorm", 0,
+                         "bc3-srgb", 0,
+                         "bc3-unorm", 0,
+                         "bc5-rg", 0,
+                         "bc7-srgb", 0,
+                         "bc7-unorm", 0));
+    name = string_to_name(mv_string("Format"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    format_ty = e->value;
+
+    typep = mk_named_type(pia, "Cull", mk_enum_type(pia, 4,
+                         "counter-clockwise", 0,
+                         "clockwise", 0,
+                         "all", 0,
+                          "none", 0));
+    name = string_to_name(mv_string("Cull"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    cull_ty = e->value;
+
+    typep = mk_named_type(pia, "BlendOp", mk_enum_type(pia, 4,
+                         "+", 0,
+                         "-", 0,
+                         "reverse-", 0,
+                         "min", 0,
+                         "max", 0));
+    name = string_to_name(mv_string("BlendOp"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    blend_op_ty = e->value;
+
+    typep = mk_named_type(pia, "Factor", mk_enum_type(pia, 11,
+                         "zero", 0,
+                         "one", 0,
+                         "source-colour", 0,
+                         "dest-colour", 0,
+                         "source-alpha", 0,
+                         "dest-alpha", 0,
+                         "one-minus-source-colour", 0,
+                         "one-minus-dest-colour", 0,
+                         "one-minus-source-alpha", 0,
+                         "one-minus-test-alpha", 0,
+                         "alpha-saturate", 0));
+    name = string_to_name(mv_string("BlendFactor"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    blend_factor_ty = e->value;
+
+    typep = mk_struct_type(pia, 3,
+                           "source", blend_factor_ty,
+                           "destination", blend_factor_ty,
+                           "operation", blend_op_ty);
+    name = string_to_name(mv_string("BlendComponentState"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    blend_component_state_ty = e->value;
+
+    typep = mk_struct_type(pia, 2,
+                           "colour", blend_component_state_ty,
+                           "alpha", blend_component_state_ty);
+    name = string_to_name(mv_string("BlendState"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    blend_state_ty = e->value;
+
+    typep = mk_named_type(pia, "ColourTarget",
+                          mk_struct_type(pia, 3,
+                                         "format", format_ty,
+                                         "blend", mk_type_app(pia, get_maybe_type(), blend_state_ty),
+                                         "write-mask", mk_prim_type(pia, UInt_8)));
+    name = string_to_name(mv_string("ColourTarget"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    colour_target_ty = e->value;
+
+    typep = mk_named_type(pia, "DepthBias",
+                          mk_struct_type(pia, 3,
+                           "constant", mk_prim_type(pia, Float_32),
+                           "clamp", mk_prim_type(pia, Float_32),
+                           "slope", mk_prim_type(pia, Float_32)));
+    name = string_to_name(mv_string("DepthBias"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    depth_bias_ty = e->value;
+
+    typep = mk_struct_type(pia, 5,
+                           "cull", cull_ty,
+                           "depth-format", mk_type_app(pia, get_maybe_type(), format_ty),
+                           "depth-bias", mk_type_app(pia, get_maybe_type(), depth_bias_ty),
+                           "stencil-format", mk_type_app(pia, get_maybe_type(), format_ty),
+                           "colour-targets", mk_type_app(pia, get_slice_type(), colour_target_ty));
+    name = string_to_name(mv_string("RasterDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    raster_description_ty = e->value;
 
     typep = mk_opaque_type(pia, "Pipeline", module, mk_prim_type(pia, Address));
     name = string_to_name(mv_string("Pipeline"));
@@ -683,6 +885,28 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          pipeline_ty);
     build_create_compute_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-compute-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_enum_type(pia, 2,
+                         "vertex-ir", 1, mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)),
+                         "meshlet-ir", 1, mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)));
+    name = string_to_name(mv_string("FirstStageIR"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    PiType* first_stage_ir_ty = e->value;
+
+    typep = mk_proc_type(pia, 4,
+                         first_stage_ir_ty,
+                         mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)),
+                         raster_description_ty,
+                         mk_prim_type(pia, UInt_64),
+                         pipeline_ty);
+    build_create_graphics_pipeline_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-graphics-pipeline"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
