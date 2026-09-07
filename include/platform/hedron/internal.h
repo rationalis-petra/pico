@@ -1,6 +1,7 @@
 #include "data/meta/array_header.h"
 #include "platform/machine_info.h"
 
+
 #ifndef WINDOW_SYSTEM
 #define NO_PLATFORM_AVAILABLE
 #elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
@@ -9,11 +10,16 @@
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #elif OS_FAMILY == WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #else 
 #error "unrecognized OS"
 #endif
 
-#define MAX_COLOUR_ATTACHMENTS 8
 //#define VK_NO_PROTOTYPES
 
 #include <vulkan/vulkan.h>
@@ -23,6 +29,8 @@
 
 #include "platform/hedron/hedron.h"
 #include "platform/window/internal.h"
+
+#define MAX_COLOUR_ATTACHMENTS 8
 
 // Instance & Devices
 struct HdInstance {
