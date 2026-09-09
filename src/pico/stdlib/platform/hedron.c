@@ -25,6 +25,7 @@ static PiType* physical_device_ty;
 static PiType* logical_device_ty;
 
 static PiType* swapchain_ty;
+static PiType* render_view_ty;
 
 static PiType* alloc_sort_ty;
 static PiType* device_address_ty;
@@ -45,6 +46,13 @@ static PiType* pipeline_ty;
 static PiType* queue_ty;
 static PiType* semaphore_ty;
 static PiType* command_buffer_ty;
+
+static PiType* load_op_ty;
+static PiType* store_op_ty;
+static PiType* colour_attachment_ty;
+static PiType* depth_attachment_ty;
+static PiType* stencil_attachment_ty;
+static PiType* render_desc_ty;
 
 //  Errors
 // --------
@@ -148,6 +156,32 @@ void build_destroy_swapchain_fn(PiType* type, Assembler* ass, PiAllocator* pia, 
                                  "swapchain", mk_voidptr_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(destroy_swapchain, &fn_ctype, type, ass, a, point); 
+}
+
+void build_next_frame_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "swapchain", mk_voidptr_ctype(pia),
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(next_frame, &fn_ctype, type, ass, a, point); 
+}
+
+void build_resize_notify_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType extent_ctype =
+      mk_struct_ctype(pia, 2,
+                      "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                      "hegith", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "swapchain", mk_voidptr_ctype(pia),
+                                 "extent", extent_ctype,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(resize_notify, &fn_ctype, type, ass, a, point); 
+}
+
+void build_present_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "swapchain", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(present, &fn_ctype, type, ass, a, point); 
 }
 
 //   Memory
@@ -361,7 +395,7 @@ void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
 
 void relic_dispatch(HdCommandBuffer* cb, void* data, UVec3 grid_dimensions) {
     HdLogicalDevice* device = get_current_device();
-    dispatch(device, cb, data, grid_dimensions);
+    dispatch(cb, data, grid_dimensions, device);
 }
 
 void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -375,6 +409,61 @@ void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator
                                  "dimenstions", dims,
                                  (CType){.sort = CSVoid});
     convert_c_fn(relic_dispatch, &fn_ctype, type, ass, a, point); 
+}
+
+void relic_draw(HdCommandBuffer *cb, void *data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
+    HdLogicalDevice* device = get_current_device();
+    draw(cb, data, vertex_count, instance_count, first_vertex, first_instance, device);
+}
+
+void build_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 6,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "data", mk_voidptr_ctype(pia),
+                                 "vertex_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "instance_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "first_vertex", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "first_instance", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(relic_draw, &fn_ctype, type, ass, a, point); 
+}
+
+void build_start_render_pass_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType depth_attachment_ctype =
+      mk_struct_ctype(pia, 4,
+                      "view", mk_voidptr_ctype(pia),
+                      "load", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "store", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "clear", (CType){.sort = CSFloat});
+  CType depth_option_ctype =
+      mk_struct_ctype(pia, 2,
+                      "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "depth_bias", depth_attachment_ctype);
+  CType stencil_attachment_ctype =
+      mk_struct_ctype(pia, 4,
+                      "view", mk_voidptr_ctype(pia),
+                      "load", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "store", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "clear", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+  CType stencil_option_ctype =
+      mk_struct_ctype(pia, 2,
+                      "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                      "val", stencil_attachment_ctype);
+  CType render_desc_ctype = mk_struct_ctype(pia, 3,
+                                            "colour_attachments", mk_slice_ctype(pia),
+                                            "depth_attachment", depth_option_ctype,
+                                            "stencil_attachment", stencil_option_ctype);
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "render-desc", render_desc_ctype,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(start_render_pass, &fn_ctype, type, ass, a, point); 
+}
+
+void build_end_render_pass_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "commands", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(end_render_pass, &fn_ctype, type, ass, a, point); 
 }
 
 void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region) {
@@ -525,18 +614,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    /*
-      typep = mk_proc_type(pia, 2, surface_ty, physical_device_ty,
-      mk_type_app(pia, get_pair_type(), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32)),
-      mk_prim_type(pia, Unit));
-      build_resize_window_surface_fn(typep, ass, pia, &ra, &point);
-      name = string_to_name(mv_string("resize-window-surface"));
-      fn_segments.code = get_instructions(ass);
-      prepped = prep_target(module, fn_segments, ass, NULL);
-      add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-      clear_assembler(ass);
-    */
-
     typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, Unit));
     build_destroy_window_surface_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("destroy-surface"));
@@ -614,6 +691,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     swapchain_ty = e->value;
 
+    type = (PiType) {.sort = TType};
+    typep = mk_opaque_type(pia, "RenderView", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("RenderView"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    render_view_ty = e->value;
+
     typep = mk_proc_type(pia, 2, logical_device_ty, surface_ty, mk_type_app(pia, get_result_type(), swapchain_ty, error_code_ty));
     build_create_swapchain_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-swapchain"));
@@ -625,6 +710,32 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 1, swapchain_ty, mk_prim_type(pia, Unit));
     build_destroy_swapchain_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("destroy-swapchain"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, swapchain_ty, render_view_ty);
+    build_next_frame_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("next-frame"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, swapchain_ty,
+                         mk_struct_type(pia, 2, "width", mk_prim_type(pia, UInt_32), "height", mk_prim_type(pia, UInt_32)),
+                         mk_prim_type(pia, Unit));
+    build_resize_notify_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("resize-notify"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, swapchain_ty, mk_prim_type(pia, Unit));
+    build_present_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("present"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
@@ -1035,6 +1146,108 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), wave_dims, mk_prim_type(pia, Unit));
     build_dispatch_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dispatch"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 6,
+                         command_buffer_ty,
+                         mk_prim_type(pia, Address),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, Unit));
+    build_draw_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("draw"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    type = (PiType) {.sort = TType};
+
+    typep =
+        mk_named_type(pia, "LoadOp",
+                      mk_enum_type(pia, 3, "load", 0, "clear", 0, "discard", 0));
+    name = string_to_name(mv_string("LoadOp"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    load_op_ty = e->value;
+
+    typep =
+        mk_named_type(pia, "StoreOp",
+                      mk_enum_type(pia, 2, "store", 0, "discard", 0));
+    name = string_to_name(mv_string("StoreOp"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    store_op_ty = e->value;
+
+    typep =
+        mk_named_type(pia, "ColourAttachment",
+                      mk_struct_type(pia, 4,
+                                     "view", render_view_ty,
+                                     "load", load_op_ty,
+                                     "store", store_op_ty,
+                                     "clear", mk_tile_type(pia, 1, 4, mk_prim_type(pia, Float_32))));
+    name = string_to_name(mv_string("ColourAttachment"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    colour_attachment_ty = e->value;
+
+    typep =
+        mk_named_type(pia, "DepthAttachment",
+                      mk_struct_type(pia, 4,
+                                     "view", render_view_ty,
+                                     "load", load_op_ty,
+                                     "store", store_op_ty,
+                                     "clear", mk_prim_type(pia, Float_32)));
+    name = string_to_name(mv_string("DepthAttachment"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    depth_attachment_ty = e->value;
+
+    typep =
+        mk_named_type(pia, "StencilAttachment",
+                      mk_struct_type(pia, 4,
+                                     "view", render_view_ty,
+                                     "load", load_op_ty,
+                                     "store", store_op_ty,
+                                     "clear", mk_prim_type(pia, UInt_8)));
+    name = string_to_name(mv_string("StencilAttachment"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    stencil_attachment_ty = e->value;
+
+    typep =
+        mk_named_type(pia, "RenderDescription",
+                      mk_struct_type(pia, 3,
+                                     "colours", mk_type_app(pia, get_slice_type(), colour_attachment_ty),
+                                     "depth", mk_type_app(pia, get_maybe_type(), depth_attachment_ty),
+                                     "stencil", mk_type_app(pia, get_maybe_type(), stencil_attachment_ty)));
+    name = string_to_name(mv_string("RenderDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    render_desc_ty = e->value;
+
+    typep = mk_proc_type(pia, 2, command_buffer_ty, render_desc_ty, mk_prim_type(pia, Unit));
+    build_start_render_pass_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("start-render-pass"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
+    build_end_render_pass_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("end-render-pass"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

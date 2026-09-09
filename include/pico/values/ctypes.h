@@ -18,6 +18,7 @@ typedef enum : uint64_t {
     CSPtr,
     CSProc,
     CSStruct,
+    CSStaticArray,
     CSIncomplete,
     CSUnion,
     CSCEnum,
@@ -56,6 +57,11 @@ typedef struct {
 } CStruct;
 
 typedef struct {
+    uint64_t named_size;
+    CType* element;
+} CStaticArray;
+
+typedef struct {
     CPrimInt base;
     NameI64PiAMap vals;
 } CEnum;
@@ -74,6 +80,7 @@ struct CType {
         CPrimInt prim;
         CProc proc;
         CStruct structure;
+        CStaticArray array;
         CEnum enumeration;
         CUnion cunion;
         CPtr ptr;
@@ -108,6 +115,9 @@ CType mk_fn_ctype(PiAllocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 CType mk_struct_ctype(PiAllocator* a, size_t nfields, ...);
+
+// Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
+CType mk_array_ctype(PiAllocator* a, size_t len, CType val);
  
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
 CType mk_enum_ctype(PiAllocator* a, CPrimInt store, size_t nfields, ...);

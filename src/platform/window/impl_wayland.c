@@ -94,7 +94,7 @@ void resize(PlWindow* window) {
     close(fd);
 }
 
-void draw(PlWindow* window) {
+void window_draw(PlWindow* window) {
     // colour = grep
     uint8_t colour = 128;
 	memset(window->pixles, colour, window->width * window->height * 4);
@@ -117,7 +117,7 @@ void xdg_surface_conf(void *data, struct xdg_surface* xdg_surface, uint32_t seri
     xdg_surface_ack_configure(xdg_surface, serial);
     // TODO: see if we can get the window passed in via data?
     if (!window->pixles) resize(window);
-    //draw(window);
+    //window_draw(window);
 }
 
 // callback

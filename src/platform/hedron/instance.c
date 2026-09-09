@@ -11,10 +11,11 @@ const char *required_extensions[] = {
     //VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
 };
 #else
-const uint32_t num_required_extensions = 2;
+const uint32_t num_required_extensions = 4;
 const char *required_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
-    //VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+    VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+    VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
     // No window extension needed.
 #if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
     VK_KHR_XLIB_SURFACE_EXTENSION_NAME,

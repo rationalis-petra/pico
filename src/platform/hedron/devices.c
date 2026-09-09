@@ -11,9 +11,13 @@
 //   
 //  
 
-const uint32_t num_required_device_extensions = 5;
+const uint32_t num_required_device_extensions = 6;
 const char *required_device_extensions[] = {
+    // Presentation extensions
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+
+    // Other extensions
     VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
     VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, 
@@ -47,9 +51,13 @@ bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
 }
 
 bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+        .pNext = NULL,
+    };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_heap_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
-        .pNext = NULL
+        .pNext = &swapchain_maintenance1,
     };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
@@ -83,16 +91,17 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     const bool extensions_supported = check_device_extension_support(device, a);
 
     // TODO: move some (or all) of these checks into the hedron API
-    return (desc_buffer_features.descriptorBuffer
+    return (swapchain_maintenance1.swapchainMaintenance1
+            && desc_buffer_features.descriptorBuffer
             && supported_features_14.maintenance5
             && supported_features_13.dynamicRendering
+            && supported_features_13.synchronization2
             && supported_features_12.timelineSemaphore
             && supported_features_12.scalarBlockLayout
             && supported_features_12.descriptorIndexing
             && supported_features_12.bufferDeviceAddress
             && supported_features_12.descriptorBindingPartiallyBound
             && supported_features_12.descriptorBindingVariableDescriptorCount
-            && supported_features_13.synchronization2
             && extensions_supported);
 }
 
@@ -176,10 +185,15 @@ uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
     // Enable feature on physical device features chain during device creation
     // Chain deviceFeatures2 into VkDeviceCreateInfo::pNext
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+        .swapchainMaintenance1 = VK_TRUE,
+        .pNext = NULL,
+    };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .descriptorBuffer = VK_TRUE,
-        .pNext = NULL
+        .pNext = &swapchain_maintenance1,
     };
     VkPhysicalDeviceVulkan14Features features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
@@ -249,6 +263,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
         .physical_device = device->device,
         .gpa = instance->gpa,
 
+        .swapchains = mk_ptr_array(2, instance->gpa),
         .usable_buffers = mk_ptr_array(8, instance->gpa),
         .pending_buffers = mk_sem_bufs_amap(8, instance->gpa),
 
@@ -280,6 +295,9 @@ void destroy_logical_device(HdLogicalDevice* device) {
         mem_free(buffer, device->gpa);
     }
     sdelete_ptr_array(device->usable_buffers);
+
+    // Swapchains ought to be cleanud up independently.
+    sdelete_ptr_array(device->swapchains);
     for (size_t i = 0; i < device->pending_buffers.len; i++) {
         PendingBufferArray arr = device->pending_buffers.data[i].val;
         // TODO: panic/report error if arr.len > 0 - all pending buffest ought

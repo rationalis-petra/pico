@@ -195,6 +195,23 @@ VkBlendOp blend_op_to_vk(HdBlendOp op) {
     panic(mv_string("Unknown blend operation."));
 }
 
+VkAttachmentLoadOp load_op_to_vk(LoadOp op) {
+    switch (op) {
+    case LOpLoad: return VK_ATTACHMENT_LOAD_OP_LOAD;
+    case LOpClear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
+    case LOpDiscard: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    }
+    panic(mv_string("unknown attachment load operation"));
+}
+
+VkAttachmentStoreOp store_op_to_vk(StoreOp op) {
+    switch (op) {
+    case SOpStore: return VK_ATTACHMENT_STORE_OP_STORE;
+    case SOpDiscard: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    }
+    panic(mv_string("unknown attachment store operation"));
+}
+
 VkFormat format_to_vk(HdFormat format) {
     switch (format) {
     case FormatUndefined: break;   
@@ -256,5 +273,6 @@ VkFormat format_to_vk(HdFormat format) {
 
     panic(mv_string("unknown image format"));
 }
+
 
 #endif

@@ -20,9 +20,10 @@
 #error "unrecognized OS"
 #endif
 
-//#define VK_NO_PROTOTYPES
-
+#define VK_ENABLE_BETA_EXTENSIONS
 #include <vulkan/vulkan.h>
+
+//#define VK_NO_PROTOTYPES
 
 #include "data/meta/array_header.h"
 #include "data/meta/amap_header.h"
@@ -59,7 +60,10 @@ struct HdCommandBuffer {
     // cross-thread synchronization
     VkCommandPool pool;
     HdLogicalDevice* device;
+
+    // State
     HdPipeline* current_pipeline;
+    bool rendering;
 };
 
 typedef struct {
@@ -78,6 +82,7 @@ struct HdLogicalDevice {
     VkPhysicalDevice physical_device;
     Allocator* gpa; // Allocator is accessed often, so keep it high up.
 
+    PtrArray swapchains;
     // The api exposes a sort of 'automatic' command buffer management: you
     // simply request a new command buffer from a queue, then submit a command
     // buffer (at which point it is considered done/discarded)
@@ -116,15 +121,52 @@ struct HdSurface {
     HdInstance* instance;
 };
 
+typedef struct {
+    VkSemaphore acquired;
+    VkSemaphore rendered;
+    VkFence presented;
+    bool present_pending;
+} HdPresentContext;
+
+struct HdRenderView { 
+    HdLogicalDevice* device;
+    VkImageView image_view;
+    HdExtent extent;
+    HdSwapchain* swapchain;
+};
+
 // Swapchain
 struct HdSwapchain {
+    // Context 
     VkSwapchainKHR swapchain;
     HdLogicalDevice* device;
+    HdSurface* surface;
     HdExtent extent;
+
+    // Current State - will change as program executes
+    uint32_t current_present;
+    uint32_t current_image;
+    bool acquired;
+    bool recreate_required;
+
+    // Needed for wrapping presentation/submission cleanly
     uint32_t num_images;
     VkImage* images;
-    VkImageView* image_views;
-    VkSemaphore* render_complete_semaphores;
+    HdRenderView* render_views;
+    HdPresentContext* present_contexts;
+    // When uninitialized, images will have layout 'undefined'. 
+    // After that, they will have layout 'present source'. We need this
+    // information, so store it here.
+    bool* initialized; 
+
+    // If we try begin a render pass with a command buffer and an attachment
+    // points to the swapchain, and the swapchain hasn't been transitioned
+    // to a new layout, this claimed_by will be set, to record the command
+    // buffer which is rendering to the swapchain.
+    // If the swapchain has been claimed by a different command buffer, we
+    // return an error.
+    HdCommandBuffer* claimed_by;
+    uint32_t next_present_context;
 };
 
 // Pipeline
@@ -146,4 +188,6 @@ HdError convert_error_type(VkResult desc);
 VkCullModeFlags cull_to_vk(HdCull cull);
 VkCullModeFlags blend_factor_to_vk(HdBlendFactor blend);
 VkBlendOp blend_op_to_vk(HdBlendOp op);
+VkAttachmentLoadOp load_op_to_vk(LoadOp op);
+VkAttachmentStoreOp store_op_to_vk(StoreOp op);
 VkFormat format_to_vk(HdFormat format);

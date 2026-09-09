@@ -82,15 +82,22 @@ PtrSlice get_physical_devices(HdInstance* instance, Allocator* a);
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance);
 void destroy_logical_device(HdLogicalDevice* device);
 
-// Swapchain
+// Swapchain & Render Views
+// -------------------------
 // Under this API, the swapchain is considered an operating system concern. From
 // the perspective of the API, we only care about getting a texture we can
 // render into from the swapchain.
 // TODO: determine how much complexity from the swapchain we want here, or
 // whether we want it elsewhere? (window api?)
 typedef struct HdSwapchain HdSwapchain;
+typedef struct HdRenderView HdRenderView;
 HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surfaceimages);
 void destroy_swapchain(HdSwapchain* swapchain);
+
+HdRenderView* next_frame(HdSwapchain* swapchain);
+// TODO: why isn't the surface notifying us that is should be resized??
+void resize_notify(HdSwapchain* swapchain, HdExtent extent);
+void present(HdSwapchain* swapchain);
 
 /*
 void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
@@ -112,7 +119,7 @@ typedef struct {
    DeviceAddress device;
 } SharedAddress;
 
-typedef enum { MemoryDefault, MemoryWriteback } MemoryType;
+typedef enum : uint64_t { MemoryDefault, MemoryWriteback } MemoryType;
 
 SharedAddress alloc_shared_memory(size_t size, size_t align, MemoryType type, HdLogicalDevice* device);
 void free_shared_memory(SharedAddress address, HdLogicalDevice* device);
@@ -126,14 +133,14 @@ void free_device_memory(DeviceAddress address, HdLogicalDevice* device);
 
 //  Pipelines
 // ------------
-typedef enum {
+typedef enum : uint64_t {
   CullCCW,
   CullCW,
   CullAll,
   CullNone,
 } HdCull;
 
-typedef enum {
+typedef enum : uint64_t {
   BlendAdd,
   BlendSubtract,
   BlendRevSubtract,
@@ -141,7 +148,7 @@ typedef enum {
   BlendMax,
 } HdBlendOp;
 
-typedef enum {
+typedef enum : uint64_t {
   FactorZero,
   FactorOne,
   FactorSrcColour,
@@ -155,7 +162,7 @@ typedef enum {
   FactorSrcAlphaSaturate,
 } HdBlendFactor;
 
-typedef enum {
+typedef enum : uint64_t {
   Format_R8_SRGB,
   Format_RG8_SRGB,
   Format_RGB8_SRGB,
@@ -252,19 +259,6 @@ HdPipeline* create_compute_pipeline(U32Slice computeIR, size_t data_size, HdLogi
 HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, bool is_meshlet, size_t data_size, HdLogicalDevice* device);
 void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
 
-// State Objects
-// --------------
-typedef enum {
-  OpNever,
-  OpLess,
-  OpEqual,
-  OpLessEqual,
-  OpGreater,
-  OpNotEqual,
-  OpGreaterEqual,
-  OpAlways
-} HdCompOp;
-
 // Semaphores
 // -----------
 // 
@@ -299,7 +293,31 @@ void submit_commands(HdQueue* queue, PtrSlice command_buffers, HdSemaphore* sema
 // 
 // TODO: stage meshlet shader??
 // TODO: stage acceleration structure??
-typedef enum {
+// State Objects
+// --------------
+typedef enum : uint64_t {
+    OpNever,
+    OpLess,
+    OpEqual,
+    OpLessEqual,
+    OpGreater,
+    OpNotEqual,
+    OpGreaterEqual,
+    OpAlways
+} HdCompOp;
+
+typedef enum : uint64_t {
+    StKeep,
+    StZero,
+    StReplace,
+    StIncrementClamp,
+    StDecrementClamp,
+    StInvert,
+    StIncrementWrap,
+    StDecrementWrap,
+} StencilOp;
+
+typedef enum : uint64_t {
   StageTransfer,
   StageCompute,
   StageRasterColourOut,
@@ -308,26 +326,26 @@ typedef enum {
 } HdStage;
 
 // TODO: acceleration structure.
-typedef enum {
+typedef enum : uint64_t {
   HazardDrawArguments = 0x1,
   HazardDescriptors = 0x2,
   HAZARD_DEPTH_STENCIL = 0x4
 } HdHazardFlags; 
 
 // TODO: investigate what signals need adding (if any)
-typedef enum {
+typedef enum : uint64_t {
   SignalAtomicSet,
   SignalAtomicMax,
   SignalAtomicOr
 } HdSignal;
 
-typedef enum {
+typedef enum : uint64_t {
     LOpLoad,
     LOpClear,
     LOpDiscard,
 } LoadOp;
 
-typedef enum {
+typedef enum : uint64_t {
     SOpStore,
     SOpDiscard,
 } StoreOp;
@@ -339,9 +357,8 @@ typedef struct {
     float w;
 } Vec4f;
 
-typedef struct RenderView RenderView;
 typedef struct {
-    RenderView* render_view;
+    HdRenderView* render_view;
     LoadOp load;
     StoreOp store;
     Vec4f clear;
@@ -349,23 +366,25 @@ typedef struct {
 SLICE_TYPE(HdColourAttachment, ColourAttachment)
 
 typedef struct {
-    RenderView* render_view;
+    HdRenderView* render_view;
     LoadOp load;
     StoreOp store;
     float clear;
 } HdDepthAttachment;
+OPTION_TYPE(HdDepthAttachment, HdDepthAttachment)
 
 typedef struct {
-    RenderView* render_view;
+    HdRenderView* render_view;
     LoadOp load;
     StoreOp store;
     uint8_t clear;
 } HdStencilAttachment;
+OPTION_TYPE(HdStencilAttachment, HdStencilAttachment)
 
 typedef struct {
     ColourAttachmentSlice colours;
-    HdDepthAttachment depth;
-    HdStencilAttachment stencil;
+    HdDepthAttachmentOption depth;
+    HdStencilAttachmentOption stencil;
 } HdRenderDesc;
 
 /*
@@ -377,20 +396,66 @@ void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags h
 void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
 void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
 
-void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline);
-//void set_depth_stencil_state(HdCommandBuffer* cb, GpuDepthStencilState state);
-//void set_blend_state(HdCommandBuffer* cb, GpuBlendState state); 
+typedef struct {
+    float x;
+    float y;
+    float width;
+    float height;
+    float min_depth;
+    float max_depth;
+} HdViewport;
 
+typedef struct {
+    int32_t x;
+    int32_t y;
+    uint32_t width;
+    uint32_t height;
+} HdScissor;
+
+typedef struct {
+    HdCompOp compare;
+    StencilOp fail;
+    StencilOp pass;
+    StencilOp depth_fail;
+    uint8_t reference;
+} StencilFaceState;
+
+typedef struct {
+    bool depth_test;
+    bool depth_write;
+    HdCompOp depth_compare;
+    bool stencil_test;
+    uint8_t stencil_read_mask;
+    uint8_t stencil_write_mask;
+    StencilFaceState front;
+    StencilFaceState back;
+} HdDepthStencilState;
+
+// Generic commands: pipeline etc.
+void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline);
+void set_viewport(HdCommandBuffer* cb, HdViewport viewport);
+void set_scissor(HdCommandBuffer* cb, HdScissor scissor);
+void set_depth_stencil(HdCommandBuffer* cb, HdDepthStencilState depth_stencil);
+
+// Dispatch Shaders (graphics/compute)
 typedef struct {
     uint32_t x;
     uint32_t y;
     uint32_t z;
 } UVec3;
-void dispatch(HdLogicalDevice* device, HdCommandBuffer* cb, void* dataGpu, UVec3 group_count);
+void dispatch(HdCommandBuffer* cb, void* dataGpu, UVec3 group_count, HdLogicalDevice* device );
 //void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* group_count_device);
 
-void begin_render_pass(HdCommandBuffer* cb, HdRenderDesc desc);
+void draw(HdCommandBuffer *commands, void *data,
+          uint32_t vertex_count, uint32_t instance_count,
+          uint32_t first_vertex, uint32_t first_instance,
+          HdLogicalDevice* device);
+
+// Graphics Commands
+void start_render_pass(HdCommandBuffer* cb, HdRenderDesc desc);
 void end_render_pass(HdCommandBuffer* cb);
 
+//void set_depth_stencil_state(HdCommandBuffer* cb, GpuDepthStencilState state);
+//void set_blend_state(HdCommandBuffer* cb, GpuBlendState state); 
 
 #endif
