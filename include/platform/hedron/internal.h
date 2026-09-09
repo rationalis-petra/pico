@@ -144,6 +144,7 @@ struct HdSwapchain {
     HdExtent extent;
 
     // Current State - will change as program executes
+    uint32_t next_present_context;
     uint32_t current_present;
     uint32_t current_image;
     bool acquired;
@@ -166,7 +167,6 @@ struct HdSwapchain {
     // If the swapchain has been claimed by a different command buffer, we
     // return an error.
     HdCommandBuffer* claimed_by;
-    uint32_t next_present_context;
 };
 
 // Pipeline

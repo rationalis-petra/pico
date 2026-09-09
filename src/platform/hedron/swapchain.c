@@ -162,7 +162,7 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     }
 
 
-    HdPresentContext *present_contexts = swapchain->present_contexts;
+    HdPresentContext* present_contexts = swapchain->present_contexts;
     if (present_contexts == NULL) {
         present_contexts = mem_alloc(sizeof(HdPresentContext) * num_images, device->gpa);
         for (size_t i = 0; i < num_images; i++) {
@@ -184,7 +184,8 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
         .render_views = render_views,
         .present_contexts = present_contexts,
         .initialized = initialized,
-        .next_present_context = 0,
+        .next_present_context = swapchain->next_present_context,
+        .current_present = swapchain->current_present,
     };
 
     for (size_t i = 0; i < num_images; i++) {
@@ -302,7 +303,8 @@ HdRenderView* next_frame(HdSwapchain* swapchain) {
                                                 &image_index);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             swapchain->recreate_required = true;
-            continue;
+            panic(mv_string("boo!"));
+            //continue;
         }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
             panic(mv_string("TODO: handle errors in next_frame"));
