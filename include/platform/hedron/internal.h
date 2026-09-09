@@ -21,9 +21,8 @@
 #endif
 
 #define VK_ENABLE_BETA_EXTENSIONS
-#include <vulkan/vulkan.h>
-
 //#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
 
 #include "data/meta/array_header.h"
 #include "data/meta/amap_header.h"
@@ -32,6 +31,7 @@
 #include "platform/window/internal.h"
 
 #define MAX_COLOUR_ATTACHMENTS 8
+#define ADDRESS_FLAGS (VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR | VK_ADDRESS_COMMAND_STORAGE_BUFFER_USAGE_BIT_KHR)
 
 // Instance & Devices
 struct HdInstance {
@@ -106,8 +106,12 @@ struct HdLogicalDevice {
 
     HdQueue queue;
 
-    // function pointers for extensions we need go here.
+    // Function pointers for extensions we need go here.
     PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
+    PFN_vkCmdBindIndexBuffer3KHR cmd_bind_index_buffer;
+    PFN_vkCmdDrawIndirect2KHR cmd_draw_indirect;
+    PFN_vkCmdDrawIndexedIndirect2KHR cmd_draw_indexed_indirect;
+    PFN_vkCmdDispatchIndirect2KHR cmd_dispatch_indirect;
 };
 
 // called during device creation

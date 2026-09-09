@@ -7,7 +7,6 @@
 
 typedef enum {
     GpuAllocDefault,
-    // Memory_Desriptor, // internal only, add after/with images?
     GpuAllocReadback,
     GpuAllocGpu,
 } AllocationType;
@@ -142,13 +141,9 @@ static HdAllocation create_allocation(size_t size, size_t align, AllocationType 
             VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
             VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR |
             VK_BUFFER_USAGE_2_TRANSFER_DST_BIT_KHR |
-            //VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR |
-            VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR;
-            //VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR |
+            VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR |
+            VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT_KHR |
+            VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR;
 
             // Only required for ray tracing... how are we exposing this?
             //VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
@@ -157,7 +152,7 @@ static HdAllocation create_allocation(size_t size, size_t align, AllocationType 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        //case GpuAlloc_Descriptor:
+
         return do_vk_allocation(size, align, usage, properties, device);
     }
     case GpuAllocReadback: {

@@ -77,13 +77,76 @@ void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count, HdLogicalDevic
     vkCmdDispatch(cb->buffer, group_count.x, group_count.y, group_count.z);
 }
 
-void draw(HdCommandBuffer* cb, void* data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance, HdLogicalDevice* device) {
+void draw(HdCommandBuffer* cb, void* data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
     // TODO: debug tests
     //const bool valid = commands && commands->recording && commands->rendering;
     //assert(valid && "draw requires an active rendering scope");
 
     emit_root_data(cb, data);
     vkCmdDraw(cb->buffer, vertex_count, instance_count, first_vertex, first_instance);
+}
+
+void draw_indexed(HdCommandBuffer *cb, void *data,
+                  DeviceRange indices, IndexType type,
+                  uint32_t index_count, uint32_t instance_count, uint32_t first_index,
+                  int32_t vertex_offset, uint32_t first_instance) {
+    //assert(commands && commands->state);
+    emit_root_data(cb, data);
+    const VkBindIndexBuffer3InfoKHR bind_info = {
+        .sType = VK_STRUCTURE_TYPE_BIND_INDEX_BUFFER_3_INFO_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)(indices.address.val),
+            .size = indices.size,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+        .indexType = (VkIndexType)type,
+    };
+    cb->device->cmd_bind_index_buffer(cb->buffer, &bind_info);
+    vkCmdDrawIndexed(cb->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+}
+
+void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint32_t draw_count, uint32_t stride) {
+    //assert(commands && commands->state);
+    emit_root_data(cb, data);
+    const VkDrawIndirect2InfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_DRAW_INDIRECT_2_INFO_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)arguments.address.val,
+            .size = arguments.size,
+            .stride = stride == 0 ? sizeof(VkDrawIndirectCommand) : stride,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+        .drawCount = draw_count,
+    };
+    cb->device->cmd_draw_indirect(cb->buffer, &info);
+}
+
+void draw_indexed_indirect(HdCommandBuffer *cb, void *data,
+                           DeviceRange indices, IndexType type, DeviceRange arguments, uint32_t draw_count,
+                           uint32_t stride) {
+    //assert(commands && commands->state);
+    emit_root_data(cb, data);
+    const VkBindIndexBuffer3InfoKHR bind_info = {
+        .sType = VK_STRUCTURE_TYPE_BIND_INDEX_BUFFER_3_INFO_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)(indices.address.val),
+            .size = indices.size,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+        .indexType = (VkIndexType)(type),
+    };
+    cb->device->cmd_bind_index_buffer(cb->buffer, &bind_info);
+    const VkDrawIndirect2InfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_DRAW_INDIRECT_2_INFO_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)arguments.address.val,
+            .size = arguments.size,
+            .stride = stride == 0 ? sizeof(VkDrawIndexedIndirectCommand) : stride,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+        .drawCount = draw_count,
+    };
+    cb->device->cmd_draw_indexed_indirect(cb->buffer, &info);
 }
 
 void start_render_pass(HdCommandBuffer* cb, HdRenderDesc desc) {

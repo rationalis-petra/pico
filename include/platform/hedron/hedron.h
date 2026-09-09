@@ -115,6 +115,11 @@ typedef struct {
 } DeviceAddress;
 
 typedef struct {
+    DeviceAddress address;
+    uint64_t size; // Number of bytes
+} DeviceRange;
+
+typedef struct {
    void* host;
    DeviceAddress device;
 } SharedAddress;
@@ -387,6 +392,8 @@ typedef struct {
     HdStencilAttachmentOption stencil;
 } HdRenderDesc;
 
+typedef enum {IdxU16, IdxU32} IndexType;
+
 /*
  * These are for signalling GPU/GPU dependencies. The barrier is for use within
  * a command buffer recording, whereas (I think) the signal after/wait before
@@ -448,8 +455,15 @@ void dispatch(HdCommandBuffer* cb, void* dataGpu, UVec3 group_count, HdLogicalDe
 
 void draw(HdCommandBuffer *commands, void *data,
           uint32_t vertex_count, uint32_t instance_count,
-          uint32_t first_vertex, uint32_t first_instance,
-          HdLogicalDevice* device);
+          uint32_t first_vertex, uint32_t first_instance);
+void draw_indexed(HdCommandBuffer *cb, void *data, DeviceRange indices,
+                  IndexType type, uint32_t index_count, uint32_t instance_count,
+                  uint32_t first_index, int32_t vertex_offset,
+                  uint32_t first_instance);
+void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint32_t draw_count, uint32_t stride);
+void draw_indexed_indirect(HdCommandBuffer *cb, void *data, DeviceRange indices,
+                           IndexType type, DeviceRange arguments,
+                           uint32_t draw_count, uint32_t stride);
 
 // Graphics Commands
 void start_render_pass(HdCommandBuffer* cb, HdRenderDesc desc);

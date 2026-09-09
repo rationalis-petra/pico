@@ -11,13 +11,15 @@
 //   
 //  
 
-const uint32_t num_required_device_extensions = 6;
+const uint32_t num_required_device_extensions = 8;
 const char *required_device_extensions[] = {
     // Presentation extensions
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
 
     // Other extensions
+    VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+    VK_KHR_DEVICE_ADDRESS_COMMANDS_EXTENSION_NAME,
     VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
     VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, 
@@ -269,8 +271,18 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
 
         .allocations = mk_hdalloc_array(8, instance->gpa),
 
-        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vk_ldevice, "vkCmdPushDataEXT")
+        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vk_ldevice, "vkCmdPushDataEXT"),
+        .cmd_bind_index_buffer = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdBindIndexBuffer3KHR"),
+        .cmd_draw_indirect = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDrawIndirect2KHR"),
+        .cmd_draw_indexed_indirect = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDrawIndexedIndirect2KHR"),
+        .cmd_dispatch_indirect = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDispatchIndirect2KHR"),
     };
+
+    // TODO: ifdef debug assert
+    if (!ldevice->vkCmdPushDataEXT) {
+        panic(mv_string("Unable to get function vkCmdPushDataEXT"));
+    }
+    // TODO: check all functions are nonzero
 
 
     VkQueue vk_queue = VK_NULL_HANDLE;
