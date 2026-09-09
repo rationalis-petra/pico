@@ -4,6 +4,9 @@
 #include "platform/hedron/hedron.h"
 #include "platform/hedron/internal.h"
 
+void retire_swapchain(HdSwapchain* swapchain);
+void wait_present_context(HdLogicalDevice* device, HdPresentContext* context);
+
 static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, HdSurface* surface) {
     uint32_t num_formats;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
@@ -26,34 +29,6 @@ static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, Hd
 
     return selected_format;
 }
-
-// Present mode affects the possibility of screentearing/stalling
-/*
-static VkPresentModeKHR choose_swap_present_mode(HdLogicalDevice *device, HdSurface *surface) {
-   //(VkPresentModeKHR* available_present_modes, uint32_t num_modes) {
-
-    uint32_t num_formats;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
-                                         surface->surface,
-                                         &num_formats, NULL);
-    VkSurfaceFormatKHR* available_formats = mem_alloc(sizeof(VkSurfaceFormatKHR) * num_formats, device->gpa);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
-                                         surface->surface, &num_formats,
-                                         available_formats);
-    
-    for (size_t i = 0; i < num_modes; i++) {
-        VkPresentModeKHR present_mode = available_present_modes[i];
-        // Ideal: no screentearing or stalling
-        if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return present_mode;
-        }
-    }
-
-    // FIFO is guaranteed to be available by the vulkan standard
-    // No screen-tearing, but may stall.
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-*/
 
 static uint32_t clamp(uint32_t val, uint32_t min, uint32_t max) {
     if (val < min) return min;
@@ -149,6 +124,10 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     result = vkCreateSwapchainKHR(device->device, &swapchain_create_info, NULL, &vk_swapchain);
     if (result != VK_SUCCESS) return result;
 
+    // Free old resources associated with the swapchain, now that we have
+    // created a new one (and pointed to the old swapchain)
+    retire_swapchain(swapchain);
+
     // Get number of images
     uint32_t num_images;
     result = vkGetSwapchainImagesKHR(device->device, vk_swapchain, &num_images, NULL);
@@ -159,7 +138,7 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     result = vkGetSwapchainImagesKHR(device->device, vk_swapchain, &num_images, images);
     if (result != VK_SUCCESS) return result;
 
-    HdRenderView* render_views = mem_alloc(sizeof(HdRenderView) * num_images, device->gpa);
+    HdRenderView* render_views = swapchain->render_views ? swapchain->render_views : mem_alloc(sizeof(HdRenderView) * num_images, device->gpa);
     for (size_t i = 0; i < num_images; i++) {
         VkImageViewCreateInfo view_info = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -182,9 +161,13 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
         };
     }
 
-    HdPresentContext* present_contexts = swapchain->present_contexts ? swapchain->present_contexts : mem_alloc(sizeof(HdPresentContext) * num_images, device->gpa);
-    for (size_t i = 0; i < num_images; i++) {
-        create_present_context(device, &present_contexts[i]);
+
+    HdPresentContext *present_contexts = swapchain->present_contexts;
+    if (present_contexts == NULL) {
+        present_contexts = mem_alloc(sizeof(HdPresentContext) * num_images, device->gpa);
+        for (size_t i = 0; i < num_images; i++) {
+            create_present_context(device, &present_contexts[i]);
+        }
     }
     bool* initialized = swapchain->initialized ? swapchain->initialized : mem_alloc(sizeof(bool) * num_images, device->gpa);
     for (size_t i = 0; i < num_images; i++) {
@@ -233,8 +216,22 @@ HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surface) {
     }
 }
 
+//  Like destroy swapchain, but doesn't free memory, just releases resources.
+void retire_swapchain(HdSwapchain* swapchain) {
+    HdLogicalDevice* device = swapchain->device;
+    for (size_t i = 0; i < swapchain->num_images; i++) {
+        wait_present_context(device, &swapchain->present_contexts[i]);
+    }
+    for (size_t i = 0; i < swapchain->num_images; i++) {
+        vkDestroyImageView(swapchain->device->device, swapchain->render_views[i].image_view, NULL);
+    }
+    vkDestroySwapchainKHR(swapchain->device->device, swapchain->swapchain, NULL);
+}
+
 void destroy_swapchain(HdSwapchain* swapchain) {
     HdLogicalDevice* device = swapchain->device;
+    // IMPORTANT: wait untill all images are presented.
+    retire_swapchain(swapchain);
     for (size_t i = 0; i < device->swapchains.len; i++) {
         if (swapchain == device->swapchains.data[i]) {
             device->swapchains.data[i] = device->swapchains.data[device->swapchains.len - 1];
@@ -243,14 +240,11 @@ void destroy_swapchain(HdSwapchain* swapchain) {
         }
     }
     for (size_t i = 0; i < swapchain->num_images; i++) {
-        vkDestroyImageView(swapchain->device->device, swapchain->render_views[i].image_view, NULL);
-    }
-    for (size_t i = 0; i < swapchain->num_images; i++) {
         vkDestroySemaphore(swapchain->device->device, swapchain->present_contexts[i].acquired, NULL);
         vkDestroySemaphore(swapchain->device->device, swapchain->present_contexts[i].rendered, NULL);
         vkDestroyFence(swapchain->device->device, swapchain->present_contexts[i].presented, NULL);
     }
-    vkDestroySwapchainKHR(swapchain->device->device, swapchain->swapchain, NULL);
+    mem_free(swapchain->initialized, swapchain->device->gpa);
     mem_free(swapchain->present_contexts, swapchain->device->gpa);
     mem_free(swapchain->render_views, swapchain->device->gpa);
     mem_free(swapchain->images, swapchain->device->gpa);
@@ -361,16 +355,13 @@ void present(HdSwapchain* swapchain)  {
     //swapchain->ready_to_present = false;
     swapchain->next_present_context = (swapchain->current_present + 1) % swapchain->num_images;
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         swapchain->recreate_required = true;
     }
-    else if (result == VK_SUBOPTIMAL_KHR)
-    {
+    else if (result == VK_SUBOPTIMAL_KHR) {
         swapchain->recreate_required = swapchain->recreate_required || swapchain_surface_configuration_changed(swapchain);
     }
-    else if (result != VK_SUCCESS)
-    {
+    else if (result != VK_SUCCESS) {
         panic(mv_string("TODO: handle failre to present"));
     }
 }
