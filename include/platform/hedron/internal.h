@@ -31,7 +31,7 @@
 #include "platform/window/internal.h"
 
 #define MAX_COLOUR_ATTACHMENTS 8
-#define ADDRESS_FLAGS (VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR | VK_ADDRESS_COMMAND_STORAGE_BUFFER_USAGE_BIT_KHR)
+#define ADDRESS_FLAGS (VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR)
 
 // Instance & Devices
 struct HdInstance {
@@ -42,8 +42,12 @@ struct HdInstance {
     HdPhysicalDevice* devices;
 };
 
+// Use this to store device properties, so when we need them we don't have to
+// re-query the API. 
 struct HdPhysicalDevice {
     VkPhysicalDevice device;
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    VkPhysicalDeviceDescriptorHeapPropertiesEXT heap_properties;
 };
 
 struct HdQueue {
@@ -74,12 +78,16 @@ typedef struct {
 ARRAY_HEADER(PendingBuffer, pbuf, PendingBuffer);
 AMAP_HEADER(HdSemaphore*, PendingBufferArray, sem_bufs, SemBufs);
 
-typedef struct HdAllocation HdAllocation;
-ARRAY_HEADER(HdAllocation, hdalloc, HdAllocation)
+typedef struct {
+    PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
+    PFN_vkCmdBindIndexBuffer3KHR vkCmdBindIndexBuffer3KHR;
+    PFN_vkCmdDrawIndirect2KHR vkCmdDrawIndirect2KHR;
+    PFN_vkCmdDrawIndexedIndirect2KHR vkCmdDrawIndexedIndirect2KHR;
+    PFN_vkCmdDispatchIndirect2KHR vkCmdDispatchIndirect2KHR;
+} DeviceFunctions;
 
 struct HdLogicalDevice {
     VkDevice device;
-    VkPhysicalDevice physical_device;
     Allocator* gpa; // Allocator is accessed often, so keep it high up.
 
     PtrArray swapchains;
@@ -97,21 +105,14 @@ struct HdLogicalDevice {
     PtrArray usable_buffers;
     SemBufsAMap pending_buffers;
 
-    // We keep track of allocations in the device because we only provide
-    // device/host addresses via the API, but vulkan requires that we keep track
-    // of more state.
-    // TODO: Use a mutex to lock the allocations, ensuring that num_allocations
-    //       + allocations stay coherent when hammered by multiple threads.
-    HdAllocationArray allocations;
-
     HdQueue queue;
+    
+    // Instead of needing to re-query the physical device for it's properties,
+    // we store them here. 
+    HdPhysicalDevice* physical_device;
 
     // Function pointers for extensions we need go here.
-    PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
-    PFN_vkCmdBindIndexBuffer3KHR cmd_bind_index_buffer;
-    PFN_vkCmdDrawIndirect2KHR cmd_draw_indirect;
-    PFN_vkCmdDrawIndexedIndirect2KHR cmd_draw_indexed_indirect;
-    PFN_vkCmdDispatchIndirect2KHR cmd_dispatch_indirect;
+    DeviceFunctions fns;
 };
 
 // called during device creation

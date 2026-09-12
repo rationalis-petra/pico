@@ -67,14 +67,29 @@ void emit_root_data(HdCommandBuffer* commands, void* data) {
             .size = commands->current_pipeline->data_size,
         },
     };
-    commands->device->vkCmdPushDataEXT(commands->buffer, &info);
+    commands->device->fns.vkCmdPushDataEXT(commands->buffer, &info);
 }
 
-void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count, HdLogicalDevice* device) {
+void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count) {
     // TODO: input validation with debug layers
 
     emit_root_data(cb, data);
     vkCmdDispatch(cb->buffer, group_count.x, group_count.y, group_count.z);
+}
+
+void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, DeviceRange arguments) {
+    // TODO: debug layer/asserts
+    //assert(commands && commands->state);
+    emit_root_data(cb, dataGpu);
+    const VkDispatchIndirect2InfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_DISPATCH_INDIRECT_2_INFO_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)arguments.address.val,
+            .size = arguments.size,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+    };
+    cb->device->fns.vkCmdDispatchIndirect2KHR(cb->buffer, &info);
 }
 
 void draw(HdCommandBuffer* cb, void* data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
@@ -101,7 +116,7 @@ void draw_indexed(HdCommandBuffer *cb, void *data,
         .addressFlags = ADDRESS_FLAGS,
         .indexType = (VkIndexType)type,
     };
-    cb->device->cmd_bind_index_buffer(cb->buffer, &bind_info);
+    cb->device->fns.vkCmdBindIndexBuffer3KHR(cb->buffer, &bind_info);
     vkCmdDrawIndexed(cb->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
@@ -118,7 +133,7 @@ void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint3
         .addressFlags = ADDRESS_FLAGS,
         .drawCount = draw_count,
     };
-    cb->device->cmd_draw_indirect(cb->buffer, &info);
+    cb->device->fns.vkCmdDrawIndirect2KHR(cb->buffer, &info);
 }
 
 void draw_indexed_indirect(HdCommandBuffer *cb, void *data,
@@ -135,7 +150,7 @@ void draw_indexed_indirect(HdCommandBuffer *cb, void *data,
         .addressFlags = ADDRESS_FLAGS,
         .indexType = (VkIndexType)(type),
     };
-    cb->device->cmd_bind_index_buffer(cb->buffer, &bind_info);
+    cb->device->fns.vkCmdBindIndexBuffer3KHR(cb->buffer, &bind_info);
     const VkDrawIndirect2InfoKHR info = {
         .sType = VK_STRUCTURE_TYPE_DRAW_INDIRECT_2_INFO_KHR,
         .addressRange = {
@@ -146,7 +161,7 @@ void draw_indexed_indirect(HdCommandBuffer *cb, void *data,
         .addressFlags = ADDRESS_FLAGS,
         .drawCount = draw_count,
     };
-    cb->device->cmd_draw_indexed_indirect(cb->buffer, &info);
+    cb->device->fns.vkCmdDrawIndexedIndirect2KHR(cb->buffer, &info);
 }
 
 void start_render_pass(HdCommandBuffer* cb, HdRenderDesc desc) {

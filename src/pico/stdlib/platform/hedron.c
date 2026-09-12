@@ -28,9 +28,11 @@ static PiType* swapchain_ty;
 static PiType* render_view_ty;
 
 static PiType* alloc_sort_ty;
+static PiType* heap_owner_ty;
 static PiType* device_address_ty;
 static PiType* device_range_ty;
-static PiType* shared_address_ty;
+static PiType* shared_range_ty;
+static PiType* device_heap_ty;
 
 static PiType* format_ty;
 static PiType* cull_ty;
@@ -174,61 +176,40 @@ void build_present_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator*
     convert_c_fn(present, &fn_ctype, type, ass, a, point); 
 }
 
-//   Memory
-// ---------
+//   Memory & Resources
+// ----------------------
 
-SharedAddress relic_alloc_shared_memory(size_t size, size_t align, MemoryType type) {
+HdHeap relic_create_device_heap(size_t size, size_t align, MemoryType type) {
     HdLogicalDevice* device = get_current_device();
-    return alloc_shared_memory(size, align, type, device);
+    return create_device_heap(size, align, type, device);
 }
 
-void build_alloc_shared_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType shared_mem_ctype = mk_struct_ctype(pia, 2,
-                                             "host", mk_voidptr_ctype(pia),
-                                             "device", mk_voidptr_ctype(pia));
+void build_create_device_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType hd_range_ctype = mk_struct_ctype(pia, 3,
+                                           "host", mk_voidptr_ctype(pia),
+                                           "device", mk_voidptr_ctype(pia),
+                                           "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType hd_heap_ctype = mk_struct_ctype(pia, 2,
+                                          "range", hd_range_ctype,
+                                          "owner", mk_voidptr_ctype(pia));
     CType fn_ctype = mk_fn_ctype(pia, 3,
                                  "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "align", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 shared_mem_ctype);
-    convert_c_fn(relic_alloc_shared_memory, &fn_ctype, type, ass, a, point); 
+                                 hd_heap_ctype);
+    convert_c_fn(relic_create_device_heap, &fn_ctype, type, ass, a, point); 
 }
 
-void relic_free_shared_memory(SharedAddress address) {
-    HdLogicalDevice* device = get_current_device();
-    free_shared_memory(address, device);
-}
-
-void build_free_shared_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType shared_mem_ctype = mk_struct_ctype(pia, 2,
-                                             "host", mk_voidptr_ctype(pia),
-                                             "device", mk_voidptr_ctype(pia));
-    CType fn_ctype = mk_fn_ctype(pia, 1, "mem", shared_mem_ctype, (CType){.sort = CSVoid});
-    convert_c_fn(relic_free_shared_memory, &fn_ctype, type, ass, a, point); 
-}
-
-DeviceAddress relic_alloc_device_memory(size_t size, size_t align) {
-    HdLogicalDevice* device = get_current_device();
-    return alloc_device_memory(size, align, device);
-}
-
-void build_alloc_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 3,
-                                 "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "align", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 mk_voidptr_ctype(pia));
-    convert_c_fn(relic_alloc_device_memory, &fn_ctype, type, ass, a, point); 
-}
-
-void relic_free_device_memory(DeviceAddress address) {
-    HdLogicalDevice* device = get_current_device();
-    free_device_memory(address, device);
-}
-
-void build_free_device_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "mem", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-    convert_c_fn(relic_free_device_memory, &fn_ctype, type, ass, a, point); 
+void build_destroy_device_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType hd_range_ctype = mk_struct_ctype(pia, 3,
+                                           "host", mk_voidptr_ctype(pia),
+                                           "device", mk_voidptr_ctype(pia),
+                                           "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType hd_heap_ctype = mk_struct_ctype(pia, 2,
+                                          "range", hd_range_ctype,
+                                          "owner", mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "mem", hd_heap_ctype, (CType){.sort = CSVoid});
+    convert_c_fn(destroy_device_heap, &fn_ctype, type, ass, a, point); 
 }
 
 //   Textures 
@@ -383,11 +364,6 @@ void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
     convert_c_fn(set_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
-void relic_dispatch(HdCommandBuffer* cb, void* data, UVec3 grid_dimensions) {
-    HdLogicalDevice* device = get_current_device();
-    dispatch(cb, data, grid_dimensions, device);
-}
-
 void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType dims = mk_struct_ctype(pia, 3,
                                  "x", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
@@ -398,7 +374,19 @@ void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator
                                  "data", mk_voidptr_ctype(pia),
                                  "dimenstions", dims,
                                  (CType){.sort = CSVoid});
-    convert_c_fn(relic_dispatch, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(dispatch, &fn_ctype, type, ass, a, point); 
+}
+
+void build_dispatch_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType device_range_ctype = mk_struct_ctype(pia, 2,
+                                               "data", mk_voidptr_ctype(pia),
+                                               "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 3,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "data", mk_voidptr_ctype(pia),
+                                 "args", device_range_ctype,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(dispatch_indirect, &fn_ctype, type, ass, a, point); 
 }
 
 void build_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -791,14 +779,21 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      */
     type = (PiType) {.sort = TType};
 
-    typep = mk_enum_type(pia, 2, "default", 0, "writeback", 0);
-    name = string_to_name(mv_string("AllocSort"));
+    typep = mk_enum_type(pia, 5, "default", 0, "writeback", 0, "device", 0, "texture-descriptor", 0, "sampler-desriptor", 0);
+    name = string_to_name(mv_string("HeapType"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
     alloc_sort_ty = e->value;
 
-    typep = mk_opaque_type(pia, "DeviceAddress", module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, "HeapOwner", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("HeapOwner"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    heap_owner_ty = e->value;
+
+    typep = mk_distinct_type(pia, "DeviceAddress", mk_prim_type(pia, Address));
     name = string_to_name(mv_string("DeviceAddress"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -815,45 +810,38 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     device_range_ty = e->value;
 
-    typep =
-        mk_named_type(pia, "SharedAddress",
-                      mk_struct_type(pia, 2,
-                                     "host", mk_prim_type(pia, Address),
-                                     "device", device_address_ty));
-    name = string_to_name(mv_string("SharedAddress"));
+    typep = mk_named_type(pia, "SharedRange",
+                          mk_struct_type(pia, 3,
+                                         "host", mk_prim_type(pia, Address),
+                                         "device", device_address_ty,
+                                         "memsize", mk_prim_type(pia, UInt_64)));
+    name = string_to_name(mv_string("SharedRange"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
-    shared_address_ty = e->value;
+    shared_range_ty = e->value;
 
+    typep = mk_named_type(pia, "DeviceHeap",
+                          mk_struct_type(pia, 2,
+                                         "range", shared_range_ty,
+                                         "owner", heap_owner_ty));
+    name = string_to_name(mv_string("DeviceHeap"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    device_heap_ty = e->value;
 
-    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_64), alloc_sort_ty, shared_address_ty);
-    build_alloc_shared_memory_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("alloc-shared"));
+    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_64), alloc_sort_ty, device_heap_ty);
+    build_create_device_heap_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-device-heap"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, shared_address_ty, mk_prim_type(pia, Unit));
-    build_free_shared_memory_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("free-shared"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_64), alloc_sort_ty, device_address_ty);
-    build_alloc_device_memory_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("alloc-device"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 1, device_address_ty, mk_prim_type(pia, Unit));
-    build_free_device_memory_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("free-device"));
+    typep = mk_proc_type(pia, 1, device_heap_ty, mk_prim_type(pia, Unit));
+    build_destroy_device_heap_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-device-heap"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
@@ -1269,6 +1257,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), wave_dims, mk_prim_type(pia, Unit));
     build_dispatch_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dispatch"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), device_range_ty, mk_prim_type(pia, Unit));
+    build_dispatch_indirect_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("dispatch-indirect"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

@@ -1,267 +1,237 @@
 #ifdef USE_VULKAN
-#include "data/meta/array_impl.h"
 
 #include "platform/signals.h"
 #include "platform/hedron/hedron.h"
 #include "platform/hedron/internal.h"
 
-typedef enum {
-    GpuAllocDefault,
-    GpuAllocReadback,
-    GpuAllocGpu,
-} AllocationType;
 
-struct HdAllocation {
+typedef struct HdBackingBuffer {
     VkBuffer buffer;
     VkDeviceMemory memory;
-    VkDeviceSize size;
+    void* mapped;
     VkDeviceAddress address;
-    void* ptr;
-    VkBufferUsageFlags usage;
+} HdBackingBuffer;
+
+struct HdHeapOwner {
+    HdLogicalDevice* device;
+    HdBackingBuffer backing;
 };
 
-ARRAY_COMMON_IMPL(HdAllocation, hdalloc, HdAllocation);
+#define GPU_ALLOCATION_ALIGNMENT 16
 
+#define CPU_VISIBLE_MEMORY_PROPERTIES                                          \
+    (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |\
+     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |\
+     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
 
-/*
-  // TODO: at device creation, check to ensure all necessary memory types are supported.
-uint32_t find_memory_type(uint32_t filter, VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties mem_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_properties);
+#define UNIVERSAL_BUFFER_USAGE \
+        (VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |                    \
+         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | \
+         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
 
-    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
-        if (filter & (1 << i) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
+#define FORBIDDEN_MEMORY_PROPERTIES \
+    (VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT |            \
+     VK_MEMORY_PROPERTY_PROTECTED_BIT |                   \
+     VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD |         \
+     VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)
 
-    panic(mv_string("failed to find suitable memory type!"));
-}
-*/
-
-uint32_t find_memory_type(uint32_t typeFilter, VkMemoryPropertyFlags props, HdLogicalDevice* device) {
-    VkPhysicalDeviceMemoryProperties phys_props;
-    vkGetPhysicalDeviceMemoryProperties(device->physical_device, &phys_props);
-    for (uint32_t i = 0; i < phys_props.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && (phys_props.memoryTypes[i].propertyFlags & props) == props) {
-            return i;
-        }
-    }
-
-    return UINT32_MAX;
+static uint64_t align_up(uint64_t size, uint64_t alignment) {
+    return ((size + alignment - 1) / alignment) * alignment;
 }
 
-static HdAllocation do_vk_allocation(size_t size, size_t align,
-                                     VkBufferUsageFlags2KHR usage,
-                                     VkMemoryPropertyFlagBits props,
-                                     HdLogicalDevice *device) {
-    VkBufferUsageFlags2CreateInfoKHR usage2Info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR,
-        .usage = usage,
-    };
+static uint32_t popcount(uint32_t value) {
+    // Keep the core library usable on x86-64 CPUs without POPCNT.
+    value -= (value >> 1) & 0x55555555u;
+    value = (value & 0x33333333u) + ((value >> 2) & 0x33333333u);
+    value = (value + (value >> 4)) & 0x0f0f0f0fu;
+    return (value * 0x01010101u) >> 24;
+}
 
-    VkBufferCreateInfo buffer_create = {
+
+bool is_usable_memory_type(VkPhysicalDeviceMemoryProperties properties, uint32_t index) {
+    const VkMemoryType type = properties.memoryTypes[index];
+    if ((type.propertyFlags & FORBIDDEN_MEMORY_PROPERTIES) != 0)
+        return false;
+    return (properties.memoryHeaps[type.heapIndex].flags & VK_MEMORY_HEAP_TILE_MEMORY_BIT_QCOM) == 0;
+}
+
+bool find_memory_type(uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred, VkDeviceSize minimum_heap_size,
+                      uint32_t* output, VkMemoryPropertyFlags avoided, HdLogicalDevice* device) {
+    bool has_best = false;
+    bool best_is_avoided = false;
+    uint32_t best = 0;
+    uint32_t best_score = 0;
+    VkPhysicalDeviceMemoryProperties memory_properties = device->physical_device->memory_properties;
+    VkDeviceSize best_heap_size = 0;
+    for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+        if ((bits & (1u << i)) == 0)
+            continue;
+        const VkMemoryPropertyFlags flags = memory_properties.memoryTypes[i].propertyFlags;
+        if ((flags & required) != required)
+            continue;
+        if (!is_usable_memory_type(memory_properties, i))
+            continue;
+        const VkMemoryHeap heap = memory_properties.memoryHeaps[memory_properties.memoryTypes[i].heapIndex];
+        if (heap.size < minimum_heap_size) {
+            continue;
+        }
+        const bool is_avoided = (flags & avoided) != 0;
+        const uint32_t score = (uint32_t)(popcount(flags & preferred));
+        if (!has_best || (best_is_avoided && !is_avoided) ||
+            (best_is_avoided == is_avoided &&
+             (score > best_score || (score == best_score && heap.size > best_heap_size)))) {
+            best = i;
+            has_best = true;
+            best_is_avoided = is_avoided;
+            best_score = score;
+            best_heap_size = heap.size;
+        }
+    }
+    if (!has_best)
+        return false;
+    *output = best;
+    return true;
+}
+
+void create_backing_buffer(HdBackingBuffer* output, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags required,
+                           VkMemoryPropertyFlags preferred, VkMemoryPropertyFlags avoided, HdLogicalDevice* device)  {
+    *output = (HdBackingBuffer){};
+    HdBackingBuffer result = {};
+    const VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
-        .pNext = &usage2Info,
-        // Ignored as we pass the actual usage via pNext
-        .usage = 0,
-        // Means that other queue families cannot access the data in this buffer.
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        // must be 0 as sharing mode is exclusive.
-        .queueFamilyIndexCount = 0,
-    };
-
-    VkBuffer buffer;
-    VkResult result = vkCreateBuffer(device->device, &buffer_create, NULL, &buffer);
-    if (result != VK_SUCCESS) {
-        panic(mv_string("Failure in internal GPU allocation procedure. TODO: allow gpu allocations to fail without panicing"));
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(device->device, buffer, &memory_requirements);
-
-    align = align > memory_requirements.alignment ? align : memory_requirements.alignment;
-    VkDeviceSize alignedSize = (memory_requirements.size + align - 1) & ~(align - 1);
-
-    VkMemoryAllocateFlagsInfo allocate_flags = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR,
-    };
-
-    VkMemoryAllocateInfo allocate_info = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &allocate_flags,
-        .allocationSize = alignedSize,
-        .memoryTypeIndex = find_memory_type(memory_requirements.memoryTypeBits, props, device),
-    };
-
-    VkDeviceMemory device_memory;
-    result = vkAllocateMemory(device->device, &allocate_info, NULL, &device_memory);
-    if (result != VK_SUCCESS) {
-        panic(mv_string("Failure in internal GPU allocation procedure. TODO: allow gpu allocations to fail without panicing"));
-    }
-    result = vkBindBufferMemory(device->device, buffer, device_memory, 0);
-    if (result != VK_SUCCESS) {
-        panic(mv_string("Failure in internal GPU allocation procedure. TODO: allow gpu allocations to fail without panicing"));
-    }
-    VkBufferDeviceAddressInfo address_info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = buffer,
-    };
-    VkDeviceAddress address = vkGetBufferDeviceAddress(device->device, &address_info); 
-
-    VkDeviceSize offset = (align - (address % align)) % align;
-    address += offset;
-
-    void* host_address = NULL;
-    if (props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        vkMapMemory(device->device, device_memory, 0, alignedSize, 0, &host_address);
-        host_address = (uint8_t*)(host_address) + offset;
-    }
-    return (HdAllocation) {
-        .buffer = buffer,
-        .memory = device_memory,
-        .size = size,
-        .address = address,
-        .ptr = host_address,
-
         .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkResult vkresult = vkCreateBuffer(device->device, &buffer_info, NULL, &result.buffer);
+    if (vkresult != VK_SUCCESS)
+        panic(mv_string("TODO: handle this failure elegantly (hedron)"));
+
+    VkMemoryRequirements requirements = {};
+    vkGetBufferMemoryRequirements(device->device, result.buffer, &requirements);
+    uint32_t memory_type = 0;
+    const bool has_memory_type = find_memory_type(requirements.memoryTypeBits, required, preferred,
+                                                  requirements.size, &memory_type, avoided, device);
+    //assert(has_memory_type);
+    // TODO: make the above check happen at device creation time, and the below
+    // check happen only as an internal 'the API has bugs' type error.
+    if (!has_memory_type)
+        panic(mv_string("Device does not have memory type to support this backing buffer."));
+
+    const VkMemoryAllocateFlagsInfo flags_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+    };
+    const VkMemoryAllocateInfo allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &flags_info,
+        .allocationSize = requirements.size,
+        .memoryTypeIndex = memory_type,
+    };
+    vkresult = vkAllocateMemory(device->device, &allocate_info, NULL, &result.memory);
+    if (vkresult != VK_SUCCESS)
+        panic(mv_string("TODO: handle this failure elegantly (hedron)"));
+    vkresult = vkBindBufferMemory(device->device, result.buffer, result.memory, 0);
+    if (vkresult != VK_SUCCESS)
+        panic(mv_string("TODO: handle this failure elegantly (hedron)"));
+
+    if ((required & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) {
+        vkresult = vkMapMemory(device->device, result.memory, 0, VK_WHOLE_SIZE, 0, &result.mapped);
+        if (vkresult != VK_SUCCESS)
+            panic(mv_string("TODO: handle this failure elegantly (hedron)"));
+    }
+
+    const VkBufferDeviceAddressInfo address_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = result.buffer,
+    };
+    result.address = vkGetBufferDeviceAddress(device->device, &address_info);
+    *output = result;
+}
+
+HdHeap allocate_descriptor_heap(size_t size, MemoryType type, HdLogicalDevice* device) {
+    //GpuHeap Device::allocate_descriptor_heap(VkDeviceSize size, MemoryType memory) noexcept
+    //assert(memory == MemoryType::texture_descriptor_heap || memory == MemoryType::sampler_descriptor_heap);
+    VkPhysicalDeviceDescriptorHeapPropertiesEXT heap_properties
+        = device->physical_device->heap_properties;
+    const bool texture_heap = type == MemoryTextureDescriptor;
+    const VkDeviceSize resource_alignment = heap_properties.imageDescriptorAlignment > heap_properties.bufferDescriptorAlignment
+                                                ? heap_properties.imageDescriptorAlignment
+                                                : heap_properties.bufferDescriptorAlignment;
+    const VkDeviceSize reserved_alignment = texture_heap ? resource_alignment : heap_properties.samplerDescriptorAlignment;
+    const VkDeviceSize heap_alignment = texture_heap ? heap_properties.resourceHeapAlignment : heap_properties.samplerHeapAlignment;
+    const VkDeviceSize reserved_size = texture_heap ? heap_properties.minResourceHeapReservedRange : heap_properties.minSamplerHeapReservedRange;
+
+    const VkDeviceSize reserved_offset = align_up(size, reserved_alignment);
+    const VkDeviceSize bind_size = reserved_offset + reserved_size;
+    const VkDeviceSize allocation_alignment = heap_alignment > GPU_ALLOCATION_ALIGNMENT ? heap_alignment : GPU_ALLOCATION_ALIGNMENT;
+    const VkDeviceSize alignment_padding = allocation_alignment - 1;
+    const VkDeviceSize backing_size = bind_size + alignment_padding;
+
+    HdHeapOwner *heap = mem_alloc(sizeof(HdHeapOwner), device->gpa);
+    *heap = (HdHeapOwner){.device = device};
+
+    create_backing_buffer(
+        &heap->backing, backing_size,
+        UNIVERSAL_BUFFER_USAGE | VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT,
+        CPU_VISIBLE_MEMORY_PROPERTIES, 0, 0, device);
+
+    const VkDeviceAddress gpu_address = align_up(heap->backing.address, allocation_alignment);
+    const VkDeviceSize allocation_offset = gpu_address - heap->backing.address;
+    return (HdHeap) {
+        .host = ((uint8_t*)heap->backing.mapped) + allocation_offset,
+        .device = {gpu_address},
+        .memsize = size,
+        .owner = heap,
     };
 }
 
-static HdAllocation create_allocation(size_t size, size_t align, AllocationType type, HdLogicalDevice* device) {
+HdHeap create_device_heap(size_t size, size_t align, MemoryType type, HdLogicalDevice* device) {
+    if (type == MemoryTextureDescriptor || type == MemorySamplerDescriptor)
+        return allocate_descriptor_heap(size, type, device);
+
+    VkMemoryPropertyFlags required = 0;
+    VkMemoryPropertyFlags preferred = 0;
+    VkMemoryPropertyFlags avoided = 0;
     switch (type) {
-    case GpuAllocDefault: {
-        // default: it may be used for basically anything, so we flag it as
-        // such. On modern GPUs, expect minimal extra cost.
-        // TODO: in theroy we only need a subset of these flags, investigate
-        //       (Shader device addres + storage  + transfer)
-        VkBufferUsageFlags2KHR usage = 
-            VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT_KHR |
-            VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR |
-            VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT_KHR |
-            VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR;
-
-            // Only required for ray tracing... how are we exposing this?
-            //VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
-
-        VkMemoryPropertyFlagBits properties =
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-        return do_vk_allocation(size, align, usage, properties, device);
-    }
-    case GpuAllocReadback: {
-        /** Note: reference had, why less usage?
-        auto usage =
-            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        */
-        VkBufferUsageFlags2KHR usage = 
-            VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT_KHR |
-            VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR;
-        
-        VkMemoryPropertyFlagBits properties =
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-            VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-        return do_vk_allocation(size, align, usage, properties, device);
-    }
-    case GpuAllocGpu: {
-        // Like Default, but with an additional 'acceleration structure storage
-        // bit' flag.
-        VkBufferUsageFlags2KHR usage = 
-            VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR |
-            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT_KHR |
-            //VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_STORAGE_TEXEL_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR |
-            VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR;
-            //VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT_KHR |
-            //VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR |
-            // Only required for ray tracing... how are we exposing this?
-            //VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-            //VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
-        VkMemoryPropertyFlagBits properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        return do_vk_allocation(size, align, usage, properties, device);
-    }
+    case MemoryCpuVisible:
+        required = CPU_VISIBLE_MEMORY_PROPERTIES;
+        break;
+    case MemoryWriteback:
+        required = CPU_VISIBLE_MEMORY_PROPERTIES;
+        preferred = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        break;
+    case MemoryDevice:
+        required = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        avoided = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        break;
     default:
-        panic(mv_string("Invalid allocation type"));
-    }
-}
-
-void free_allocation(HdAllocation allocation, HdLogicalDevice* device) {
-    if (allocation.ptr) {
-        vkUnmapMemory(device->device, allocation.memory);
+        panic(mv_string("create_gpu_heap received an invalid memory type"));
     }
 
-    vkFreeMemory(device->device, allocation.memory, NULL);
-    vkDestroyBuffer(device->device, allocation.buffer, NULL);
-}
-
-SharedAddress alloc_shared_memory(size_t size, size_t align, MemoryType type, HdLogicalDevice* device) {
-    AllocationType atype = type == MemoryWriteback
-        ? GpuAllocReadback
-        : GpuAllocDefault;
-    HdAllocation hda = create_allocation(size, align, atype, device);
-    // TODO: acquire lock
-    push_hdalloc(hda, &device->allocations);
-    // TODO: release lock
-    return (SharedAddress) {
-        .host = hda.ptr,
-        .device = {.val = hda.address},
+    HdHeapOwner *owner = mem_alloc(sizeof(HdHeapOwner), device->gpa);
+    *owner = (HdHeapOwner) {
+        .device = device,
+    };
+    create_backing_buffer(&owner->backing, size, UNIVERSAL_BUFFER_USAGE, required, preferred, avoided, device);
+    return (HdHeap) {
+        .host = owner->backing.mapped,
+        .device = {owner->backing.address},
+        .memsize = size,
+        .owner = owner,
     };
 }
 
-void free_shared_memory(SharedAddress address, HdLogicalDevice* device) {
+void destroy_device_heap(HdHeap heap) {
     // TODO: acquire mutex
     // TODO: release mutex
-    bool valid = false;
-    for (size_t i = 0; i < device->allocations.len; i++) {
-        if (address.device.val == device->allocations.data[i].address) {
-            free_allocation(device->allocations.data[i], device);
-            device->allocations.data[i] = device->allocations.data[device->allocations.len - 1];
-            pop_hdalloc(&device->allocations);
-            valid = true;
-        }
-    }
-    // TODO: add debug hook or similar for this check!
-    if (!valid) {
-        panic(mv_string("attempt to free invalid or already free'd shared address"));
-    }
-}
-
-DeviceAddress alloc_device_memory(size_t size, size_t align, HdLogicalDevice* device) {
-    HdAllocation hda = create_allocation(size, align, GpuAllocGpu, device);
-    // TODO: acquire lock
-    push_hdalloc(hda, &device->allocations);
-    // TODO: release lock
-    return (DeviceAddress) {.val = hda.address};
-}
-
-void free_device_memory(DeviceAddress address, HdLogicalDevice* device) {
-    // TODO: acquire mutex
-    // TODO: release mutex
-    bool valid = false;
-    for (size_t i = 0; i < device->allocations.len; i++) {
-        if (address.val == device->allocations.data[i].address) {
-            free_allocation(device->allocations.data[i], device);
-            device->allocations.data[i] = device->allocations.data[device->allocations.len - 1];
-            pop_hdalloc(&device->allocations);
-        }
-    }
-    // TODO: add debug hook or similar for this check!
-    if (!valid) {
-        panic(mv_string("attempt to free invalid or already free'd device address"));
-    }
+    HdLogicalDevice* device = heap.owner->device;
+    const VkDevice vkdevice = device->device;
+    const HdBackingBuffer backing = heap.owner->backing;
+    if (backing.mapped) vkUnmapMemory(vkdevice, backing.memory);
+    vkDestroyBuffer(vkdevice, backing.buffer, NULL);
+    vkFreeMemory(vkdevice, backing.memory, NULL);
+    mem_free(heap.owner, device->gpa);
 }
 
 #endif

@@ -27,6 +27,23 @@ const char *required_device_extensions[] = {
     //VK_EXT_MESH_SHADER_EXTENSION_NAME, // Note: not supported on laptop :(
 };
 
+VkResult populate_physical_device(VkPhysicalDevice device, HdPhysicalDevice* out) {
+  *out = (HdPhysicalDevice){};
+  out->device = device;
+  vkGetPhysicalDeviceMemoryProperties(device, &out->memory_properties);
+
+  out->heap_properties = (VkPhysicalDeviceDescriptorHeapPropertiesEXT) {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT
+  };
+  VkPhysicalDeviceProperties2 properties2 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+    .pNext = &out->heap_properties,
+  };
+  vkGetPhysicalDeviceProperties2(device, &properties2);
+
+  return VK_SUCCESS;
+};
+
 bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
     uint32_t extension_count;
     vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
@@ -104,6 +121,7 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
             && supported_features_12.bufferDeviceAddress
             && supported_features_12.descriptorBindingPartiallyBound
             && supported_features_12.descriptorBindingVariableDescriptorCount
+            && supported_features_11.storageBuffer16BitAccess
             && extensions_supported);
 }
 
@@ -136,9 +154,7 @@ PtrSlice get_physical_devices(HdInstance* instance, Allocator* a) {
         size_t suitable_device_index = 0;
         for (size_t i = 0; i < device_count; i++) {
             if (is_device_suitable(devices[i], a)) {
-                suitable_devices[suitable_device_index] = (HdPhysicalDevice) {
-                    .device = devices[i],
-                };
+                populate_physical_device(devices[i], &suitable_devices[suitable_device_index]);
                 suitable_device_index++;
             }
         }
@@ -184,6 +200,17 @@ uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
     return found_queue;
 }
 
+void populate_device_functions(HdLogicalDevice* device) {
+    VkDevice vkdevice = device->device;
+    device->fns = (DeviceFunctions) {
+        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdPushDataEXT"),
+        .vkCmdBindIndexBuffer3KHR = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdBindIndexBuffer3KHR"),
+        .vkCmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndirect2KHR"),
+        .vkCmdDrawIndexedIndirect2KHR = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndexedIndirect2KHR"),
+        .vkCmdDispatchIndirect2KHR = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDispatchIndirect2KHR"),
+    };
+}
+
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
     // Enable feature on physical device features chain during device creation
     // Chain deviceFeatures2 into VkDeviceCreateInfo::pNext
@@ -219,9 +246,14 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .descriptorBindingPartiallyBound = VK_TRUE,
       .descriptorBindingVariableDescriptorCount = VK_TRUE,
     };
+    VkPhysicalDeviceVulkan11Features features_11 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+      .pNext = &features_12,
+      .storageBuffer16BitAccess = VK_TRUE,
+    };
     VkPhysicalDeviceFeatures2 features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-      .pNext = &features_12,
+      .pNext = &features_11,
     };
 
     uint32_t graphics_family = get_graphics_queue(device->device, instance->gpa);
@@ -262,28 +294,15 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
-        .physical_device = device->device,
+        .physical_device = device,
         .gpa = instance->gpa,
 
         .swapchains = mk_ptr_array(2, instance->gpa),
         .usable_buffers = mk_ptr_array(8, instance->gpa),
         .pending_buffers = mk_sem_bufs_amap(8, instance->gpa),
-
-        .allocations = mk_hdalloc_array(8, instance->gpa),
-
-        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vk_ldevice, "vkCmdPushDataEXT"),
-        .cmd_bind_index_buffer = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdBindIndexBuffer3KHR"),
-        .cmd_draw_indirect = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDrawIndirect2KHR"),
-        .cmd_draw_indexed_indirect = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDrawIndexedIndirect2KHR"),
-        .cmd_dispatch_indirect = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vk_ldevice, "vkCmdDispatchIndirect2KHR"),
     };
 
-    // TODO: ifdef debug assert
-    if (!ldevice->vkCmdPushDataEXT) {
-        panic(mv_string("Unable to get function vkCmdPushDataEXT"));
-    }
-    // TODO: check all functions are nonzero
-
+    populate_device_functions(ldevice);
 
     VkQueue vk_queue = VK_NULL_HANDLE;
     vkGetDeviceQueue2(vk_ldevice, &queue_info, &vk_queue);
@@ -298,9 +317,6 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
 
 void destroy_logical_device(HdLogicalDevice* device) {
     // TODO: make this a debug only panic/add debugging facility
-    if (device->allocations.len != 0) {
-        panic(mv_string("You haven't freed all device/shared memory that was allocated."));
-    }
     for (size_t i = 0; i < device->usable_buffers.len; i++) {
         HdCommandBuffer* buffer = device->usable_buffers.data[i];
         vkDestroyCommandPool(device->device, buffer->pool, NULL);
@@ -317,7 +333,6 @@ void destroy_logical_device(HdLogicalDevice* device) {
         sdelete_pbuf_array(arr);
     }
     sdelete_sem_bufs_amap(device->pending_buffers);
-    sdelete_hdalloc_array(device->allocations);
 
     vkDestroyDevice(device->device, NULL);
     mem_free(device, device->gpa);

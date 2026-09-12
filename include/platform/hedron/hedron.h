@@ -103,13 +103,18 @@ void present(HdSwapchain* swapchain);
 void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
 */
 
-// Memory
+// Memory & Resources
 // ------------
 // Three types of generic memory
 //   - GPU only memmory (must use commands to copy from/to)
 //   - Shared memory
 //     - Default: fast for host to write, slow for host to read
 //     - Writeback: 
+typedef struct {
+    size_t size;
+    size_t align;
+} SizeAlign;
+
 typedef struct {
     uint64_t val;
 } DeviceAddress;
@@ -119,53 +124,29 @@ typedef struct {
     uint64_t size; // Number of bytes
 } DeviceRange;
 
+typedef struct HdHeapOwner HdHeapOwner;
+
 typedef struct {
    void* host;
    DeviceAddress device;
-} SharedAddress;
+   size_t memsize;
+   HdHeapOwner *owner;
+} HdHeap;
 
-typedef enum : uint64_t { MemoryDefault, MemoryWriteback } MemoryType;
+typedef enum : uint64_t {
+  MemoryCpuVisible,
+  MemoryWriteback,
+  MemoryDevice,
+  MemoryTextureDescriptor,
+  MemorySamplerDescriptor,
+} MemoryType;
 
-SharedAddress alloc_shared_memory(size_t size, size_t align, MemoryType type, HdLogicalDevice* device);
-void free_shared_memory(SharedAddress address, HdLogicalDevice* device);
-
-DeviceAddress alloc_device_memory(size_t size, size_t align, HdLogicalDevice* device);
-void free_device_memory(DeviceAddress address, HdLogicalDevice* device);
+HdHeap create_device_heap(size_t size, size_t align, MemoryType type, HdLogicalDevice* device);
+void destroy_device_heap(HdHeap address);
 
 //  Textures
 // ------------
-// TODO
-
-//  Pipelines
-// ------------
-typedef enum : uint64_t {
-  CullCCW,
-  CullCW,
-  CullAll,
-  CullNone,
-} HdCull;
-
-typedef enum : uint64_t {
-  BlendAdd,
-  BlendSubtract,
-  BlendRevSubtract,
-  BlendMin,
-  BlendMax,
-} HdBlendOp;
-
-typedef enum : uint64_t {
-  FactorZero,
-  FactorOne,
-  FactorSrcColour,
-  FactorDstColour,
-  FactorSrcAlpha,
-  FactorDstAlpha,
-  FactorOneMinusSrcColour,
-  FactorOneMinusDstColour,
-  FactorOneMinusSrcAlpha,
-  FactorOneMinusDstAlpha,
-  FactorSrcAlphaSaturate,
-} HdBlendFactor;
+// 
 
 typedef enum : uint64_t {
   Format_R8_SRGB,
@@ -224,6 +205,138 @@ typedef enum : uint64_t {
   FormatUndefined,
 } HdFormat;
 OPTION_TYPE(HdFormat, HdFormat);
+
+typedef enum : uint64_t {
+    OpNever,
+    OpLess,
+    OpEqual,
+    OpLessEqual,
+    OpGreater,
+    OpNotEqual,
+    OpGreaterEqual,
+    OpAlways
+} HdCompOp;
+OPTION_TYPE(HdCompOp, HdCompOp);
+
+typedef enum : uint64_t {
+    Tx1d, Tx2d, Tx3d, TxCube, Tx2dArray, TxCubeArray,
+} HdTextureType;
+
+typedef enum : uint64_t {
+    UsageNone              = 0x0,
+    UsageSampled           = 0x1,
+    UsageStorage           = 0x2,
+    ColourAttachment       = 0x4,
+    DepthStencilAttachment = 0x8,
+    TransferSource         = 0x10,
+    TransferDestination    = 0x20,
+} HdTextureUsage;
+
+typedef struct HdTexture HdTexture;
+typedef struct HdTextureHeapOwner HdTextureHeapOwner;
+typedef struct {
+    HdTextureHeapOwner* owner;
+    size_t memsize;
+} HdTextureHeap;
+
+typedef struct {
+    HdTextureType type;
+    uint32_t extent[3];
+    uint32_t mip_levels;
+    uint32_t layer_count;
+    HdFormat format;
+    bool mutable_format;
+    HdTextureUsage usage;
+} HdTextureDescription;
+
+typedef enum : uint64_t {
+    TDescSampled, TDescStorage
+} HdTextureDescriptorType;
+
+typedef enum : uint64_t {
+    TxAAutomatic,  TxAColour, TxADepth, TxAStencil
+} HdTextureAspect;
+
+typedef struct {
+    HdFormat format; // Undefined inherits the texture format.
+    HdTextureAspect aspect; // Automatic selects color, or depth before stencil.
+    uint32_t base_mip;
+    uint32_t mip_count; // Zero selects every remaining mip level.
+    uint32_t base_layer; // Vulkan array layer; cube faces are individual layers.
+    uint32_t layer_count; // Vulkan array layers; zero selects every remaining layer.
+} HdTextureDescriptorDescription;
+
+typedef struct {
+    uint32_t mip_level;
+    uint32_t slice; // Physical array slice; cube faces are individual slices.
+} HdRenderViewDescription;
+
+typedef enum : uint64_t {
+    AMRepeat, AMMirroredRepeat, AMClampToEdge
+} HdAddressMode;
+
+typedef enum : uint64_t {
+    Nearest, Linear,
+} HdFilter;
+
+typedef struct {
+    HdFilter min_filter;
+    HdFilter mag_filter;
+    HdFilter mip_filter;
+    HdAddressMode address_u;
+    HdAddressMode address_v;
+    HdAddressMode address_w;
+    bool anisotropic;
+    HdCompOpOption comp;
+} HdSamplerDescription;
+
+HdTextureHeap create_texture_heap(size_t memsize, HdLogicalDevice* device);
+void destroy_texture_heap(HdTextureHeap heap);
+
+SizeAlign get_texture_size_align(HdLogicalDevice* device, HdTextureDescription desc);
+HdTexture* create_texture(HdLogicalDevice* device, HdTextureDescription desc, HdTextureHeap heap, uint64_t offset);
+void destroy_texture(HdTexture* texture);
+
+HdRenderView* create_render_view(HdTexture* texture, HdRenderViewDescription desc);
+void destroy_render_view(HdRenderView* render_view);
+
+void write_texture_descriptor(void *cpu_destination, HdTexture *texture,
+                              HdTextureDescriptorType type,
+                              HdTextureDescriptorDescription desc,
+                              HdLogicalDevice* device);
+void write_sampler_descriptor(HdLogicalDevice* device, void* cpu_destination, HdSamplerDescription desc);
+
+
+//  Pipelines
+// ------------
+typedef enum : uint64_t {
+  CullCCW,
+  CullCW,
+  CullAll,
+  CullNone,
+} HdCull;
+
+typedef enum : uint64_t {
+  BlendAdd,
+  BlendSubtract,
+  BlendRevSubtract,
+  BlendMin,
+  BlendMax,
+} HdBlendOp;
+
+typedef enum : uint64_t {
+  FactorZero,
+  FactorOne,
+  FactorSrcColour,
+  FactorDstColour,
+  FactorSrcAlpha,
+  FactorDstAlpha,
+  FactorOneMinusSrcColour,
+  FactorOneMinusDstColour,
+  FactorOneMinusSrcAlpha,
+  FactorOneMinusDstAlpha,
+  FactorSrcAlphaSaturate,
+} HdBlendFactor;
 
 typedef struct {
     HdBlendFactor source;
@@ -300,16 +413,6 @@ void submit_commands(HdQueue* queue, PtrSlice command_buffers, HdSemaphore* sema
 // TODO: stage acceleration structure??
 // State Objects
 // --------------
-typedef enum : uint64_t {
-    OpNever,
-    OpLess,
-    OpEqual,
-    OpLessEqual,
-    OpGreater,
-    OpNotEqual,
-    OpGreaterEqual,
-    OpAlways
-} HdCompOp;
 
 typedef enum : uint64_t {
     StKeep,
@@ -450,8 +553,8 @@ typedef struct {
     uint32_t y;
     uint32_t z;
 } UVec3;
-void dispatch(HdCommandBuffer* cb, void* dataGpu, UVec3 group_count, HdLogicalDevice* device );
-//void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, void* group_count_device);
+void dispatch(HdCommandBuffer* cb, void* dataGpu, UVec3 group_count);
+void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, DeviceRange arguments);
 
 void draw(HdCommandBuffer *commands, void *data,
           uint32_t vertex_count, uint32_t instance_count,

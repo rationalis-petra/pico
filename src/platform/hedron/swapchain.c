@@ -9,11 +9,11 @@ void wait_present_context(HdLogicalDevice* device, HdPresentContext* context);
 
 static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, HdSurface* surface) {
     uint32_t num_formats;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device->device,
                                          surface->surface,
                                          &num_formats, NULL);
     VkSurfaceFormatKHR* available_formats = mem_alloc(sizeof(VkSurfaceFormatKHR) * num_formats, device->gpa);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device,
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device->device,
                                          surface->surface, &num_formats,
                                          available_formats);
 
@@ -82,7 +82,7 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     // TODO: We do use check result here for 'correct' return values, but
     //       should make sure memory is cleaned up properly if/when that is the case.
     VkSurfaceCapabilitiesKHR surface_capabilities;
-    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device, surface->surface, &surface_capabilities);
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device->device, surface->surface, &surface_capabilities);
     if (result != VK_SUCCESS) return result;
 
     // requested_image_count = min(max(info.requested, minPossiple), maxPossible)
@@ -254,7 +254,7 @@ void destroy_swapchain(HdSwapchain* swapchain) {
 
 bool swapchain_surface_configuration_changed(HdSwapchain* swapchain) {
     VkSurfaceCapabilitiesKHR capabilities = {};
-    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(swapchain->device->physical_device, swapchain->surface->surface, &capabilities);
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(swapchain->device->physical_device->device, swapchain->surface->surface, &capabilities);
     if (result != VK_SUCCESS) {
         panic(mv_string("TODO: handle failure in swapchain_surface_configuration_changed"));
     }
