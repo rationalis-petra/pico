@@ -34,7 +34,27 @@ static PiType* device_range_ty;
 static PiType* shared_range_ty;
 static PiType* device_heap_ty;
 
+// Textures
 static PiType* format_ty;
+static PiType* compare_op_ty;
+static PiType* texture_shape_ty;
+static PiType* texture_usage_ty;
+static PiType* texture_description_ty;
+
+static PiType* texture_heap_ty;
+static PiType* texture_heap_owner_ty;
+static PiType* texture_ty;
+
+static PiType* texture_descriptor_type_ty;
+static PiType* texture_aspect_ty;
+static PiType* texture_descriptor_description_ty;
+static PiType* address_mode_ty;
+static PiType* filter_ty;
+static PiType* sampler_description_ty;
+
+static PiType* render_view_description_ty;
+
+// Pipeline
 static PiType* cull_ty;
 static PiType* blend_op_ty;
 static PiType* blend_factor_ty;
@@ -214,7 +234,130 @@ void build_destroy_device_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia
 
 //   Textures 
 // ---------
-// (TODO)
+
+
+HdTextureHeap relic_create_texture_heap(size_t memsize) {
+    HdLogicalDevice* device = get_current_device();
+    return create_texture_heap(memsize, device);
+}
+
+void build_create_texture_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType theap = mk_struct_ctype(pia, 2,
+                                  "host", mk_voidptr_ctype(pia),
+                                  "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 theap);
+    convert_c_fn(relic_create_texture_heap, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_texture_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType theap = mk_struct_ctype(pia, 2,
+                                  "host", mk_voidptr_ctype(pia),
+                                  "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 theap,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_texture_heap, &fn_ctype, type, ass, a, point); 
+}
+
+
+SizeAlign relic_get_texture_size_align(HdTextureDescription desc) {
+    HdLogicalDevice* device = get_current_device();
+    return get_texture_size_align(desc, device);
+}
+
+void build_get_texture_size_align_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType sz_align = mk_struct_ctype(pia, 2,
+                                     "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                     "align", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+
+    CType desc = mk_struct_ctype(pia, 7,
+                                 "shape", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "extent", mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})),
+                                 "mip_levels", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "layer_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "format", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "mutable_format", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                                 "usage", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "desc", desc, sz_align);
+    convert_c_fn(relic_get_texture_size_align, &fn_ctype, type, ass, a, point); 
+}
+
+void build_create_texture_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType desc = mk_struct_ctype(pia, 7,
+                                 "shape", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "extent", mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})),
+                                 "mip_levels", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "layer_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "format", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "mutable_format", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                                 "usage", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType theap = mk_struct_ctype(pia, 2,
+                                  "host", mk_voidptr_ctype(pia),
+                                  "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 3,
+                                 "desc", desc,
+                                 "heap", theap,
+                                 "offset", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(create_texture, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_texture_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_texture, &fn_ctype, type, ass, a, point); 
+}
+
+void relic_write_texture_descriptor(void *cpu_destination, HdTexture *texture,
+                                    HdTextureDescriptorType type,
+                                    HdTextureDescriptorDescription desc) {
+  HdLogicalDevice* device = get_current_device();
+  return write_texture_descriptor(cpu_destination, texture, type, desc, device);
+}
+
+void build_write_texture_descriptor_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType desc =
+        mk_struct_ctype(pia, 6,
+                        "format", mk_option_ctype(pia, mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})),
+                        "aspect", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "base-mip", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                        "mip-count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                        "base-layer", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                        "layer-count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 4,
+                                 "cpu-desination", mk_voidptr_ctype(pia),
+                                 "texture", mk_voidptr_ctype(pia),
+                                 "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "desc", desc,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(relic_write_texture_descriptor, &fn_ctype, type, ass, a, point); 
+}
+
+void relic_write_sampler_descriptor(void* cpu_destination, HdSamplerDescription desc) {
+    HdLogicalDevice* device = get_current_device();
+    return write_sampler_descriptor(cpu_destination, desc, device);
+}
+
+void build_write_sampler_descriptor_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType desc =
+        mk_struct_ctype(pia, 6,
+                        "min_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "mag_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "mip_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "address_u", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "address_v", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "address_w", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                        "anisotropic", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                        "comp", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "cpu-destination", mk_voidptr_ctype(pia),
+                                 "desc", desc,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(relic_write_sampler_descriptor, &fn_ctype, type, ass, a, point); 
+}
 
 //   Pipelines 
 // -------------
@@ -357,10 +500,10 @@ void build_submit_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Al
 // -------------
 
 void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2,
-                               "commands", mk_voidptr_ctype(pia),
-                               "pipeline", mk_voidptr_ctype(pia),
-                               (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "pipeline", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
     convert_c_fn(set_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
@@ -713,7 +856,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     swapchain_ty = e->value;
 
-    type = (PiType) {.sort = TType};
     typep = mk_opaque_type(pia, "RenderView", module, mk_prim_type(pia, Address));
     name = string_to_name(mv_string("RenderView"));
     add_def(module, name, type, &typep, null_segments, NULL);
@@ -779,7 +921,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      */
     type = (PiType) {.sort = TType};
 
-    typep = mk_enum_type(pia, 5, "default", 0, "writeback", 0, "device", 0, "texture-descriptor", 0, "sampler-desriptor", 0);
+    typep = mk_enum_type(pia, 5, "default", 0, "writeback", 0, "device", 0, "texture-descriptor", 0, "sampler-descriptor", 0);
     name = string_to_name(mv_string("HeapType"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
@@ -850,43 +992,37 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     /** 
      * Textures 
      * ----------
-     * TODO
+     * 
      */
 
-    /** 
-     * Pipelines
-     * ----------
-     * A pipeline is simply a series of shaders that get executed, and (in the
-     * case of a graphics pipeline), the rasterizer state that the shaders use.
-     */
     type = (PiType) {.sort = TType};
 
-    typep = mk_named_type(pia, "Format", mk_enum_type(pia, 53,
+    typep = mk_named_type(pia, "Format", mk_enum_type(pia, 49,
                          "r8-srgb", 0,
                          "rg8-srgb", 0,
-                         "rgb8-srgb", 0,
+                                     //"rgb8-srgb", 0,
                          "rgba8-srgb", 0,
                          "bgra8-srgb", 0,
-                         "rgba4-srgb", 0,
+                         "rgba4-unorm", 0,
                          "r5g5b5a1-unorm", 0,
                          "r5g6b5-unorm", 0,
                          "r8-unorm", 0,
                          "rg8-unorm", 0,
-                         "rgb8-unorm", 0,
+                                    //"rgb8-unorm", 0,
                          "rgba8-unorm", 0,
                          "brga8-unorm", 0,
                          "r16-unorm", 0,
                          "rg16-unorm", 0,
-                         "rgb16-unorm", 0,
+                                   //"rgb16-unorm", 0,
                          "rgba16-unorm", 0,
                          "r8-uint", 0,
                          "rg8-uint", 0,
-                         "rgb8-uint", 0,
+                                     //"rgb8-uint", 0,
                          "rgba8-uint", 0,
                          "brga8-uint", 0,
                          "r16-uint", 0,
                          "rg16-uint", 0,
-                         "rgb16-uint", 0,
+                                    //"rgb16-uint", 0,
                          "rgba16-uint", 0,
                          "r32-uint", 0,
                          "rg32-uint", 0,
@@ -894,7 +1030,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          "rgba32-uint", 0,
                          "r16-float", 0,
                          "rg16-float", 0,
-                         "rgb16-float", 0,
+                                   //"rgb16-float", 0,
                          "rgba16-float", 0,
                          "r32-float", 0,
                          "rg32-float", 0,
@@ -913,6 +1049,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          "bc3-srgb", 0,
                          "bc3-unorm", 0,
                          "bc5-rg", 0,
+                         "bc6h-ufloat", 0,
+                         "bc6h-sfloat", 0,
                          "bc7-srgb", 0,
                          "bc7-unorm", 0));
     name = string_to_name(mv_string("Format"));
@@ -921,6 +1059,237 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     format_ty = e->value;
 
+    typep = mk_named_type(pia, "CompareOp",
+                          mk_enum_type(pia, 8,
+                                       "never", 0,
+                                       "<", 0,
+                                       "=", 0,
+                                       "<=", 0,
+                                       ">", 0,
+                                       "!=", 0,
+                                       ">=", 0,
+                                       "always", 0));
+    name = string_to_name(mv_string("CompareOp"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    compare_op_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureShape",
+                          mk_enum_type(pia, 6,
+                                       "one-d", 0, "two-d", 0, "three-d", 0, "cube", 0, "two-d-array", 0, "cube-array", 0));
+    name = string_to_name(mv_string("TextureShape"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_shape_ty = e->value;
+
+    // TODO: define usage, eventually add flags to language
+    typep = mk_named_type(pia, "TextureUsage", mk_prim_type(pia, UInt_64));
+    name = string_to_name(mv_string("TextureUsage"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_usage_ty = e->value;
+
+    typep = mk_opaque_type(pia, "Texture", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("Texture"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_ty = e->value;
+
+    typep = mk_opaque_type(pia, "TextureHeapOwner", module, mk_prim_type(pia, Address));
+    name = string_to_name(mv_string("TextureHeapOwner"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_heap_owner_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureHeap",
+                          mk_struct_type(pia, 2,
+                                         "owner", texture_heap_owner_ty,
+                                         "memsize",  mk_prim_type(pia, UInt_64)));
+    name = string_to_name(mv_string("TextureHeap"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_heap_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureDescription",
+                          mk_struct_type(pia, 7,
+                                         "shape", texture_shape_ty,
+                                         "extent", mk_tile_type(pia, 1, 3, mk_prim_type(pia, UInt_32)),
+                                         "mip-levels", mk_prim_type(pia, UInt_32),
+                                         "layer-count", mk_prim_type(pia, UInt_32),
+                                         "format", format_ty,
+                                         "format-is-mutable", mk_prim_type(pia, Bool),
+                                         "usage", texture_usage_ty));
+    name = string_to_name(mv_string("TextureDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_description_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureDescriptorType",
+                          mk_enum_type(pia, 2,
+                                       "sampled", 0, "storage", 0));
+    name = string_to_name(mv_string("TextureDescriptorType"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_descriptor_type_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureAspect",
+                          mk_enum_type(pia, 4,
+                                       "automatic", 0, "colour", 0, "depth", 0, "stencil", 0));
+    name = string_to_name(mv_string("TextureAspect"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_aspect_ty = e->value;
+
+    typep = mk_named_type(pia, "TextureDescriptorDescription",
+                          mk_struct_type(pia, 6,
+                                         "format", mk_type_app(pia, get_maybe_type(), format_ty),
+                                         "aspect", texture_aspect_ty,
+                                         "base-mip", mk_prim_type(pia, UInt_32),
+                                         "mip-count", mk_prim_type(pia, UInt_32),
+                                         "base-layer", mk_prim_type(pia, UInt_32),
+                                         "layer-count", mk_prim_type(pia, UInt_32)));
+    name = string_to_name(mv_string("TextureDescriptorDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_descriptor_description_ty = e->value;
+
+    typep = mk_named_type(pia, "AddressMode",
+                          mk_enum_type(pia, 3,
+                                       "repeat", 0, "mirrored-repeat", 0, "clamp-to-edge", 0));
+    name = string_to_name(mv_string("AddressMode"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    address_mode_ty = e->value;
+
+    typep = mk_named_type(pia, "Filter",
+                          mk_enum_type(pia, 2,
+                                       "nearest", 0, "linear", 0));
+    name = string_to_name(mv_string("Filter"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    filter_ty = e->value;
+
+    typep = mk_named_type(pia, "SamplerDescription",
+                          mk_struct_type(pia, 6,
+                                         "min-filter", filter_ty,
+                                         "mag-filter", filter_ty,
+                                         "mip-filter", filter_ty,
+                                         "address-u", address_mode_ty,
+                                         "address-v", address_mode_ty,
+                                         "address-w", address_mode_ty,
+                                         "anisotropic", mk_prim_type(pia, Bool),
+                                         "comparison", compare_op_ty));
+    name = string_to_name(mv_string("SamplerDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    sampler_description_ty = e->value;
+
+    typep = mk_named_type(pia, "RenderViewDescription",
+                          mk_struct_type(pia, 2,
+                                         "mip-level", mk_prim_type(pia, UInt_32),
+                                         "slice", mk_prim_type(pia, UInt_32)));
+    name = string_to_name(mv_string("RenderViewDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    render_view_description_ty = e->value;
+
+    typep = mk_proc_type(pia, 1,
+                         mk_prim_type(pia, UInt_64),
+                         texture_heap_ty);
+    build_create_texture_heap_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-texture-heap"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, texture_heap_ty,
+                         mk_prim_type(pia, Unit));
+    build_destroy_texture_heap_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destory-texture-heap"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+
+    typep = mk_proc_type(pia, 1, texture_description_ty,
+                         mk_struct_type(pia, 2,
+                                        "size", mk_prim_type(pia, UInt_64),
+                                        "align", mk_prim_type(pia, UInt_64)));
+    build_get_texture_size_align_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("texture-size-align"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 3,
+                         texture_description_ty,
+                         texture_heap_ty,
+                         mk_prim_type(pia, UInt_64),
+                         texture_ty);
+    build_create_texture_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-texture"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, texture_ty,
+                         mk_prim_type(pia, Unit));
+    build_destroy_texture_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destory-texture"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 4,
+                         mk_prim_type(pia, Address),
+                         texture_ty,
+                         texture_descriptor_type_ty,
+                         texture_descriptor_description_ty,
+                         mk_prim_type(pia, Unit));
+    build_write_texture_descriptor_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("write-texture-descriptor"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2,
+                         mk_prim_type(pia, Address),
+                         sampler_description_ty,
+                         mk_prim_type(pia, Unit));
+    build_write_sampler_descriptor_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("write-sampler-descriptor"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+
+    /** 
+     * Pipelines
+     * ----------
+     * A pipeline is simply a series of shaders that get executed, and (in the
+     * case of a graphics pipeline), the rasterizer state that the shaders use.
+     */
     typep = mk_named_type(pia, "Cull", mk_enum_type(pia, 4,
                          "counter-clockwise", 0,
                          "clockwise", 0,
@@ -1241,7 +1610,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     index_type_ty = e->value;
 
-
+    // Commands - Values
     typep = mk_proc_type(pia, 2, command_buffer_ty, pipeline_ty, mk_prim_type(pia, Unit));
     build_set_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("set-pipeline"));

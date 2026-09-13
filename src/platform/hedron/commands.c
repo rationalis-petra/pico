@@ -351,5 +351,4 @@ void end_render_pass(HdCommandBuffer* cb) {
     cb->rendering = false;
 }
 
-
 #endif

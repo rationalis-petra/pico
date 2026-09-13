@@ -29,68 +29,8 @@ struct HdHeapOwner {
          VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | \
          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
 
-#define FORBIDDEN_MEMORY_PROPERTIES \
-    (VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT |            \
-     VK_MEMORY_PROPERTY_PROTECTED_BIT |                   \
-     VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD |         \
-     VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)
-
 static uint64_t align_up(uint64_t size, uint64_t alignment) {
     return ((size + alignment - 1) / alignment) * alignment;
-}
-
-static uint32_t popcount(uint32_t value) {
-    // Keep the core library usable on x86-64 CPUs without POPCNT.
-    value -= (value >> 1) & 0x55555555u;
-    value = (value & 0x33333333u) + ((value >> 2) & 0x33333333u);
-    value = (value + (value >> 4)) & 0x0f0f0f0fu;
-    return (value * 0x01010101u) >> 24;
-}
-
-
-bool is_usable_memory_type(VkPhysicalDeviceMemoryProperties properties, uint32_t index) {
-    const VkMemoryType type = properties.memoryTypes[index];
-    if ((type.propertyFlags & FORBIDDEN_MEMORY_PROPERTIES) != 0)
-        return false;
-    return (properties.memoryHeaps[type.heapIndex].flags & VK_MEMORY_HEAP_TILE_MEMORY_BIT_QCOM) == 0;
-}
-
-bool find_memory_type(uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred, VkDeviceSize minimum_heap_size,
-                      uint32_t* output, VkMemoryPropertyFlags avoided, HdLogicalDevice* device) {
-    bool has_best = false;
-    bool best_is_avoided = false;
-    uint32_t best = 0;
-    uint32_t best_score = 0;
-    VkPhysicalDeviceMemoryProperties memory_properties = device->physical_device->memory_properties;
-    VkDeviceSize best_heap_size = 0;
-    for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
-        if ((bits & (1u << i)) == 0)
-            continue;
-        const VkMemoryPropertyFlags flags = memory_properties.memoryTypes[i].propertyFlags;
-        if ((flags & required) != required)
-            continue;
-        if (!is_usable_memory_type(memory_properties, i))
-            continue;
-        const VkMemoryHeap heap = memory_properties.memoryHeaps[memory_properties.memoryTypes[i].heapIndex];
-        if (heap.size < minimum_heap_size) {
-            continue;
-        }
-        const bool is_avoided = (flags & avoided) != 0;
-        const uint32_t score = (uint32_t)(popcount(flags & preferred));
-        if (!has_best || (best_is_avoided && !is_avoided) ||
-            (best_is_avoided == is_avoided &&
-             (score > best_score || (score == best_score && heap.size > best_heap_size)))) {
-            best = i;
-            has_best = true;
-            best_is_avoided = is_avoided;
-            best_score = score;
-            best_heap_size = heap.size;
-        }
-    }
-    if (!has_best)
-        return false;
-    *output = best;
-    return true;
 }
 
 void create_backing_buffer(HdBackingBuffer* output, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags required,

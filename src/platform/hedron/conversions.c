@@ -214,33 +214,33 @@ VkAttachmentStoreOp store_op_to_vk(StoreOp op) {
 
 VkFormat format_to_vk(HdFormat format) {
     switch (format) {
-    case FormatUndefined: break;   
-
     case Format_R8_SRGB: return VK_FORMAT_R8_SRGB;
     case Format_RG8_SRGB: return VK_FORMAT_R8G8_SRGB;
-    case Format_RGB8_SRGB: return VK_FORMAT_R8G8B8_SRGB;
+        //case Format_RGB8_SRGB: return VK_FORMAT_R8G8B8_SRGB;
     case Format_RGBA8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
     case Format_BGRA8_SRGB: return VK_FORMAT_B8G8R8A8_SRGB;
-    case Format_RGBA4_SRGB: return VK_FORMAT_R4G4B4A4_UNORM_PACK16;
-    case Format_R5G5B5A1_UNORM: return VK_FORMAT_R5G5B5A1_UNORM_PACK16;
-    case Format_R5G6B5_UNORM: return VK_FORMAT_R5G6B5_UNORM_PACK16;
-    case Format_R8_UNORM: return VK_FORMAT_R8_UNORM;
-    case Format_RG8_UNORM: return VK_FORMAT_R8G8_UNORM;
-    case Format_RGB8_UNORM: return VK_FORMAT_R8G8B8_UNORM;
-    case Format_RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
-    case Format_BRGA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
-    case Format_R16_UNORM: return VK_FORMAT_R16_UNORM;
-    case Format_RG16_UNORM: return VK_FORMAT_R16G16_UNORM;
-    case Format_RGB16_UNORM: return VK_FORMAT_R16G16B16_UNORM;
-    case Format_RGBA16_UNORM: return VK_FORMAT_R16G16B16A16_UNORM;
+
+    case Format_RGBA4_UNorm: return VK_FORMAT_R4G4B4A4_UNORM_PACK16;
+    case Format_R5G5B5A1_UNorm: return VK_FORMAT_R5G5B5A1_UNORM_PACK16;
+    case Format_R5G6B5_UNorm: return VK_FORMAT_R5G6B5_UNORM_PACK16;
+
+    case Format_R8_UNorm: return VK_FORMAT_R8_UNORM;
+    case Format_RG8_UNorm: return VK_FORMAT_R8G8_UNORM;
+        //case Format_RGB8_UNorm: return VK_FORMAT_R8G8B8_UNORM;
+    case Format_RGBA8_UNorm: return VK_FORMAT_R8G8B8A8_UNORM;
+    case Format_BGRA8_UNorm: return VK_FORMAT_B8G8R8A8_UNORM;
+    case Format_R16_UNorm: return VK_FORMAT_R16_UNORM;
+    case Format_RG16_UNorm: return VK_FORMAT_R16G16_UNORM;
+        //case Format_RGB16_UNORM: return VK_FORMAT_R16G16B16_UNORM;
+    case Format_RGBA16_UNorm: return VK_FORMAT_R16G16B16A16_UNORM;
     case Format_R8_UInt: return VK_FORMAT_R8_UINT;
     case Format_RG8_UInt: return VK_FORMAT_R8G8_UINT;
-    case Format_RGB8_UInt: return VK_FORMAT_R8G8B8_UINT;
+        //case Format_RGB8_UInt: return VK_FORMAT_R8G8B8_UINT;
     case Format_RGBA8_UInt: return VK_FORMAT_R8G8B8A8_UINT;
-    case Format_BRGA8_UInt: return VK_FORMAT_B8G8R8A8_UINT;
+    case Format_BGRA8_UInt: return VK_FORMAT_B8G8R8A8_UINT;
     case Format_R16_UInt: return VK_FORMAT_R16_UINT;
     case Format_RG16_UInt: return VK_FORMAT_R16G16_UINT;
-    case Format_RGB16_UInt: return VK_FORMAT_R16G16B16_UINT;
+        //case Format_RGB16_UInt: return VK_FORMAT_R16G16B16_UINT;
     case Format_RGBA16_UInt: return VK_FORMAT_R16G16B16A16_UINT;
     case Format_R32_UInt: return VK_FORMAT_R32_UINT;
     case Format_RG32_UInt: return VK_FORMAT_R32G32_UINT;
@@ -248,7 +248,7 @@ VkFormat format_to_vk(HdFormat format) {
     case Format_RGBA32_UInt: return VK_FORMAT_R32G32B32A32_UINT;
     case Format_R16_Float: return VK_FORMAT_R16_SFLOAT;
     case Format_RG16_Float: return VK_FORMAT_R16G16_SFLOAT;
-    case Format_RGB16_Float: return VK_FORMAT_R16G16B16_SFLOAT;
+        //case Format_RGB16_Float: return VK_FORMAT_R16G16B16_SFLOAT;
     case Format_RGBA16_Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
     case Format_R32_Float: return VK_FORMAT_R32_SFLOAT;
     case Format_RG32_Float: return VK_FORMAT_R32G32_SFLOAT;
@@ -262,11 +262,13 @@ VkFormat format_to_vk(HdFormat format) {
     case Format_S8_UInt: return VK_FORMAT_S8_UINT;
     case Format_D32_Float_S8_UInt: return VK_FORMAT_D32_SFLOAT_S8_UINT;
     case Format_EAC_RG: return VK_FORMAT_EAC_R11G11_UNORM_BLOCK;
-    case Format_ASTC_4X4_SRGB: return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
-    case Format_ASTC_4X4_UNorm: return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+    case Format_ASTC_4x4_SRGB: return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
+    case Format_ASTC_4x4_UNorm: return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
     case Format_BC3_SRGB: return VK_FORMAT_BC3_SRGB_BLOCK;
     case Format_BC3_UNorm: return VK_FORMAT_BC3_UNORM_BLOCK;
     case Format_BC5_RG: return VK_FORMAT_BC5_UNORM_BLOCK;
+    case Format_BC6H_UFloat: return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+    case Format_BC6H_SFloat: return VK_FORMAT_BC6H_SFLOAT_BLOCK;
     case Format_BC7_SRGB: return VK_FORMAT_BC7_SRGB_BLOCK;
     case Format_BC7_UNorm: return VK_FORMAT_BC7_UNORM_BLOCK;
     }
@@ -274,5 +276,120 @@ VkFormat format_to_vk(HdFormat format) {
     panic(mv_string("unknown image format"));
 }
 
+VkImageType texshape_to_vk(HdTextureShape type) {
+    switch (type) {
+    case Tx1d: return VK_IMAGE_TYPE_1D;
+    case Tx3d: return VK_IMAGE_TYPE_3D;
+    case Tx2d:
+    case TxCube:
+    case Tx2dArray:
+    case TxCubeArray: return VK_IMAGE_TYPE_2D;
+    }
+    return VK_IMAGE_TYPE_MAX_ENUM;
+}
+
+VkImageViewType texshape_to_vk_view(HdTextureShape type) {
+    switch (type) {
+    case Tx1d: return VK_IMAGE_VIEW_TYPE_1D;
+    case Tx2d: return VK_IMAGE_VIEW_TYPE_2D;
+    case Tx3d: return VK_IMAGE_VIEW_TYPE_3D;
+    case TxCube: return VK_IMAGE_VIEW_TYPE_CUBE;
+    case Tx2dArray: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    case TxCubeArray: return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+    }
+    return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+}
+
+HdTextureFormatInfo get_texture_format_info(HdFormat format) {
+    switch (format) {
+    case Format_R8_SRGB:
+    case Format_R8_UNorm:
+    case Format_R8_UInt:
+    case Format_S8_UInt:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 1,
+            .depth = false,
+            .stencil = format == Format_S8_UInt,
+        };
+    case Format_RG8_SRGB:
+    case Format_RGBA4_UNorm:
+    case Format_R5G5B5A1_UNorm:
+    case Format_R5G6B5_UNorm:
+    case Format_RG8_UNorm:
+    case Format_R16_UNorm:
+    case Format_RG8_UInt:
+    case Format_R16_UInt:
+    case Format_R16_Float:
+    case Format_D16_UNorm:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 2,
+            .depth = format == Format_D16_UNorm,
+            .stencil = false,
+        };
+    case Format_RGBA8_SRGB:
+    case Format_BGRA8_SRGB:
+    case Format_RGBA8_UNorm:
+    case Format_BGRA8_UNorm:
+    case Format_RG16_UNorm:
+    case Format_RGBA8_UInt:
+    case Format_BGRA8_UInt:
+    case Format_RG16_UInt:
+    case Format_R32_UInt:
+    case Format_RG16_Float:
+    case Format_R32_Float:
+    case Format_RGB10A2_UNorm:
+    case Format_RG11B10_Float:
+    case Format_D24_UNorm_S8_UInt:
+    case Format_D32_Float:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 4,
+            .depth = format == Format_D24_UNorm_S8_UInt || format == Format_D32_Float,
+            .stencil = format == Format_D24_UNorm_S8_UInt,
+        };
+    case Format_RGBA16_UNorm:
+    case Format_RGBA16_UInt:
+    case Format_RG32_UInt:
+    case Format_RGBA16_Float:
+    case Format_RG32_Float:
+    case Format_D32_Float_S8_UInt:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 8,
+            .depth = format == Format_D32_Float_S8_UInt,
+            .stencil = format == Format_D32_Float_S8_UInt,
+        };
+    case Format_RGB32_UInt:
+    case Format_RGB32_Float:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 12,
+        };
+    case Format_RGBA32_UInt:
+    case Format_RGBA32_Float:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 1, .height = 1},
+            .bytes_per_block = 16,
+        };
+    case Format_EAC_RG:
+    case Format_ASTC_4x4_SRGB:
+    case Format_ASTC_4x4_UNorm:
+    case Format_BC3_SRGB:
+    case Format_BC3_UNorm:
+    case Format_BC5_RG:
+    case Format_BC6H_UFloat:
+    case Format_BC6H_SFloat:
+    case Format_BC7_SRGB:
+    case Format_BC7_UNorm:
+        return (HdTextureFormatInfo) {
+            .block_extent = {.width = 4, .height = 4},
+            .bytes_per_block = 16,
+        };
+    }
+    // TODO: panic??
+    return (HdTextureFormatInfo) {};
+}
 
 #endif

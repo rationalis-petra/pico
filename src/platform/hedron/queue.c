@@ -14,19 +14,65 @@ HdQueue* get_queue(HdLogicalDevice* device) {
     return &device->queue;
 }
 
+#define IMAGE_BARRIER_BATCH_SIZE 64 
+
+void record_image_barriers(VkCommandBuffer command_buffer, VkImageMemoryBarrier2* barriers, uint32_t num_barriers) {
+    // TODO: debug layer
+    //assert((command_buffer && barriers.data && barriers.size != 0 && barriers.size <= UINT_MAX) && "image barrier batch is invalid");
+    const VkDependencyInfo dependency = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = num_barriers,
+        .pImageMemoryBarriers = barriers,
+    };
+    vkCmdPipelineBarrier2(command_buffer, &dependency);
+}
+
+void command_begin(HdCommandBuffer* buffer, HdLogicalDevice* device) {
+    vkResetCommandPool(device->device, buffer->pool, 0);
+    VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+
+    vkBeginCommandBuffer(buffer->buffer, &begin_info);
+    if (device->pending_texture_initializations.first) {
+        VkImageMemoryBarrier2 barriers[IMAGE_BARRIER_BATCH_SIZE] = {};
+        uint32_t barrier_count = 0;
+        while (device->pending_texture_initializations.first) {
+            HdTextureInitialization* initialization = device->pending_texture_initializations.first;
+            remove_texture_initialization(initialization);
+            barriers[barrier_count++] = (VkImageMemoryBarrier2) {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = initialization->image,
+                .subresourceRange = {
+                    .aspectMask = initialization->aspect_mask,
+                    .levelCount = initialization->mip_levels,
+                    .layerCount = initialization->array_layers,
+                },
+            };
+            if (barrier_count == IMAGE_BARRIER_BATCH_SIZE) {
+                record_image_barriers(buffer->buffer, barriers, barrier_count);
+                barrier_count = 0;
+            }
+        }
+        if (barrier_count != 0) record_image_barriers(buffer->buffer, barriers, barrier_count);
+    }
+}
+
 HdCommandBuffer* start_recording_commands(HdQueue* queue) {
     // TODO: look at aaltonen's vestion...
   HdLogicalDevice* device = queue->device;
 
   if (device->usable_buffers.len > 0) {
     HdCommandBuffer* buffer = pop_ptr(&device->usable_buffers);
-
-    vkResetCommandPool(device->device, buffer->pool, 0);
-    VkCommandBufferBeginInfo begin_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    vkBeginCommandBuffer(buffer->buffer, &begin_info);
+    command_begin(buffer, queue->device);
     return buffer;
   }
 
@@ -54,12 +100,6 @@ HdCommandBuffer* start_recording_commands(HdQueue* queue) {
     panic(mv_string("Failed to create command pool"));
   }
 
-  VkCommandBufferBeginInfo begin_info = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(buffer, &begin_info);
-  
   HdCommandBuffer* hd_buffer = mem_alloc(sizeof(HdCommandBuffer), queue->device->gpa);
   *hd_buffer = (HdCommandBuffer) {
     .queue = queue,
@@ -67,6 +107,8 @@ HdCommandBuffer* start_recording_commands(HdQueue* queue) {
     .pool = pool,
     .device = queue->device,
   };
+
+  command_begin(hd_buffer, queue->device);
   return hd_buffer;
 }
 

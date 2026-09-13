@@ -277,7 +277,7 @@ Document* pretty_res(EvalResult res, Allocator* a) {
     }
     case ERImport: {
         PtrArray docs = mk_ptr_array(res.imported.len + 1, a);
-        push_ptr(mk_str_doc(mv_string("Opened:"), a), &docs);
+        push_ptr(mk_str_doc(mv_string("Imported:"), a), &docs);
         for (size_t i = 0; i < res.imported.len; i++) {
             ImportClause clause = res.imported.data[i];
             push_ptr(pretty_import_clause(clause, a), &docs);

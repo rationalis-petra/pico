@@ -32,6 +32,7 @@
 
 #define MAX_COLOUR_ATTACHMENTS 8
 #define ADDRESS_FLAGS (VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR)
+#define FORMAT_COUNT ((uint32_t)Format_Count)
 
 // Instance & Devices
 struct HdInstance {
@@ -46,6 +47,7 @@ struct HdInstance {
 // re-query the API. 
 struct HdPhysicalDevice {
     VkPhysicalDevice device;
+    VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkPhysicalDeviceDescriptorHeapPropertiesEXT heap_properties;
 };
@@ -59,6 +61,7 @@ struct HdQueue {
 struct HdCommandBuffer {
     HdQueue* queue;
     VkCommandBuffer buffer;
+
     // TODO: investigate the following
     // Each command buffer owns its' own pool so recording needs no
     // cross-thread synchronization
@@ -79,12 +82,35 @@ ARRAY_HEADER(PendingBuffer, pbuf, PendingBuffer);
 AMAP_HEADER(HdSemaphore*, PendingBufferArray, sem_bufs, SemBufs);
 
 typedef struct {
+    PFN_vkWriteSamplerDescriptorsEXT vkWriteSamplerDescriptorsEXT;
+    PFN_vkWriteResourceDescriptorsEXT vkWriteResourceDescriptorsEXT;
     PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
     PFN_vkCmdBindIndexBuffer3KHR vkCmdBindIndexBuffer3KHR;
     PFN_vkCmdDrawIndirect2KHR vkCmdDrawIndirect2KHR;
     PFN_vkCmdDrawIndexedIndirect2KHR vkCmdDrawIndexedIndirect2KHR;
     PFN_vkCmdDispatchIndirect2KHR vkCmdDispatchIndirect2KHR;
 } DeviceFunctions;
+
+typedef struct HdTextureInitializationList HdTextureInitializationList;
+typedef struct HdTextureInitialization HdTextureInitialization;
+
+struct HdTextureInitialization {
+    VkImage image;
+    VkImageAspectFlags aspect_mask;
+    uint32_t mip_levels;
+    uint32_t array_layers;
+    HdTextureInitialization* previous;
+    HdTextureInitialization* next;
+    HdTextureInitializationList* owner;
+};
+
+struct HdTextureInitializationList {
+    HdTextureInitialization* first;
+    HdTextureInitialization* last;
+};
+
+void append_texture_initialization(HdTextureInitializationList* list, HdTextureInitialization* initialization);
+void remove_texture_initialization(HdTextureInitialization* initialization);
 
 struct HdLogicalDevice {
     VkDevice device;
@@ -106,10 +132,14 @@ struct HdLogicalDevice {
     SemBufsAMap pending_buffers;
 
     HdQueue queue;
+    HdTextureInitializationList pending_texture_initializations;
     
     // Instead of needing to re-query the physical device for it's properties,
-    // we store them here. 
+    // we store them here. We also store some cached data about the device
     HdPhysicalDevice* physical_device;
+    VkFormatFeatureFlags2* format_features;
+    uint32_t texture_memory_type;
+    uint32_t texture_heap_alignment;
 
     // Function pointers for extensions we need go here.
     DeviceFunctions fns;
@@ -174,6 +204,19 @@ struct HdSwapchain {
     HdCommandBuffer* claimed_by;
 };
 
+// Textures
+struct HdTexture {
+    HdLogicalDevice* device;
+    VkImage image;
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+    uint32_t layer_count;
+    HdTextureShape shape;
+    HdFormat format;
+    HdTextureInitialization initialization;
+};
+
 // Pipeline
 struct HdPipeline {
     VkPipeline pipeline;
@@ -196,3 +239,15 @@ VkBlendOp blend_op_to_vk(HdBlendOp op);
 VkAttachmentLoadOp load_op_to_vk(LoadOp op);
 VkAttachmentStoreOp store_op_to_vk(StoreOp op);
 VkFormat format_to_vk(HdFormat format);
+VkImageViewType texshape_to_vk_view(HdTextureShape type);
+VkImageType texshape_to_vk(HdTextureShape type);
+
+// Get information about things in useful formats
+uint32_t popcount(uint32_t value);
+bool has_depth_aspect(HdFormat format);
+bool has_stencil_aspect(HdFormat format);
+VkMemoryRequirements image_memory_requirements(HdLogicalDevice* device, const VkImageCreateInfo image_info);
+VkFormatFeatureFlags2 required_format_features(HdTextureUsage usage);
+
+bool find_memory_type(uint32_t bits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred, VkDeviceSize minimum_heap_size,
+                      uint32_t* output, VkMemoryPropertyFlags avoided, HdLogicalDevice* device);

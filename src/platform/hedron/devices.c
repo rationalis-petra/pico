@@ -9,7 +9,12 @@
 // Device management, see hedron.h any functions marked with static are note
 // exposed as part of the public API
 //   
-//  
+//
+
+// TODO: add to extra/detail fiel?
+uint32_t count_leading_zeros(uint32_t val) {
+  return __builtin_clz(val);
+}
 
 const uint32_t num_required_device_extensions = 8;
 const char *required_device_extensions[] = {
@@ -25,23 +30,6 @@ const char *required_device_extensions[] = {
     VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, 
     VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
     //VK_EXT_MESH_SHADER_EXTENSION_NAME, // Note: not supported on laptop :(
-};
-
-VkResult populate_physical_device(VkPhysicalDevice device, HdPhysicalDevice* out) {
-  *out = (HdPhysicalDevice){};
-  out->device = device;
-  vkGetPhysicalDeviceMemoryProperties(device, &out->memory_properties);
-
-  out->heap_properties = (VkPhysicalDeviceDescriptorHeapPropertiesEXT) {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT
-  };
-  VkPhysicalDeviceProperties2 properties2 = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-    .pNext = &out->heap_properties,
-  };
-  vkGetPhysicalDeviceProperties2(device, &properties2);
-
-  return VK_SUCCESS;
 };
 
 bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
@@ -69,18 +57,18 @@ bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
     return supported_extension_count == num_required_device_extensions;
 }
 
-bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
+bool device_supports_features(VkPhysicalDevice device, Allocator* a) {
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
         .pNext = NULL,
     };
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_heap_features = {
+    VkPhysicalDeviceDescriptorHeapFeaturesEXT descriptor_heap = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
         .pNext = &swapchain_maintenance1,
     };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-        .pNext = &descriptor_heap_features,
+        .pNext = &descriptor_heap,
     };
 
 // Chain shaderObjectFeatures into your VkDeviceCreateInfo pNext
@@ -112,6 +100,7 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     // TODO: move some (or all) of these checks into the hedron API
     return (swapchain_maintenance1.swapchainMaintenance1
             && desc_buffer_features.descriptorBuffer
+            && descriptor_heap.descriptorHeap
             && supported_features_14.maintenance5
             && supported_features_13.dynamicRendering
             && supported_features_13.synchronization2
@@ -124,6 +113,27 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
             && supported_features_11.storageBuffer16BitAccess
             && extensions_supported);
 }
+
+bool check_and_populate_physical_device(VkPhysicalDevice device, Allocator* a, HdPhysicalDevice* out) {
+  if (!device_supports_features(device, a))
+    return false;
+  *out = (HdPhysicalDevice){};
+  out->device = device;
+  vkGetPhysicalDeviceMemoryProperties(device, &out->memory_properties);
+
+  out->heap_properties = (VkPhysicalDeviceDescriptorHeapPropertiesEXT) {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT
+  };
+  VkPhysicalDeviceProperties2 properties2 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+    .pNext = &out->heap_properties,
+  };
+  vkGetPhysicalDeviceProperties2(device, &properties2);
+  out->properties = properties2.properties;
+
+  return true;
+};
+
 
 PtrSlice get_physical_devices(HdInstance* instance, Allocator* a) {
     if (instance->devices) {
@@ -142,29 +152,29 @@ PtrSlice get_physical_devices(HdInstance* instance, Allocator* a) {
         VkPhysicalDevice* devices = mem_alloc(device_count * sizeof(VkPhysicalDevice), a);
         vkEnumeratePhysicalDevices(instance->vk_instance, &device_count, devices);
 
+        HdPhysicalDevice* suitable_devices = mem_alloc( device_count * sizeof(HdPhysicalDevice), a);
         size_t num_suitable_devices = 0;
         // TODO (FEAT): score devices & pick "best" device.
         for (size_t i = 0; i < device_count; i++) {
-            if (is_device_suitable(devices[i], a)) {
+          if (check_and_populate_physical_device(devices[i], a, &suitable_devices[num_suitable_devices])) {
                 num_suitable_devices++;
-            }
-        }
-
-        HdPhysicalDevice* suitable_devices = mem_alloc( num_suitable_devices * sizeof(HdPhysicalDevice), a);
-        size_t suitable_device_index = 0;
-        for (size_t i = 0; i < device_count; i++) {
-            if (is_device_suitable(devices[i], a)) {
-                populate_physical_device(devices[i], &suitable_devices[suitable_device_index]);
-                suitable_device_index++;
             }
         }
 
         mem_free(devices, a);
         instance->num_devices = num_suitable_devices;
         instance->devices = suitable_devices;
+
+        // We have now locally memoized the physical devices; call the function
+        // again to return a a copy of the memoized devices.
+
         return get_physical_devices(instance, a);
     }
 }
+
+/** 
+ * LOGICAL DEVICE STARTS HERE
+ */
 
 uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
     uint32_t queue_family_count = 0;
@@ -203,12 +213,169 @@ uint32_t get_graphics_queue(VkPhysicalDevice device, Allocator* a) {
 void populate_device_functions(HdLogicalDevice* device) {
     VkDevice vkdevice = device->device;
     device->fns = (DeviceFunctions) {
-        .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdPushDataEXT"),
-        .vkCmdBindIndexBuffer3KHR = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdBindIndexBuffer3KHR"),
-        .vkCmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndirect2KHR"),
-        .vkCmdDrawIndexedIndirect2KHR = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndexedIndirect2KHR"),
-        .vkCmdDispatchIndirect2KHR = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDispatchIndirect2KHR"),
+      .vkWriteSamplerDescriptorsEXT = (PFN_vkWriteSamplerDescriptorsEXT)vkGetDeviceProcAddr(vkdevice, "vkWriteSamplerDescriptorsEXT"),
+      .vkWriteResourceDescriptorsEXT = (PFN_vkWriteResourceDescriptorsEXT)vkGetDeviceProcAddr(vkdevice, "vkWriteResourceDescriptorsEXT"),
+      .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdPushDataEXT"),
+      .vkCmdBindIndexBuffer3KHR = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdBindIndexBuffer3KHR"),
+      .vkCmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndirect2KHR"),
+      .vkCmdDrawIndexedIndirect2KHR = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndexedIndirect2KHR"),
+      .vkCmdDispatchIndirect2KHR = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDispatchIndirect2KHR"),
     };
+}
+
+void include_texture_heap_alignment(HdLogicalDevice* device, const VkMemoryRequirements requirements) {
+    if (requirements.alignment > device->texture_heap_alignment)
+        device->texture_heap_alignment = requirements.alignment;
+}
+
+bool fits_image_format_properties(const VkImageCreateInfo image_info, const VkImageFormatProperties properties) {
+    return image_info.extent.width <= properties.maxExtent.width &&
+           image_info.extent.height <= properties.maxExtent.height &&
+           image_info.extent.depth <= properties.maxExtent.depth &&
+           image_info.mipLevels <= properties.maxMipLevels &&
+           image_info.arrayLayers <= properties.maxArrayLayers;
+}
+
+
+bool supports_image_create_info(HdPhysicalDevice* device, const VkImageCreateInfo image_info, VkImageFormatProperties* output) {
+    const VkPhysicalDeviceImageFormatInfo2 format_info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+        .format = image_info.format,
+        .type = image_info.imageType,
+        .tiling = image_info.tiling,
+        .usage = image_info.usage,
+        .flags = image_info.flags,
+    };
+    VkImageFormatProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+    };
+    const VkResult result = vkGetPhysicalDeviceImageFormatProperties2(device->device, &format_info, &properties);
+    if (result == VK_ERROR_FORMAT_NOT_SUPPORTED)
+        return false;
+    //require_vk(result);
+    if (output)
+        *output = properties.imageFormatProperties;
+    return fits_image_format_properties(image_info, properties.imageFormatProperties);
+}
+
+bool select_texture_memory_type(VkPhysicalDevice device, HdLogicalDevice* hd_device) {
+  HdPhysicalDevice* ph_device = hd_device->physical_device;
+  const VkFormatFeatureFlags2 color_features = hd_device->format_features[(uint32_t)(Format_RGBA8_UNorm)];
+    if ((color_features & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT) == 0)
+        return false;
+    // Probes cover DCC-capable color, broad 3D, and sampled depth layouts.
+    // Resource Memory Association makes the color mask common to ordinary optimal-tiled images. Intersect every public depth/stencil format below.
+    const uint32_t probe_2d_size = ph_device->properties.limits.maxImageDimension2D < 2048
+                                       ? ph_device->properties.limits.maxImageDimension2D
+                                       : 2048;
+    VkImageUsageFlags color_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    if ((color_features & VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT) != 0)
+        color_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent = {.width = probe_2d_size, .height = probe_2d_size, .depth = 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = color_usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    if (!supports_image_create_info(ph_device, image_info, NULL)) {
+        image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (!supports_image_create_info(ph_device, image_info, NULL))
+            return false;
+    }
+    const VkMemoryRequirements colour_requirements = image_memory_requirements(hd_device, image_info);
+    uint32_t memory_type_bits = colour_requirements.memoryTypeBits;
+    include_texture_heap_alignment(hd_device, colour_requirements);
+
+    const HdTextureUsage broad_texture_usage = UsageSampled | UsageStorage | UsageTransferDestination;
+    const VkFormatFeatureFlags2 broad_features = hd_device->format_features[(uint32_t)(Format_RGBA32_Float)];
+    const VkFormatFeatureFlags2 broad_required_features = required_format_features(broad_texture_usage);
+    if ((broad_features & broad_required_features) == broad_required_features) {
+        const uint32_t probe_3d_size = ph_device->properties.limits.maxImageDimension3D < 2048
+                                           ? ph_device->properties.limits.maxImageDimension3D
+                                           : 2048;
+        image_info.imageType = VK_IMAGE_TYPE_3D;
+        image_info.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        image_info.extent = (VkExtent3D) {.width = probe_3d_size, .height = probe_3d_size, .depth = probe_3d_size < 4 ? probe_3d_size : 4};
+        image_info.mipLevels = (32u - count_leading_zeros(probe_3d_size));
+        image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if (supports_image_create_info(ph_device, image_info, NULL))
+            include_texture_heap_alignment(hd_device, image_memory_requirements(hd_device, image_info));
+    }
+
+    const HdFormat depth_stencil_formats[] = {
+        Format_D16_UNorm,
+        Format_D24_UNorm_S8_UInt,
+        Format_D32_Float,
+        Format_S8_UInt,
+        Format_D32_Float_S8_UInt,
+    };
+    const VkFormatFeatureFlags2 storage_features = required_format_features(UsageStorage);
+    for (size_t i = 0; i < 5; i++) {
+      HdFormat format = depth_stencil_formats[i];
+      const VkFormatFeatureFlags2 features = hd_device->format_features[(uint32_t)format];
+        const bool combined = has_depth_aspect(format) && has_stencil_aspect(format);
+        VkImageUsageFlags compatibility_usage = 0;
+        if ((features & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT) != 0) compatibility_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        else if ((features & VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) compatibility_usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        else if ((features & storage_features) == storage_features) compatibility_usage = VK_IMAGE_USAGE_STORAGE_BIT;
+        else if (!combined && (features & VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT) != 0) compatibility_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        else if (!combined && (features & VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT) != 0) compatibility_usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if (compatibility_usage != 0)
+        {
+            image_info.imageType = VK_IMAGE_TYPE_2D;
+            image_info.format = format_to_vk(format);
+            image_info.extent = (VkExtent3D) {.width = 1, .height = 1, .depth = 1};
+            image_info.mipLevels = 1;
+            image_info.usage = compatibility_usage;
+            VkImageFormatProperties compatibility_properties = {};
+            if (supports_image_create_info(ph_device, image_info, &compatibility_properties)) {
+                image_info.extent = (VkExtent3D) {.width = 512, .height = 512, .depth = 1};
+                if ((features & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT) != 0 && (features & VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+                    image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+                bool supported = image_info.usage == compatibility_usage
+                  ? fits_image_format_properties(image_info, compatibility_properties)
+                  : supports_image_create_info(ph_device, image_info, NULL);
+                if (!supported && image_info.usage != compatibility_usage)
+                {
+                    image_info.usage = compatibility_usage;
+                    supported = fits_image_format_properties(image_info, compatibility_properties);
+                }
+                if (!supported)
+                {
+                    image_info.extent = (VkExtent3D) {.width = 1, .height = 1, .depth = 1};
+                    image_info.usage = compatibility_usage;
+                }
+
+                const VkMemoryRequirements requirements = image_memory_requirements(hd_device, image_info);
+                memory_type_bits &= requirements.memoryTypeBits;
+                include_texture_heap_alignment(hd_device, requirements);
+            }
+        }
+    }
+    return find_memory_type(memory_type_bits,
+                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, 1,
+                            &hd_device->texture_memory_type,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, hd_device);
+}
+
+VkFormatFeatureFlags2 optimal_format_features(VkPhysicalDevice physical_device, HdFormat format) {
+    VkFormatProperties3 properties3 = {
+        .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3,
+    };
+    VkFormatProperties2 properties2 = {
+        .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+        .pNext = &properties3,
+    };
+    vkGetPhysicalDeviceFormatProperties2(physical_device, format_to_vk(format), &properties2);
+    return properties3.optimalTilingFeatures;
 }
 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
@@ -219,10 +386,15 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
         .swapchainMaintenance1 = VK_TRUE,
         .pNext = NULL,
     };
+    VkPhysicalDeviceDescriptorHeapFeaturesEXT descriptor_heap = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
+        .descriptorHeap = VK_TRUE,
+        .pNext = &swapchain_maintenance1,
+    };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .descriptorBuffer = VK_TRUE,
-        .pNext = &swapchain_maintenance1,
+        .pNext = &descriptor_heap,
     };
     VkPhysicalDeviceVulkan14Features features_14 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
@@ -256,6 +428,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
       .pNext = &features_11,
     };
 
+    // TODO: move this to the physical device being populated.
     uint32_t graphics_family = get_graphics_queue(device->device, instance->gpa);
 
     float queue_priority = 1.0f;
@@ -291,6 +464,12 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
         .queueIndex = 0,
     };
 
+
+    VkFormatFeatureFlags2* format_features = mem_alloc(sizeof(VkFormatFeatureFlags2) * FORMAT_COUNT, instance->gpa);
+    for (uint32_t value = 0; value < FORMAT_COUNT; ++value) {
+      format_features[value] = optimal_format_features(device->device, (HdFormat)value);
+    }
+
     HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
@@ -300,8 +479,12 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
         .swapchains = mk_ptr_array(2, instance->gpa),
         .usable_buffers = mk_ptr_array(8, instance->gpa),
         .pending_buffers = mk_sem_bufs_amap(8, instance->gpa),
+        .format_features = format_features,
     };
 
+    if (!select_texture_memory_type(device->device, ldevice)) {
+      panic(mv_string("TODO: move this to device filtering!"));
+    }
     populate_device_functions(ldevice);
 
     VkQueue vk_queue = VK_NULL_HANDLE;
@@ -333,6 +516,7 @@ void destroy_logical_device(HdLogicalDevice* device) {
         sdelete_pbuf_array(arr);
     }
     sdelete_sem_bufs_amap(device->pending_buffers);
+    mem_free(device->format_features, device->gpa);
 
     vkDestroyDevice(device->device, NULL);
     mem_free(device, device->gpa);

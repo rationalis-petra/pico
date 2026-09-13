@@ -90,18 +90,15 @@ void destroy_logical_device(HdLogicalDevice* device);
 // TODO: determine how much complexity from the swapchain we want here, or
 // whether we want it elsewhere? (window api?)
 typedef struct HdSwapchain HdSwapchain;
-typedef struct HdRenderView HdRenderView;
+typedef struct HdFrame HdFrame;
 HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surfaceimages);
 void destroy_swapchain(HdSwapchain* swapchain);
 
+typedef struct HdRenderView HdRenderView;
 HdRenderView* next_frame(HdSwapchain* swapchain);
 // TODO: why isn't the surface notifying us that is should be resized??
 void resize_notify(HdSwapchain* swapchain, HdExtent extent);
 void present(HdSwapchain* swapchain);
-
-/*
-void resize_window_surface(HdSurface* surface, HdSwapchain* swapchain, HdPhysicalDevice* device, HdExtent extent);
-*/
 
 // Memory & Resources
 // ------------
@@ -149,62 +146,76 @@ void destroy_device_heap(HdHeap address);
 // 
 
 typedef enum : uint64_t {
-  Format_R8_SRGB,
-  Format_RG8_SRGB,
-  Format_RGB8_SRGB,
-  Format_RGBA8_SRGB,
-  Format_BGRA8_SRGB,
-  Format_RGBA4_SRGB,
-  Format_R5G5B5A1_UNORM,
-  Format_R5G6B5_UNORM,
-  Format_R8_UNORM,
-  Format_RG8_UNORM,
-  Format_RGB8_UNORM,
-  Format_RGBA8_UNORM,
-  Format_BRGA8_UNORM,
-  Format_R16_UNORM,
-  Format_RG16_UNORM,
-  Format_RGB16_UNORM,
-  Format_RGBA16_UNORM,
-  Format_R8_UInt,
-  Format_RG8_UInt,
-  Format_RGB8_UInt,
-  Format_RGBA8_UInt,
-  Format_BRGA8_UInt,
-  Format_R16_UInt,
-  Format_RG16_UInt,
-  Format_RGB16_UInt,
-  Format_RGBA16_UInt,
-  Format_R32_UInt,
-  Format_RG32_UInt,
-  Format_RGB32_UInt,
-  Format_RGBA32_UInt,
-  Format_R16_Float,
-  Format_RG16_Float,
-  Format_RGB16_Float,
-  Format_RGBA16_Float,
-  Format_R32_Float,
-  Format_RG32_Float,
-  Format_RGB32_Float,
-  Format_RGBA32_Float,
-  Format_RGB10A2_UNorm,
-  Format_RG11B10_Float,
-  Format_D16_UNorm,
-  Format_D24_UNorm_S8_UInt,
-  Format_D32_Float,
-  Format_S8_UInt,
-  Format_D32_Float_S8_UInt,
-  Format_EAC_RG,
-  Format_ASTC_4X4_SRGB,
-  Format_ASTC_4X4_UNorm,
-  Format_BC3_SRGB,
-  Format_BC3_UNorm,
-  Format_BC5_RG,
-  Format_BC7_SRGB,
-  Format_BC7_UNorm,
-  FormatUndefined,
+    Format_R8_SRGB,
+    Format_RG8_SRGB,
+    Format_RGBA8_SRGB,
+    Format_BGRA8_SRGB,
+
+    Format_RGBA4_UNorm,
+    Format_R5G5B5A1_UNorm,
+    Format_R5G6B5_UNorm,
+
+    Format_R8_UNorm,
+    Format_RG8_UNorm,
+    Format_RGBA8_UNorm,
+    Format_BGRA8_UNorm,
+    Format_R16_UNorm,
+    Format_RG16_UNorm,
+    Format_RGBA16_UNorm,
+
+    Format_R8_UInt,
+    Format_RG8_UInt,
+    Format_RGBA8_UInt,
+    Format_BGRA8_UInt,
+    Format_R16_UInt,
+    Format_RG16_UInt,
+    Format_RGBA16_UInt,
+    Format_R32_UInt,
+    Format_RG32_UInt,
+    Format_RGB32_UInt,
+    Format_RGBA32_UInt,
+
+    Format_R16_Float,
+    Format_RG16_Float,
+    Format_RGBA16_Float,
+    Format_R32_Float,
+    Format_RG32_Float,
+    Format_RGB32_Float,
+    Format_RGBA32_Float,
+
+    Format_RGB10A2_UNorm,
+    Format_RG11B10_Float,
+
+    Format_D16_UNorm,
+    Format_D24_UNorm_S8_UInt,
+    Format_D32_Float,
+    Format_S8_UInt,
+    Format_D32_Float_S8_UInt,
+
+    Format_EAC_RG,
+    Format_ASTC_4x4_SRGB,
+    Format_ASTC_4x4_UNorm,
+    Format_BC3_SRGB,
+    Format_BC3_UNorm,
+    Format_BC5_RG,
+    Format_BC6H_UFloat,
+    Format_BC6H_SFloat,
+    Format_BC7_SRGB,
+    Format_BC7_UNorm,
+    // Not a real format, just used to keep track of the number of formats.
+    Format_Count,
 } HdFormat;
+
 OPTION_TYPE(HdFormat, HdFormat);
+
+typedef struct {
+    HdExtent block_extent;
+    uint32_t bytes_per_block;
+    bool depth;
+    bool stencil;
+} HdTextureFormatInfo;
+
+HdTextureFormatInfo get_texture_format_info(HdFormat format);
 
 typedef enum : uint64_t {
     OpNever,
@@ -220,27 +231,28 @@ OPTION_TYPE(HdCompOp, HdCompOp);
 
 typedef enum : uint64_t {
     Tx1d, Tx2d, Tx3d, TxCube, Tx2dArray, TxCubeArray,
-} HdTextureType;
+} HdTextureShape;
 
 typedef enum : uint64_t {
-    UsageNone              = 0x0,
-    UsageSampled           = 0x1,
-    UsageStorage           = 0x2,
-    ColourAttachment       = 0x4,
-    DepthStencilAttachment = 0x8,
-    TransferSource         = 0x10,
-    TransferDestination    = 0x20,
+    UsageNone                   = 0x0,
+    UsageSampled                = 0x1,
+    UsageStorage                = 0x2,
+    UsageColourAttachment       = 0x4,
+    UsageDepthStencilAttachment = 0x8,
+    UsageTransferSource         = 0x10,
+    UsageTransferDestination    = 0x20,
 } HdTextureUsage;
 
 typedef struct HdTexture HdTexture;
 typedef struct HdTextureHeapOwner HdTextureHeapOwner;
+
 typedef struct {
     HdTextureHeapOwner* owner;
     size_t memsize;
 } HdTextureHeap;
 
 typedef struct {
-    HdTextureType type;
+    HdTextureShape shape;
     uint32_t extent[3];
     uint32_t mip_levels;
     uint32_t layer_count;
@@ -258,18 +270,13 @@ typedef enum : uint64_t {
 } HdTextureAspect;
 
 typedef struct {
-    HdFormat format; // Undefined inherits the texture format.
+    HdFormatOption format; // Undefined inherits the texture format.
     HdTextureAspect aspect; // Automatic selects color, or depth before stencil.
     uint32_t base_mip;
     uint32_t mip_count; // Zero selects every remaining mip level.
     uint32_t base_layer; // Vulkan array layer; cube faces are individual layers.
     uint32_t layer_count; // Vulkan array layers; zero selects every remaining layer.
 } HdTextureDescriptorDescription;
-
-typedef struct {
-    uint32_t mip_level;
-    uint32_t slice; // Physical array slice; cube faces are individual slices.
-} HdRenderViewDescription;
 
 typedef enum : uint64_t {
     AMRepeat, AMMirroredRepeat, AMClampToEdge
@@ -290,21 +297,26 @@ typedef struct {
     HdCompOpOption comp;
 } HdSamplerDescription;
 
+typedef struct {
+    uint32_t mip_level;
+    uint32_t slice; // Physical array slice; cube faces are individual slices.
+} HdRenderViewDescription;
+
 HdTextureHeap create_texture_heap(size_t memsize, HdLogicalDevice* device);
 void destroy_texture_heap(HdTextureHeap heap);
 
-SizeAlign get_texture_size_align(HdLogicalDevice* device, HdTextureDescription desc);
-HdTexture* create_texture(HdLogicalDevice* device, HdTextureDescription desc, HdTextureHeap heap, uint64_t offset);
+SizeAlign get_texture_size_align(HdTextureDescription desc, HdLogicalDevice* device);
+HdTexture* create_texture(HdTextureDescription desc, HdTextureHeap heap, uint64_t offset);
 void destroy_texture(HdTexture* texture);
 
 HdRenderView* create_render_view(HdTexture* texture, HdRenderViewDescription desc);
 void destroy_render_view(HdRenderView* render_view);
 
-void write_texture_descriptor(void *cpu_destination, HdTexture *texture,
+void write_texture_descriptor(void* cpu_destination, HdTexture* texture,
                               HdTextureDescriptorType type,
                               HdTextureDescriptorDescription desc,
                               HdLogicalDevice* device);
-void write_sampler_descriptor(HdLogicalDevice* device, void* cpu_destination, HdSamplerDescription desc);
+void write_sampler_descriptor(void* cpu_destination, HdSamplerDescription desc, HdLogicalDevice* device);
 
 
 //  Pipelines
