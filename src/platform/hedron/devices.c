@@ -16,11 +16,12 @@ uint32_t count_leading_zeros(uint32_t val) {
   return __builtin_clz(val);
 }
 
-const uint32_t num_required_device_extensions = 8;
+const uint32_t num_required_device_extensions = 9;
 const char *required_device_extensions[] = {
     // Presentation extensions
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
+    VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
 
     // Other extensions
     VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
@@ -57,60 +58,82 @@ bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
     return supported_extension_count == num_required_device_extensions;
 }
 
+typedef struct {
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1;
+    VkPhysicalDeviceShaderUntypedPointersFeaturesKHR untyped_pointers;
+    VkPhysicalDeviceDescriptorHeapFeaturesEXT descriptor_heap;
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features;
+
+    VkPhysicalDeviceVulkan14Features vulkan_14;
+    VkPhysicalDeviceVulkan13Features vulkan_13;
+    VkPhysicalDeviceVulkan12Features vulkan_12;
+    VkPhysicalDeviceVulkan11Features vulkan_11;
+    VkPhysicalDeviceFeatures2 base;
+} QueriedFeatures;
+
+void populate_queried_features(QueriedFeatures* features) {
+    *features = (QueriedFeatures) {
+        .swapchain_maintenance1 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
+            .pNext = NULL,
+        },
+        .untyped_pointers = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR,
+            .pNext = &features->swapchain_maintenance1,
+        },
+        .descriptor_heap = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
+            .pNext = &features->untyped_pointers,
+        },
+        .desc_buffer_features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+            .pNext = &features->descriptor_heap,
+        },
+
+        .vulkan_14 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = &features->desc_buffer_features,
+        },
+        .vulkan_13 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .pNext = &features->vulkan_14,
+        },
+        .vulkan_12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            .pNext = &features->vulkan_13,
+        },
+        .vulkan_11 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+            .pNext = &features->vulkan_12,
+        },
+        .base = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &features->vulkan_11,
+        },
+    };
+}
+
 bool device_supports_features(VkPhysicalDevice device, Allocator* a) {
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
-        .pNext = NULL,
-    };
-    VkPhysicalDeviceDescriptorHeapFeaturesEXT descriptor_heap = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
-        .pNext = &swapchain_maintenance1,
-    };
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-        .pNext = &descriptor_heap,
-    };
-
-// Chain shaderObjectFeatures into your VkDeviceCreateInfo pNext
-    VkPhysicalDeviceVulkan14Features supported_features_14 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-      .pNext = &desc_buffer_features,
-    };
-    VkPhysicalDeviceVulkan13Features supported_features_13 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-      .pNext = &supported_features_14,
-    };
-
-    VkPhysicalDeviceVulkan12Features supported_features_12 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      .pNext = &supported_features_13,
-    };
-    VkPhysicalDeviceVulkan11Features supported_features_11 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-      .pNext = &supported_features_12,
-    };
-    VkPhysicalDeviceFeatures2 supported_features = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-      .pNext = &supported_features_11,
-    };
-    vkGetPhysicalDeviceFeatures2(device, &supported_features);
+    QueriedFeatures features; 
+    populate_queried_features(&features);
+    vkGetPhysicalDeviceFeatures2(device, &features.base);
 
     const bool extensions_supported = check_device_extension_support(device, a);
 
-    // TODO: move some (or all) of these checks into the hedron API
-    return (swapchain_maintenance1.swapchainMaintenance1
-            && desc_buffer_features.descriptorBuffer
-            && descriptor_heap.descriptorHeap
-            && supported_features_14.maintenance5
-            && supported_features_13.dynamicRendering
-            && supported_features_13.synchronization2
-            && supported_features_12.timelineSemaphore
-            && supported_features_12.scalarBlockLayout
-            && supported_features_12.descriptorIndexing
-            && supported_features_12.bufferDeviceAddress
-            && supported_features_12.descriptorBindingPartiallyBound
-            && supported_features_12.descriptorBindingVariableDescriptorCount
-            && supported_features_11.storageBuffer16BitAccess
+    return (features.swapchain_maintenance1.swapchainMaintenance1
+            && features.untyped_pointers.shaderUntypedPointers
+            && features.desc_buffer_features.descriptorBuffer
+            && features.descriptor_heap.descriptorHeap
+            && features.vulkan_14.maintenance5
+            && features.vulkan_13.dynamicRendering
+            && features.vulkan_13.synchronization2
+            && features.vulkan_12.timelineSemaphore
+            && features.vulkan_12.scalarBlockLayout
+            && features.vulkan_12.descriptorIndexing
+            && features.vulkan_12.bufferDeviceAddress
+            && features.vulkan_12.descriptorBindingPartiallyBound
+            && features.vulkan_12.descriptorBindingVariableDescriptorCount
+            && features.vulkan_11.storageBuffer16BitAccess
             && extensions_supported);
 }
 
@@ -215,6 +238,8 @@ void populate_device_functions(HdLogicalDevice* device) {
     device->fns = (DeviceFunctions) {
       .vkWriteSamplerDescriptorsEXT = (PFN_vkWriteSamplerDescriptorsEXT)vkGetDeviceProcAddr(vkdevice, "vkWriteSamplerDescriptorsEXT"),
       .vkWriteResourceDescriptorsEXT = (PFN_vkWriteResourceDescriptorsEXT)vkGetDeviceProcAddr(vkdevice, "vkWriteResourceDescriptorsEXT"),
+      .vkCmdBindSamplerHeapEXT=  (PFN_vkCmdBindSamplerHeapEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdBindSamplerHeapEXT"),
+      .vkCmdBindResourceHeapEXT = (PFN_vkCmdBindResourceHeapEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdBindResourceHeapEXT"),
       .vkCmdPushDataEXT = (PFN_vkCmdPushDataEXT)vkGetDeviceProcAddr(vkdevice, "vkCmdPushDataEXT"),
       .vkCmdBindIndexBuffer3KHR = (PFN_vkCmdBindIndexBuffer3KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdBindIndexBuffer3KHR"),
       .vkCmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndirect2KHR"),
@@ -381,52 +406,23 @@ VkFormatFeatureFlags2 optimal_format_features(VkPhysicalDevice physical_device, 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance) {
     // Enable feature on physical device features chain during device creation
     // Chain deviceFeatures2 into VkDeviceCreateInfo::pNext
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR,
-        .swapchainMaintenance1 = VK_TRUE,
-        .pNext = NULL,
-    };
-    VkPhysicalDeviceDescriptorHeapFeaturesEXT descriptor_heap = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
-        .descriptorHeap = VK_TRUE,
-        .pNext = &swapchain_maintenance1,
-    };
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT desc_buffer_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-        .descriptorBuffer = VK_TRUE,
-        .pNext = &descriptor_heap,
-    };
-    VkPhysicalDeviceVulkan14Features features_14 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-      .maintenance5 = VK_TRUE,
-      .pNext = &desc_buffer_features,
-    };
-    VkPhysicalDeviceVulkan13Features features_13 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-      .pNext = &features_14,
-      .synchronization2 = VK_TRUE,
-      .dynamicRendering = VK_TRUE,
-    };
+    QueriedFeatures features;
+    populate_queried_features(&features);
+    features.swapchain_maintenance1.swapchainMaintenance1 = VK_TRUE;
+    features.untyped_pointers.shaderUntypedPointers = VK_TRUE;
+    features.descriptor_heap.descriptorHeap = VK_TRUE;
+    features.desc_buffer_features.descriptorBuffer = VK_TRUE;
 
-    VkPhysicalDeviceVulkan12Features features_12 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      .pNext = &features_13,
-      .timelineSemaphore = VK_TRUE,
-      .descriptorIndexing = VK_TRUE,
-      .bufferDeviceAddress = VK_TRUE,
-      .scalarBlockLayout = VK_TRUE,
-      .descriptorBindingPartiallyBound = VK_TRUE,
-      .descriptorBindingVariableDescriptorCount = VK_TRUE,
-    };
-    VkPhysicalDeviceVulkan11Features features_11 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-      .pNext = &features_12,
-      .storageBuffer16BitAccess = VK_TRUE,
-    };
-    VkPhysicalDeviceFeatures2 features = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-      .pNext = &features_11,
-    };
+    features.vulkan_14.maintenance5 = VK_TRUE;
+    features.vulkan_13.synchronization2 = VK_TRUE;
+    features.vulkan_13.dynamicRendering = VK_TRUE;
+    features.vulkan_12.timelineSemaphore = VK_TRUE;
+    features.vulkan_12.descriptorIndexing = VK_TRUE;
+    features.vulkan_12.bufferDeviceAddress = VK_TRUE;
+    features.vulkan_12.scalarBlockLayout = VK_TRUE;
+    features.vulkan_12.descriptorBindingPartiallyBound = VK_TRUE;
+    features.vulkan_12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    features.vulkan_11.storageBuffer16BitAccess = VK_TRUE;
 
     // TODO: move this to the physical device being populated.
     uint32_t graphics_family = get_graphics_queue(device->device, instance->gpa);
@@ -441,7 +437,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
 
     VkDeviceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &features,
+        .pNext = &features.base,
 
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queue_create_info,
@@ -495,6 +491,20 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     };
     ldevice->queue = queue;
 
+    // Populate Capabilities (exposed to user)
+    ldevice->capabilities = (HdDeviceCapabilities) {
+        .name = mv_string(device->properties.deviceName),
+        .max_push_data_size = device->heap_properties.maxPushDataSize,
+        .texture_heap_alignment = ldevice->texture_heap_alignment,
+        .texture_descriptor_size = device->heap_properties.imageDescriptorSize,
+        .sampler_descriptor_size = device->heap_properties.samplerDescriptorSize,
+        .timestamp_period_ns = device->properties.limits.timestampPeriod,
+        .sub_texel_precision_bits = device->properties.limits.subTexelPrecisionBits,
+        //.texture_compression_bc = device->texture_compression_bc,
+        //.texture_compression_astc = device->texture_compression_astc,
+        //.storage_input_output16 = device->storage_input_output16,
+    };
+
     return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
@@ -523,5 +533,8 @@ void destroy_logical_device(HdLogicalDevice* device) {
 
 }
 
+HdDeviceCapabilities get_device_capabilities(HdLogicalDevice* device) {
+    return device->capabilities;
+}
 
 #endif

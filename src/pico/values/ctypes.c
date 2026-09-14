@@ -49,6 +49,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         return mk_str_doc(mv_string("float"), a);
     case CSDouble:
         return mk_str_doc(mv_string("double"), a);
+    case CSStaticArray: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(pretty_ctype(type->array.element, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", pretty_u64(type->array.len, a), a), &nodes);
+        return mv_sep_doc(nodes, a);
+    }
     case CSCEnum: {
         // enum name { l1 = n1, l2 = n2 }
         PtrArray main_nodes = mk_ptr_array(2, a);
@@ -202,6 +208,9 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
         return pretty_float(*(float*)data, a);
     case CSDouble:
         return pretty_double(*(double*)data, a);
+    case CSStaticArray: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for static arrays"), a);
+    }
     case CSCEnum: {
         return mk_str_doc(mv_string("pretty_cval not implemented for enum"), a);
     }
@@ -282,6 +291,7 @@ size_t c_size_align(size_t size, size_t align) {
     return size + pad;
 }
 
+size_t c_align_of_internal(CType type, bool in_composite);
 size_t c_size_of_internal(CType type, bool in_composite) {
 #if (ABI == SYSTEM_V_64 || ABI == WIN_64)
     // System V ABI
@@ -321,13 +331,13 @@ size_t c_size_of_internal(CType type, bool in_composite) {
         size_t max_align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             CType ftype = type.structure.fields.data[i].val;
-            size_t fsize = c_size_of(ftype);
+            size_t fsize = c_size_of_internal(ftype, true);
             if (fsize == 0) continue; // Skip things that are void, sturctures
                                       // of void, etc.
-            align = c_align_of(ftype);
+            align = c_align_of_internal(ftype, true);
             max_align = max_align > align ? max_align : align;
             size = c_size_align(size, align);
-            size += c_size_of(ftype);
+            size += fsize;
         }
         return c_size_align(size, max_align);
     }
@@ -458,6 +468,9 @@ void delete_c_type(CType t, PiAllocator* pia) {
         sdelete_name_ctype_piamap(t.proc.args);
         delete_c_type_p(t.proc.ret, pia);
         break;
+    case CSStaticArray:
+        delete_c_type_p(t.array.element, pia);
+        break;
     case CSStruct:
         for (size_t i = 0; i < t.structure.fields.len; i++) {
             delete_c_type(t.structure.fields.data[i].val, pia);
@@ -501,6 +514,10 @@ CType copy_c_type(CType t, PiAllocator* pia) {
             out.proc.args.data[i].val = copy_c_type(t.proc.args.data[i].val, pia);
         }
         out.proc.ret = copy_c_type_p(t.proc.ret, pia);
+        break;
+    case CSStaticArray:
+        out.array.element = copy_c_type_p(t.array.element, pia);
+        out.array.len = t.array.len;
         break;
     case CSStruct:
         out.structure.fields = scopy_name_ctype_piamap(t.structure.fields, pia);

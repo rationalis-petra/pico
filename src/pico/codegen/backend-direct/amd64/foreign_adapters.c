@@ -147,7 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
     // c) If the size of the aggregate exceeds two eightbytes and the first eightbyte isn’t
     //    SSE or any other eightbyte isn’t SSEUP, the whole argument is passed in memory
     if (type_size > 16) {
-        if (out.data[0] != SysVSSE) use_memory = true;
+        if (out.len == 0 || out.data[0] != SysVSSE) use_memory = true;
         for (size_t i = 1; i < out.len; i++) {
             if (out.data[i] != SysVSSEUp) use_memory = true;
         }

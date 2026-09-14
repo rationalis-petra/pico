@@ -271,6 +271,8 @@ VkFormat format_to_vk(HdFormat format) {
     case Format_BC6H_SFloat: return VK_FORMAT_BC6H_SFLOAT_BLOCK;
     case Format_BC7_SRGB: return VK_FORMAT_BC7_SRGB_BLOCK;
     case Format_BC7_UNorm: return VK_FORMAT_BC7_UNORM_BLOCK;
+    case Format_Count:
+        panic(mv_string("unknown image format"));
     }
 
     panic(mv_string("unknown image format"));
@@ -387,6 +389,8 @@ HdTextureFormatInfo get_texture_format_info(HdFormat format) {
             .block_extent = {.width = 4, .height = 4},
             .bytes_per_block = 16,
         };
+    case Format_Count:
+        return (HdTextureFormatInfo) {};
     }
     // TODO: panic??
     return (HdTextureFormatInfo) {};

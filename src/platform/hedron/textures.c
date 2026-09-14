@@ -215,6 +215,8 @@ HdTexture* create_texture(HdTextureDescription desc, HdTextureHeap heap, uint64_
 }
 
 void destroy_texture(HdTexture* texture) {
+    if (texture->initialization.owner) remove_texture_initialization(&texture->initialization);
+    vkDestroyImage(texture->device->device, texture->image, NULL);
     mem_free(texture, texture->device->gpa);
 }
 

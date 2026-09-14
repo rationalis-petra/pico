@@ -84,6 +84,8 @@ AMAP_HEADER(HdSemaphore*, PendingBufferArray, sem_bufs, SemBufs);
 typedef struct {
     PFN_vkWriteSamplerDescriptorsEXT vkWriteSamplerDescriptorsEXT;
     PFN_vkWriteResourceDescriptorsEXT vkWriteResourceDescriptorsEXT;
+    PFN_vkCmdBindSamplerHeapEXT vkCmdBindSamplerHeapEXT;
+    PFN_vkCmdBindResourceHeapEXT vkCmdBindResourceHeapEXT;
     PFN_vkCmdPushDataEXT vkCmdPushDataEXT;
     PFN_vkCmdBindIndexBuffer3KHR vkCmdBindIndexBuffer3KHR;
     PFN_vkCmdDrawIndirect2KHR vkCmdDrawIndirect2KHR;
@@ -143,6 +145,8 @@ struct HdLogicalDevice {
 
     // Function pointers for extensions we need go here.
     DeviceFunctions fns;
+
+    HdDeviceCapabilities capabilities; 
 };
 
 // called during device creation

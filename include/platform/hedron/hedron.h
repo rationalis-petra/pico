@@ -77,10 +77,25 @@ void destroy_window_surface(HdSurface* surface);
 // Physical & Logical Devices
 typedef struct HdPhysicalDevice HdPhysicalDevice;
 typedef struct HdLogicalDevice HdLogicalDevice;
+typedef struct {
+    String name;
+    uint64_t max_push_data_size;
+    uint64_t texture_heap_alignment;
+    uint64_t texture_descriptor_size;
+    uint64_t sampler_descriptor_size;
+    float timestamp_period_ns;
+    uint32_t sub_texel_precision_bits;
+    bool texture_compression_bc;
+    bool texture_compression_astc;
+    bool storage_input_output16;
+} HdDeviceCapabilities;
+
 PtrSlice get_physical_devices(HdInstance* instance, Allocator* a);
 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance);
 void destroy_logical_device(HdLogicalDevice* device);
+
+HdDeviceCapabilities get_device_capabilities(HdLogicalDevice* device);
 
 // Swapchain & Render Views
 // -------------------------
@@ -558,6 +573,9 @@ void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline);
 void set_viewport(HdCommandBuffer* cb, HdViewport viewport);
 void set_scissor(HdCommandBuffer* cb, HdScissor scissor);
 void set_depth_stencil(HdCommandBuffer* cb, HdDepthStencilState depth_stencil);
+
+void set_texture_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap);
+void set_sampler_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap);
 
 // Dispatch Shaders (graphics/compute)
 typedef struct {

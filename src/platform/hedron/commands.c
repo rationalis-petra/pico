@@ -6,8 +6,34 @@
 #include "platform/hedron/internal.h"
 
 // 
-// Command submission
-//   
+// Scheduling Commands  
+//  
+
+/*
+void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags hazards) {
+    // TODO: debug layer
+    //assert(commands);
+    const VkMemoryBarrier2 memory_barrier = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .srcStageMask = stage_to_vk(before),
+        .srcAccessMask = to_vk(before_access),
+        .dstStageMask = stage_to_vk(after),
+        .dstAccessMask = to_vk(after_access),
+    };
+    const VkDependencyInfo dependency = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &memory_barrier,
+    };
+    vkCmdPipelineBarrier2(cb->buffer, &dependency);
+}
+*/
+
+void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
+void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
+
+// 
+// State Commands: update gpu state
 //  
 
 void set_pipeline(HdCommandBuffer* cb, HdPipeline* pipeline) {
@@ -57,6 +83,47 @@ void set_depth_stencil(HdCommandBuffer* cb, HdDepthStencilState state) {
     vkCmdSetStencilWriteMask(cb->buffer, VK_STENCIL_FACE_FRONT_AND_BACK, state.stencil_write_mask);
     vkCmdSetStencilReference(cb->buffer, VK_STENCIL_FACE_FRONT_BIT, state.front.reference);
     vkCmdSetStencilReference(cb->buffer, VK_STENCIL_FACE_BACK_BIT, state.back.reference);
+}
+
+
+static uint64_t align_up(uint64_t size, uint64_t alignment) {
+    return ((size + alignment - 1) / alignment) * alignment;
+}
+void make_heap_bind_info(DeviceRange heap, VkDeviceSize reserved_alignment, VkDeviceSize reserved_size, VkBindHeapInfoEXT* output) {
+    const VkDeviceSize reserved_offset = align_up(heap.size, reserved_alignment);
+    *output = (VkBindHeapInfoEXT) {
+        .sType = VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
+        .heapRange = {
+            .address = (VkDeviceAddress)(heap.address.val),
+            .size = reserved_offset + reserved_size,
+        },
+        .reservedRangeOffset = reserved_offset,
+        .reservedRangeSize = reserved_size,
+    };
+}
+
+void set_texture_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap) {
+    // TODO: debug layer
+    //assert(commands && commands->state);
+    const VkPhysicalDeviceDescriptorHeapPropertiesEXT properties = commands->device->physical_device->heap_properties;
+    VkBindHeapInfoEXT bind_info = {};
+    make_heap_bind_info(
+        heap,
+        properties.imageDescriptorAlignment > properties.bufferDescriptorAlignment
+            ? properties.imageDescriptorAlignment
+            : properties.bufferDescriptorAlignment,
+        properties.minResourceHeapReservedRange,
+        &bind_info);
+    commands->device->fns.vkCmdBindResourceHeapEXT(commands->buffer, &bind_info);
+}
+
+void set_sampler_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap) {
+    // TODO: debug layer
+    //assert(commands && commands->state);
+    const VkPhysicalDeviceDescriptorHeapPropertiesEXT properties = commands->device->physical_device->heap_properties;
+    VkBindHeapInfoEXT bind_info = {};
+    make_heap_bind_info(heap, properties.samplerDescriptorAlignment, properties.minSamplerHeapReservedRange, &bind_info);
+    commands->device->fns.vkCmdBindSamplerHeapEXT(commands->buffer, &bind_info);
 }
 
 void emit_root_data(HdCommandBuffer* commands, void* data) {
