@@ -78,6 +78,7 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
         out->data[offset / 8] = merge_sysv_classes(SysVSSE, out->data[offset / 8]);
         break;
     case CSPtr:
+    case CSStaticArray:
     case CSProc:
             out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         break;
@@ -146,7 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
     // c) If the size of the aggregate exceeds two eightbytes and the first eightbyte isn’t
     //    SSE or any other eightbyte isn’t SSEUP, the whole argument is passed in memory
     if (type_size > 16) {
-        if (out.data[0] != SysVSSE) use_memory = true;
+        if (out.len == 0 || out.data[0] != SysVSSE) use_memory = true;
         for (size_t i = 1; i < out.len; i++) {
             if (out.data[i] != SysVSSEUp) use_memory = true;
         }
@@ -928,7 +929,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
     panic(mv_string("Invalid prim provided to can_reinterpret_type"));
 }
 
-bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
+bool bd_can_reinterpret_internal(CType* ctype, PiType* ptype, bool in_composite) {
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
     //                   we are in the source module
@@ -960,10 +961,10 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
-            if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+            if (!bd_can_reinterpret_internal(&ctype->proc.args.data[i].val, ptype->proc.args.data[i], false))
                 return false;
         }
-        return bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret);
+        return bd_can_reinterpret_internal(ctype->proc.ret, ptype->proc.ret, false);
     }
     case TStruct: {
         if (ptype->structure.fields.len != ctype->structure.fields.len) {
@@ -975,12 +976,26 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         }
 
         for (size_t i = 0; i < ptype->structure.fields.len; i++) {
-          if (!bd_can_reinterpret(&ctype->structure.fields.data[i].val,
-                               ptype->structure.fields.data[i].val)) {
+            if (!bd_can_reinterpret_internal(&ctype->structure.fields.data[i].val,
+                                             ptype->structure.fields.data[i].val,
+                                             true)) {
               return false;
           }
         }
         return true;
+    }
+    case TTile: {
+        if (!in_composite)
+            return false;
+        if (ctype->sort != CSStaticArray)
+            return false;
+        if (ptype->tile.dimensions.len != 1)
+            return false;
+        if (ctype->array.len != ptype->tile.dimensions.data[0].val)
+            return false;
+        return bd_can_reinterpret_internal(ctype->array.element,
+                                           ptype->tile.element,
+                                           false);
     }
     case TEnum: {
         PiType tag_type;
@@ -1016,7 +1031,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         else if (ctype->structure.fields.len != 2) return false;
 
         // check that the 0th struct field is reinterpretable as the tag type
-        if (!bd_can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
+        if (!bd_can_reinterpret_internal(&ctype->structure.fields.data[0].val, &tag_type, true)) return false;
         
         CType* cunion = &ctype->structure.fields.data[1].val;
 
@@ -1041,7 +1056,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
             
             PtrArray* variant = ptype->enumeration.variants.data[selected_index].val;
             if (variant->len != 1) return false;
-            return bd_can_reinterpret(cunion, variant->data[0]);
+            return bd_can_reinterpret_internal(cunion, variant->data[0], true);
         }
 
         // TODO (FEATURE): Add ability for C type to not need union/struct if
@@ -1050,7 +1065,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {
             PtrArray* variant = ptype->enumeration.variants.data[i].val;
             if (variant->len == 1) {
-                if (!bd_can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
+                if (!bd_can_reinterpret_internal(cunion->cunion.fields.data[i].val, variant->data[0], true))
                     return false;
             } else {
                 CType* var_struct = cunion->cunion.fields.data[i].val;
@@ -1058,7 +1073,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
                     return false;
 
                 for (size_t j = 0; j < variant->len; j++) {
-                    if (!bd_can_reinterpret(&var_struct->structure.fields.data[j].val, variant->data[j]))
+                    if (!bd_can_reinterpret_internal(&var_struct->structure.fields.data[j].val, variant->data[j], true))
                         return false;
                 }
             }
@@ -1088,4 +1103,8 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     default:
         panic(mv_string("invalid types provided to bd_can_reinterpret"));
     }
+}
+
+bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
+    return bd_can_reinterpret_internal(ctype, ptype, false);
 }

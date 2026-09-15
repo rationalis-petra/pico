@@ -84,6 +84,10 @@ typedef enum TermFormer {
     FStructure,
     FProjector,
     FVariant,
+    FFlags,
+    FHasFlag,
+    FHasFlags,
+    FIntersectFlags,
     FMatch,
     FInstance,
 
@@ -123,6 +127,7 @@ typedef enum TermFormer {
     FProcType,
     FStructType,
     FEnumType,
+    FFlagsType,
     FResetType,
     FDynamicType,
     FNamedType,

@@ -3557,6 +3557,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
+    case SFlagsType: {
+        gen_mk_flags_ty(reg(RAX, sz_64), syn.flags_type.size, syn.flags_type.flags, ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
     case SResetType:
         generate_i(syn.reset_type.in, env, ictx);
         generate_i(syn.reset_type.out, env, ictx);

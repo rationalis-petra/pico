@@ -63,6 +63,10 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         sdelete_sym_addr_piamap(t.structure.fields);
         break;
     }
+    case TFlags: {
+        sdelete_sym_list(t.flags.flag_values);
+        break;
+    }
     case TEnum: {
         for (size_t i = 0; i < t.enumeration.variants.len; i++)
             delete_enum_variant_p(t.enumeration.variants.data[i].val, pia);
@@ -225,6 +229,10 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     case TEnum:
         out.enumeration.tag_size = t.enumeration.tag_size,
         out.enumeration.variants = copy_sym_addr_piamap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, pia);
+        break;
+    case TFlags:
+        out.flags.flag_size = t.flags.flag_size;
+        out.flags.flag_values = scopy_sym_list(t.flags.flag_values, pia);
         break;
     case TReset:
         out.reset.in = copy_pi_type_p(t.reset.in, pia);
@@ -545,6 +553,19 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
                 out = mk_paren_doc("[:", "]", mv_sep_doc(nodes, a), a);
             }
         }
+        break;
+    }
+    case TFlags: {
+        uint64_t flagval = *(uint64_t*) val;
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc((mk_string("flags", a)), a), &nodes);
+        uint64_t bit = 1;
+        for (size_t i = 0; i < type->flags.flag_values.len; i++) {
+            if (flagval & (bit << i)) {
+                push_ptr(mk_str_doc(view_symbol_string(type->flags.flag_values.data[i]), a), &nodes);
+            }
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {
@@ -914,6 +935,15 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         push_ptr(mv_nest_doc(2, mv_sep_doc(variants, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
+    case TFlags: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc((mk_string("Flags", a)), a), &nodes);
+        for (size_t i = 0; i < type->flags.flag_values.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(type->flags.flag_values.data[i]), a), &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {
@@ -1399,6 +1429,9 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         *out = pi_size_align(max, align);
         return Ok;
     }
+    case TFlags: {
+        return type.flags.flag_size / 8;
+    }
 
     case TReset:
     case TResumeMark: 
@@ -1575,6 +1608,9 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         }
         *out = align;
         return Ok;
+    }
+    case TFlags: {
+        return type.flags.flag_size / 8;
     }
 
     case TReset:
@@ -2137,6 +2173,17 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         }
         return true;
         break;
+    case TFlags:
+        if (lhs->flags.flag_values.len != rhs->flags.flag_values.len) return false;
+        if (lhs->flags.flag_size != rhs->flags.flag_size) return false;
+        for (size_t i = 0; i < lhs->flags.flag_values.len; i++) {
+            Symbol lhsym = lhs->flags.flag_values.data[i];
+            Symbol rhsym = lhs->flags.flag_values.data[i];
+            if (!symbol_eq(lhsym, rhsym)) 
+                return false;
+        }
+        return true;
+        break;
     case TReset:
         panic(mv_string("pi_type_eql_i not implemented for resets"));
     case TResumeMark:
@@ -2478,6 +2525,32 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         return true;
     }
+    case TFlags: {
+        switch (type->flags.flag_size) {
+        case 8: {
+            uint8_t lhs_tag = *(uint8_t*)lhs;
+            uint8_t rhs_tag = *(uint8_t*)rhs;
+            return lhs_tag == rhs_tag;
+        }
+        case 16:{
+            uint16_t lhs_tag = *(uint16_t*)lhs;
+            uint16_t rhs_tag = *(uint16_t*)rhs;
+            return lhs_tag == rhs_tag;
+        }
+        case 32: {
+            uint32_t lhs_tag = *(uint32_t*)lhs;
+            uint32_t rhs_tag = *(uint32_t*)rhs;
+            return lhs_tag == rhs_tag;
+        }
+        case 64: {
+            uint64_t lhs_tag = *(uint64_t*)lhs;
+            uint64_t rhs_tag = *(uint64_t*)rhs;
+            return lhs_tag == rhs_tag;
+        }
+        default:
+            panic(mv_string("Invalid enum tag-size"));
+        }
+    }
     case TReset: {
         panic(mv_string("Not implemented: comparing values of type reset"));
     }
@@ -2803,10 +2876,6 @@ PiType* mk_trait_type(PiAllocator* pia, size_t nvars, ...) {
     return trait;
 }
 
-// Sample usage: mk_enum_type(a, 3,
-//   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
-//   "Singleton", 1, mk_prim_type(Int_64),
-//   "None", 0)
 PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
@@ -2836,7 +2905,7 @@ PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...) {
     return enumeration;
 }
 
-PiType *mk_sz_enum_type(PiAllocator *pia, uint8_t tagsize, size_t nfields, ...) {
+PiType* mk_sz_enum_type(PiAllocator *pia, uint8_t tagsize, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
     
@@ -2863,6 +2932,46 @@ PiType *mk_sz_enum_type(PiAllocator *pia, uint8_t tagsize, size_t nfields, ...) 
       .enumeration.variants = fields,
     };
     return enumeration;
+}
+
+PiType* mk_flags_type(PiAllocator* pia, size_t nflags, ...) {
+    va_list args;
+    va_start(args, nflags);
+    
+    SymbolPiList flags = mk_sym_list(nflags, pia);
+    for (size_t i = 0; i < nflags ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        push_sym(name, &flags);
+    }
+    va_end(args);
+
+    PiType* flag_type = call_alloc(sizeof(PiType), pia);
+    *flag_type = (PiType) {
+      .sort = TFlags,
+      .flags.flag_size = 64,
+      .flags.flag_values = flags,
+    };
+    return flag_type;
+}
+
+PiType *mk_sz_flags_type(PiAllocator *pia, uint8_t tagsize, size_t nflags, ...) {
+    va_list args;
+    va_start(args, nflags);
+    
+    SymbolPiList flags = mk_sym_list(nflags, pia);
+    for (size_t i = 0; i < nflags ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        push_sym(name, &flags);
+    }
+    va_end(args);
+
+    PiType* flag_type = call_alloc(sizeof(PiType), pia);
+    *flag_type = (PiType) {
+      .sort = TFlags,
+      .flags.flag_size = tagsize,
+      .flags.flag_values = flags,
+    };
+    return flag_type;
 }
 
 PiType *mk_named_type(PiAllocator* pia, const char *name, PiType *inner) {

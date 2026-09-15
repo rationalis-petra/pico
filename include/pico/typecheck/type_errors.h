@@ -81,12 +81,13 @@ _Noreturn void type_error_match_missing_variants(PiType* type, SynRef match, U8A
 
 // Struct
 _Noreturn void type_error_struct_invalid_type(PiType* type, SynRef strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_missing_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_missing_fields(PiType* type, SynRef strct, SymbolArray missing_fields, TypeCheckContext ctx);
 _Noreturn void type_error_struct_dupliate_field(PiType* type, SynRef strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_extra_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_extra_fields(PiType* type, SynRef strct, SymbolArray extra_fields, TypeCheckContext ctx);
 
 // Projector
 _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef proj, TypeCheckContext ctx);
+_Noreturn void type_error_proj_missing_field(PiType* type, SynRef proj, TypeCheckContext ctx);
 
 // Instance
 _Noreturn void type_error_instance_invalid_type(PiType* type, Range range, TypeCheckContext ctx);

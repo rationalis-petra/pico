@@ -12,6 +12,4 @@ AMAP_HEADER(String, void*, str_ptr, StrPtr)
 
 AMAP_HEADER(String, uint64_t, str_u64,StrU64)
 
-//#undef AMAP_HEADER
-
 #endif

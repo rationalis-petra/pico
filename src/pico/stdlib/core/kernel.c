@@ -267,6 +267,10 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string("Enum"));
     add_def(module, name, type, &former, null_segments, NULL);
 
+    former = FFlagsType;
+    name = string_to_name(mv_string("Flags"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
     former = FResetType;
     name = string_to_name(mv_string("Reset"));
     add_def(module, name, type, &former, null_segments, NULL);

@@ -116,7 +116,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
 
     if (test_start(log, mv_string("struct-missing-field-fails"))) {
         RUN("(def Sct Struct [.x I64] [.y I64])");
-        TEST_TYPE_FAIL("(struct Sct [.x I64])");
+        TEST_TYPE_FAIL("(struct Sct [.x 8])");
     }
 
     /*
@@ -129,7 +129,17 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
 
     if (test_start(log, mv_string("struct-incorrect-field-fails"))) {
         RUN("(def Sct Struct [.x I64] [.y I64])");
-        TEST_TYPE_FAIL("(struct Sct [.p I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 3] [.y 3])");
+    }
+
+    if (test_start(log, mv_string("struct-extra-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 1] [.y 2] [.z 3])");
+    }
+
+    if (test_start(log, mv_string("struct-extra-middle-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 1] [.z 3] [.y 2])");
     }
 
     //  Variant/Match Typechecking
