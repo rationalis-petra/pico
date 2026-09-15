@@ -1081,6 +1081,26 @@ bool bd_can_reinterpret_internal(CType* ctype, PiType* ptype, bool in_composite)
         }
         return true;
     }
+    case TFlags: {
+        PiType tag_type;
+        switch (ptype->enumeration.tag_size) {
+        case 8:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_8 };
+            break;
+        case 16:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_16 };
+            break;
+        case 32:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_32 };
+            break;
+        case 64:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
+            break;
+        default:
+            panic(mv_string("bad flagsize"));
+        }
+        return bd_can_reinterpret_internal(ctype, &tag_type, false);
+    }
     case TSealed:
         return true;
 

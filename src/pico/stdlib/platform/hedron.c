@@ -1605,14 +1605,40 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     type = (PiType) {.sort = TType};
 
-    typep = mk_named_type(pia, "Stage", mk_prim_type(pia, UInt_64));
+    typep = mk_named_type(pia, "Stage",
+                          mk_flags_type(pia, 12,
+                                        "indirect",
+                                        "index-input",
+                                        "vertex",
+                                        "task",
+                                        "mesh",
+                                        "depth-stencil-tests",
+                                        "fragment",
+                                        "colour-output",
+                                        "compute",
+                                        "transfer",
+                                        "host",
+                                        "all"));
     name = string_to_name(mv_string("Stage"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
     stage_ty = e->value;
 
-    typep = mk_named_type(pia, "Access", mk_prim_type(pia, UInt_64));
+    typep = mk_named_type(pia, "Access",
+                          mk_flags_type(pia, 12,
+                                        "transfer-read",
+                                        "transfer-write",
+                                        "shader-read",
+                                        "shader-write",
+                                        "colour-read",
+                                        "colour-write",
+                                        "depth-stencil-read",
+                                        "depth-stencil-write",
+                                        "indirect-read",
+                                        "index-read",
+                                        "host-read",
+                                        "descriptor-read"));
     name = string_to_name(mv_string("Access"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);

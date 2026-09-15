@@ -2158,21 +2158,29 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SConstructor: {
-        if (is_variable_in(type, env)) {
-            PiType* enum_type = strip_type(type);
-            generate_size_of(RAX, enum_type, env, ass, a, point);
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
-            build_binary_op(Mov, rref8(R14, 0, sz), imm32(syn.constructor.tag), ass, a, point);
-            build_unary_op(Push, reg(R14, sz_64), ass, a, point);
-            data_stack_grow(env, ADDRESS_SIZE);
+        PiType* src_type = strip_type(type); 
+        if (src_type->sort == TEnum) {
+            if (is_variable_in(type, env)) {
+                PiType* enum_type = src_type;
+                generate_size_of(RAX, enum_type, env, ass, a, point);
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, rref8(R14, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+                data_stack_grow(env, ADDRESS_SIZE);
+            } else {
+                PiType* enum_type = src_type;
+                size_t enum_size = pi_stack_size_of(*enum_type);
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                data_stack_grow(env, enum_size);
+            }
         } else {
-            PiType* enum_type = strip_type(type);
-            size_t enum_size = pi_stack_size_of(*enum_type);
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
-            data_stack_grow(env, enum_size);
+            // Max size of flag is 64 bit, so push on stack = push 64-bit number
+            build_binary_op(Mov, reg(RCX, sz_64), imm64(1 << syn.variant.tag), ass, a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            data_stack_grow(env, 8);
         }
         break;
     }

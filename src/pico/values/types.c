@@ -1829,6 +1829,8 @@ void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiA
             }
         }
         break;
+    case TFlags:
+        break;
     case TReset:
         type_app_subst(body->reset.in, subst, shadowed, pia, logger, a);
         type_app_subst(body->reset.out, subst, shadowed, pia, logger, a);

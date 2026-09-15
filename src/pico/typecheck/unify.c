@@ -420,6 +420,23 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         return (UnifyResult) {.type = UOk,};
         break;
     }
+    case TFlags: {
+        if (pi_type_eql(lhs, rhs, a)) {
+            return (UnifyResult) {.type = UOk};
+        } else {
+            PtrArray nodes = mk_ptr_array(8, a);
+            push_ptr(mk_str_doc(mv_string("Unification failed: could not unify unequal primitives"), a), &nodes);
+            push_ptr(pretty_type(lhs, default_ptp, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+            push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
+
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_sep_doc(nodes, a),
+            };
+        }
+        break;
+    }
     case TReset: {
         UnifyResult out = unify_internal(lhs->reset.in, rhs->reset.in, rename, ctx);
         if (out.type != UOk) return out;
@@ -1037,6 +1054,8 @@ bool occurs(UVarType* var, PiType *type) {
         }
         return false;
     }
+    case TFlags:
+        return false;
     case TReset: {
         if (occurs(var, type->reset.in)) return true;
         if (occurs(var, type->reset.out)) return true;
