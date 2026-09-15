@@ -52,11 +52,11 @@ struct HdPhysicalDevice {
     VkPhysicalDeviceDescriptorHeapPropertiesEXT heap_properties;
 };
 
-struct HdQueue {
+typedef struct {
     VkQueue queue;
     uint32_t queue_family;
     HdLogicalDevice* device;
-};
+} HdQueue;
 
 struct HdCommandBuffer {
     HdQueue* queue;

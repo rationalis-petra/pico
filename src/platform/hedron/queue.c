@@ -10,10 +10,6 @@
 ARRAY_COMMON_IMPL(PendingBuffer, pbuf, PendingBuffer);
 AMAP_IMPL(HdSemaphore*, PendingBufferArray, sem_bufs, SemBufs);
 
-HdQueue* get_queue(HdLogicalDevice* device) {
-    return &device->queue;
-}
-
 #define IMAGE_BARRIER_BATCH_SIZE 64 
 
 void record_image_barriers(VkCommandBuffer command_buffer, VkImageMemoryBarrier2* barriers, uint32_t num_barriers) {
@@ -66,9 +62,8 @@ void command_begin(HdCommandBuffer* buffer, HdLogicalDevice* device) {
     }
 }
 
-HdCommandBuffer* start_recording_commands(HdQueue* queue) {
-    // TODO: look at aaltonen's vestion...
-  HdLogicalDevice* device = queue->device;
+HdCommandBuffer* start_recording_commands(HdLogicalDevice* device) {
+    HdQueue* queue = &device->queue;
 
   if (device->usable_buffers.len > 0) {
     HdCommandBuffer* buffer = pop_ptr(&device->usable_buffers);
@@ -232,25 +227,17 @@ void submit_commands_internal(HdQueue *queue, PtrSlice command_buffers,
         };
         push_pbuf(pbuf, arr);
     }
-    /*
-    mem_free(vk_buffers, queue->device->gpa);
-    for (size_t index = 0; index < commands.size; ++index) {
-        CommandBuffer* current = commands.data[index];
-        current->retire_value = retirement;
-        current->swapchain = nullptr;
-    }
-    */
 }
 
-void submit_commands(HdQueue* queue, PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value) {
-    HdLogicalDevice* device = queue->device;
+void submit_commands(HdLogicalDevice* device, PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value) {
+    HdQueue* queue = &device->queue;
 
     uint32_t num_semaphores = 0;
     VkSemaphore* wait_semaphores = mem_alloc(sizeof(VkSemaphore) * command_buffers.len, device->gpa);
     VkSemaphore* signal_semaphores = mem_alloc(sizeof(VkSemaphore) * command_buffers.len, device->gpa);
     for (size_t i = 0; i < device->swapchains.len; i++) {
         HdSwapchain* swapchain = device->swapchains.data[i];
-        HdCommandBuffer* commands = NULL;
+        HdCommandBuffer* commands;
         for (size_t j = 0; j < command_buffers.len; j++)  {
             if (swapchain->claimed_by == command_buffers.data[j]) {
                 commands = command_buffers.data[j];

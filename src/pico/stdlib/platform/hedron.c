@@ -67,7 +67,6 @@ static PiType* raster_description_ty;
 
 static PiType* pipeline_ty;
 
-static PiType* queue_ty;
 static PiType* semaphore_ty;
 static PiType* command_buffer_ty;
 
@@ -490,29 +489,29 @@ void build_destroy_semaphore_fn(PiType* type, Assembler* ass, PiAllocator* pia, 
 //   Queues 
 // -------------
 
-HdQueue* relic_get_queue() {
+HdCommandBuffer* relic_start_recording_commands() {
     HdLogicalDevice* device = get_current_device();
-    return get_queue(device);
-}
-
-void build_get_queue_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
-    convert_c_fn(relic_get_queue, &fn_ctype, type, ass, a, point); 
+    return start_recording_commands(device);
 }
 
 void build_start_recording_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "queue", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
-    convert_c_fn(start_recording_commands, &fn_ctype, type, ass, a, point); 
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_voidptr_ctype(pia));
+    convert_c_fn(relic_start_recording_commands, &fn_ctype, type, ass, a, point); 
+}
+
+
+void relic_submit_commands(PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value) {
+    HdLogicalDevice* device = get_current_device();
+    return submit_commands(device, command_buffers, semaphore, value);
 }
 
 void build_submit_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 4,
-                               "queue", mk_voidptr_ctype(pia),
+  CType fn_ctype = mk_fn_ctype(pia, 3,
                                "commands", mk_slice_ctype(pia),
                                "semaphore", mk_voidptr_ctype(pia),
                                "value", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                (CType){.sort = CSVoid});
-    convert_c_fn(submit_commands, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_submit_commands, &fn_ctype, type, ass, a, point); 
 }
 
 //   Commands 
@@ -1553,21 +1552,10 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
 
     /**
-     * Queues
-     * ----------
-     * Queues are an underdeveloped part of the API, primarily as they were
-     * underspecified by Aaltonen, so we are starting very basic and adding
-     * features only when necessary.
-     *
+     * Getting and Submitting Command Buffers
+     * --------------------------------------------------
      */
     type = (PiType) {.sort = TType};
-
-    typep = mk_opaque_type(pia, "Queue", module, mk_prim_type(pia, Address));
-    name = string_to_name(mv_string("Queue"));
-    add_def(module, name, type, &typep, null_segments, NULL);
-    clear_assembler(ass);
-    e = get_def_internal(name, module);
-    queue_ty = e->value;
 
     typep = mk_opaque_type(pia, "CommandBuffer", module, mk_prim_type(pia, Address));
     name = string_to_name(mv_string("CommandBuffer"));
@@ -1576,15 +1564,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     command_buffer_ty = e->value;
 
-    typep = mk_proc_type(pia, 0, queue_ty);
-    build_get_queue_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("get-queue"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 1, queue_ty, command_buffer_ty);
+    typep = mk_proc_type(pia, 0, command_buffer_ty);
     build_start_recording_commands_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("start-recording"));
     fn_segments.code = get_instructions(ass);
@@ -1592,8 +1572,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 4,
-                         queue_ty,
+    typep = mk_proc_type(pia, 3,
                          mk_type_app(pia, get_slice_type(), command_buffer_ty),
                          semaphore_ty,
                          mk_prim_type(pia, UInt_64),

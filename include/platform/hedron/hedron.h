@@ -412,26 +412,16 @@ HdSemaphore* create_semaphore(HdLogicalDevice* device, uint64_t init_value);
 void wait_semaphore(HdLogicalDevice* device, HdSemaphore* sema, uint64_t value);
 void destroy_semaphore(HdLogicalDevice* device, HdSemaphore* sema);
 
-// Queues
-// ------------
-// Queue types
-// - Graphics (for drawing) (also guarantees can do transfer!)
-// - Compute (for compute shaders)
-// - Transfer (for transferring memory)
-// - Video Decode
-// - Video Encode
+// Get & Submit Command Buffers
+// ---------------------------------
 // In Vulkan, queues are created at the same time as devices. 
 // The Hedron API creates a single queue associated with the device, 
-// so 'get queue' just gets THE singular queue handle. In the future, this
-// should be expanded, but with caution, only introducing extra complecity if it
-// is justified.
-typedef struct HdQueue HdQueue;
-HdQueue* get_queue(HdLogicalDevice* device);
-
+// meaning that we can just submit commands directly to the device. In the future, this
+// may be expanded, if the flexibility of multible queues is justified.
 typedef struct HdCommandBuffer HdCommandBuffer;
 
-HdCommandBuffer* start_recording_commands(HdQueue* queue);
-void submit_commands(HdQueue* queue, PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value);
+HdCommandBuffer* start_recording_commands(HdLogicalDevice* device);
+void submit_commands(HdLogicalDevice* device, PtrSlice command_buffers, HdSemaphore* semaphore, uint64_t value);
 
 // Commands
 // ---------
