@@ -237,7 +237,7 @@ void submit_commands(HdLogicalDevice* device, PtrSlice command_buffers, HdSemaph
     VkSemaphore* signal_semaphores = mem_alloc(sizeof(VkSemaphore) * command_buffers.len, device->gpa);
     for (size_t i = 0; i < device->swapchains.len; i++) {
         HdSwapchain* swapchain = device->swapchains.data[i];
-        HdCommandBuffer* commands;
+        HdCommandBuffer* commands = NULL;
         for (size_t j = 0; j < command_buffers.len; j++)  {
             if (swapchain->claimed_by == command_buffers.data[j]) {
                 commands = command_buffers.data[j];

@@ -1675,6 +1675,12 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SFlagsType: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType){.sort = TType};
+        set_type(ref, t, ctx.tape);;
+        break;
+    }
     case SResetType: {
         PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TType};
@@ -3010,6 +3016,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 squash_types(args->data[j], env, ctx);
             }
         }
+        break;
+    }
+
+    case SFlagsType: {
         break;
     }
     case SResetType: {

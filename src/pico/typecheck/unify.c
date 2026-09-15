@@ -892,6 +892,8 @@ bool has_unification_vars_p(PiType type) {
         }
         return false;
     }
+    case TFlags:
+        return false;
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
     }
