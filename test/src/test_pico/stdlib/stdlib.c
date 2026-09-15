@@ -10,45 +10,51 @@
 
 void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
-    Package* base = get_base_package();
+    Package* base = NULL;
+    Module* module = NULL;
+    Module* old_current = NULL;
+    Environment* env = NULL;
+    if (suite_setup(log)) {
+        Package* base = get_base_package();
 
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(12, a),
-    };
-    add_import_all(&imports.clauses, a, 1, "prelude");
-    add_import_all(&imports.clauses, a, 1, "core");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 1, "meta");
-    add_import_all(&imports.clauses, a, 1, "platform");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
-    add_import(&imports.clauses, a, 1, "abs");
+        Imports imports = (Imports) {
+            .clauses = mk_import_clause_array(12, a),
+        };
+        add_import_all(&imports.clauses, a, 1, "prelude");
+        add_import_all(&imports.clauses, a, 1, "core");
+        add_import_all(&imports.clauses, a, 1, "num");
+        add_import_all(&imports.clauses, a, 1, "data");
+        add_import_all(&imports.clauses, a, 1, "meta");
+        add_import_all(&imports.clauses, a, 1, "platform");
+        add_import_all(&imports.clauses, a, 2, "platform", "memory");
+        add_import(&imports.clauses, a, 1, "abs");
 
-    add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
+        add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
 
-    ReExports re_exports = (ReExports) {
-        .clauses = mk_import_clause_array(0, a),
-    };
-    Exports exports = (Exports) {
-        .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
-    };
-    ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(mv_string("pipeline-test-module")),
-        .imports = imports,
-        .re_exports = re_exports,
-        .exports = exports,
-    };
-    ErrorPoint point;
-    if (catch_error(point)) {
-        panic(mv_string("Error in tests: test_pico/stdlib/stdlib.c"));
+        ReExports re_exports = (ReExports) {
+            .clauses = mk_import_clause_array(0, a),
+        };
+        Exports exports = (Exports) {
+            .export_all = true,
+            .clauses = mk_export_clause_array(0, a),
+        };
+        ModuleHeader header = (ModuleHeader) {
+            .name = string_to_name(mv_string("pipeline-test-module")),
+            .imports = imports,
+            .re_exports = re_exports,
+            .exports = exports,
+        };
+        ErrorPoint point;
+        if (catch_error(point)) {
+            panic(mv_string("Error in tests: test_pico/stdlib/stdlib.c"));
+        }
+
+        module = mk_module(header, base, NULL);
+        env = env_from_module(module, &point, a);
+        old_current = get_std_current_module();
+        set_std_current_module(module);
+        delete_module_header(header);
     }
-
-    Module* module = mk_module(header, base, NULL);
-    Environment* env = env_from_module(module, &point, a);
-    Module* old_current = get_std_current_module();
-    set_std_current_module(module);
-    delete_module_header(header);
 
     RegionAllocator* region = make_region_allocator(16384, true, a);
     if (suite_start(log, mv_string("core"))) {
@@ -105,6 +111,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         }
         suite_end(log);
     }
+
     if (suite_start(log, mv_string("data"))) {
         if (suite_start(log, mv_string("string"))) {
             RegionAllocator* subregion = make_subregion(region);
@@ -133,9 +140,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
 
-    set_std_current_module(old_current);
-    delete_env(env, a);
-
-    remove_module(base, string_to_name(mv_string("pipeline-test-module")));
     delete_region_allocator(region);
+    if (suite_teardown(log)) {
+        set_std_current_module(old_current);
+        delete_env(env, a);
+        remove_module(base, string_to_name(mv_string("pipeline-test-module")));
+    }
 }

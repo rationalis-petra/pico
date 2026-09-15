@@ -155,7 +155,10 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
     //
     // -------------------------------------------------------------------------
 
-    RUN("(def dvar dynamic -10)");
+    if (suite_setup(log)) {
+        RUN("(def dvar dynamic -10)");
+    }
+
     if (test_start(log, mv_string("dynamic-use"))) {
         int64_t expected = -10;
         TEST_EQ("(use dvar)");
@@ -183,7 +186,10 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(bind [dvar 12] (use dvar))");
     }
 
-    RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
+    if (suite_setup(log)) {
+        RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
+    }
+
     if (test_start(log, mv_string("large-dynamic-use"))) {
         int64_t expected[2] = {-10, 10};
         TEST_EQ("(use ldvar)");
@@ -210,7 +216,9 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(if :false 2 3)");
     }
 
-    RUN("(def if-proc proc [(b Bool) (x I32) (y I32)] if b x y)");
+    if (suite_setup(log)) {
+        RUN("(def if-proc proc [(b Bool) (x I32) (y I32)] if b x y)");
+    }
     if (test_start(log, mv_string("if-proc-true"))) {
         int64_t expected = 1;
         TEST_EQ("(if-proc :true 1 2)");
@@ -221,13 +229,14 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(if-proc :false 1 -12)");
     }
 
-    RUN("(def if-proc-inv proc [(b Bool) (x I32) (y I32)] if b y x)");
     if (test_start(log, mv_string("if-proc-inv-true"))) {
+        RUN("(def if-proc-inv proc [(b Bool) (x I32) (y I32)] if b y x)");
         int64_t expected = -45;
         TEST_EQ("(if-proc-inv :true 1 -45)");
     }
 
     if (test_start(log, mv_string("if-proc-inv-false"))) {
+        RUN("(def if-proc-inv proc [(b Bool) (x I32) (y I32)] if b y x)");
         int64_t expected = 720;
         TEST_EQ("(if-proc-inv :false 720 -12)");
     }
@@ -237,13 +246,14 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         int64_t num;
     } MaybeI64;
 
-    RUN("(def if-make-maybe proc [b] if b :none (:some 64))");
     if (test_start(log, mv_string("if-match-proc-some"))) {
+        RUN("(def if-make-maybe proc [b] if b :none (:some 64))");
         MaybeI64 expected = (MaybeI64){.tag = 0, .num = 64};
         TEST_EQ("(if-make-maybe :false)");
     }
 
     if (test_start(log, mv_string("if-match-proc-none"))) {
+        RUN("(def if-make-maybe proc [b] if b :none (:some 64))");
         MaybeI64 expected = (MaybeI64){.tag = 1};
         TEST_EQ("(if-make-maybe :true)");
     }
@@ -284,33 +294,36 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         int32_t y;
         int32_t z;
     } NestInner;
-    RUN("(def NestInner Struct [.x I32] [.y I32] [.z I32])") ;
 
     typedef struct {
         NestInner n1;
         NestInner n2;
     } NestOuter;
-    RUN("(def NestOuter Struct [.n1 NestInner] [.n2 NestInner])") ;
 
     typedef struct {
         int8_t x;
         int16_t y;
         int32_t z;
     } MisalignedStruct;
-    RUN("(def MAS Struct [.x I8] [.y I16] [.z I32])") ;
 
     typedef struct {
         int8_t x;
         int8_t y;
     } SmallStruct;
-    RUN("(def SML Struct [.x I8] [.y I8])") ;
 
     typedef struct {
         int32_t x;
         int16_t y;
         int8_t z;
     } AlignedStruct;
-    RUN("(def AS Struct [.x I32] [.y I16] [.z I8])") ;
+
+    if (suite_setup(log)) {
+        RUN("(def NestInner Struct [.x I32] [.y I32] [.z I32])") ;
+        RUN("(def NestOuter Struct [.n1 NestInner] [.n2 NestInner])") ;
+        RUN("(def MAS Struct [.x I8] [.y I16] [.z I32])") ;
+        RUN("(def SML Struct [.x I8] [.y I8])") ;
+        RUN("(def AS Struct [.x I32] [.y I16] [.z I8])") ;
+    }
 
     if (test_start(log, mv_string("struct"))) {
         Point expected = (Point) {.x = 3, .y = -5};
@@ -379,7 +392,10 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)");
     }
 
-    RUN("(def thrice struct NestInner [.x -12] [.y 3] [.z 1])") ;
+    if (suite_setup(log)) {
+        RUN("(def thrice struct NestInner [.x -12] [.y 3] [.z 1])") ;
+    }
+
     if (test_start(log, mv_string("project-point3-x"))) {
         int32_t expected = -12;
         TEST_EQ("(seq thrice.x)");
@@ -516,7 +532,10 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
     
 #define SETUP_MEM(type) void* mem = mem_alloc(128, &ra); type* start; { Allocator sta = mk_static_allocator(mem, 128); start = mem_alloc(8, &sta); }
 
-    PiAllocator old = get_std_current_allocator(); 
+    PiAllocator old = {};
+    if (suite_setup(log)) {
+        PiAllocator old = get_std_current_allocator(); 
+    }
     if (test_start(log, mv_string("test-load-i64"))) {
         SETUP_MEM(int64_t);
         Allocator sta = mk_static_allocator(mem, 128);
@@ -630,5 +649,7 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_MEM("(unseal [x sl] [A] (prim.address.store x.dest (prim.address.load {A} x.src)))");
     }
 
-    set_std_current_allocator(old);
+    if (suite_teardown(log)) {
+        set_std_current_allocator(old);
+    }
 }
