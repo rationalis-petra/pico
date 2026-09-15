@@ -15,7 +15,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     Module* old_current = NULL;
     Environment* env = NULL;
     if (suite_setup(log)) {
-        Package* base = get_base_package();
+        base = get_base_package();
 
         Imports imports = (Imports) {
             .clauses = mk_import_clause_array(12, a),

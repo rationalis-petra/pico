@@ -28,7 +28,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Package* base = NULL;
 
     if (suite_setup(log)) {
-        Package* base = get_base_package();
+        base = get_base_package();
 
         Imports imports = (Imports) {
             .clauses = mk_import_clause_array(4, a),

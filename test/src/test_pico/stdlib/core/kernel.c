@@ -534,7 +534,7 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
 
     PiAllocator old = {};
     if (suite_setup(log)) {
-        PiAllocator old = get_std_current_allocator(); 
+        old = get_std_current_allocator(); 
     }
     if (test_start(log, mv_string("test-load-i64"))) {
         SETUP_MEM(int64_t);

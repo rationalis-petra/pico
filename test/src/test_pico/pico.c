@@ -36,7 +36,7 @@ void run_pico_tests(TestLog* log, Allocator* a) {
             initialized++;
         }
 
-        Target target = (Target) {
+        target = (Target) {
             .target = mk_assembler(current_cpu_feature_flags(), &exec),
             .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
             .data_aux = mem_alloc(sizeof(U8Array), a),
