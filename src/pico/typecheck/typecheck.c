@@ -1053,9 +1053,12 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 type_error_struct_invalid_type(struct_type, ref, ctx);
             }
 
-            // Check if any fields are missing when a new struct is being created
-            // error message:
             if (get_type(untyped.structure.base, ctx.tape)->sort == TType) {
+                // If we expect this structure to have a particular type
+                // (povided), then there are two checks that need doing:
+                // 1. Check if any fields are missing when a new struct is being created
+                // TODO (PERFORMANCE): feels like there should be a more
+                //      efficient algorithm here?
                 SymbolArray missing_fields = mk_symbol_array(4, a);
                 for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                     Symbol field = struct_type->structure.fields.data[i].key;
@@ -1070,25 +1073,25 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 }
                 
                 if (missing_fields.len > 0) {
-                    PtrArray docs = mk_ptr_array(2 + missing_fields.len, a);
-                    if (missing_fields.len == 1) {
-                        push_ptr(mv_cstr_doc("Structure value definition is missing the field:", a), &docs);
-                        push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[0]), a), &docs);
-                    } else {
-                        push_ptr(mv_cstr_doc("Structure value definition is missing the fields:", a), &docs);
-                        for (size_t i = 0; i < missing_fields.len; i++) {
-                            if (i < missing_fields.len - 2) {
-                                push_ptr(mv_str_doc(string_cat(view_symbol_string(missing_fields.data[i]), mv_string(","), a), a), &docs);
-                            } else if (i == missing_fields.len - 2) {
-                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
-                                push_ptr(mv_cstr_doc("and", a), &docs);
-                            } else {
-                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
-                            }
-                        }
+                    type_error_struct_missing_fields(struct_type, ref, missing_fields, ctx);
+                }
+
+                // 2. Check if any fields are present but should not be
+                SymbolArray extra_fields = mk_symbol_array(4, a);
+                for (size_t i = 0; i < untyped.structure.fields.len; i++) {
+                    Symbol field = untyped.structure.fields.data[i].key;
+                    bool has_field = false;
+                    for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+                        if (symbol_eq(field, struct_type->structure.fields.data[j].key))
+                            has_field = true;
                     }
-                    err.message = mv_hsep_doc(docs, a);
-                    throw_pi_error(point, err);
+                    if (!has_field) {
+                        push_symbol(field, &extra_fields);
+                    }
+                }
+
+                if (extra_fields.len > 0) {
+                    type_error_struct_extra_fields(struct_type, ref, extra_fields, ctx);
                 }
             }
 
