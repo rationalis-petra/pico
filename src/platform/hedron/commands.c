@@ -9,16 +9,15 @@
 // Scheduling Commands  
 //  
 
-/*
-void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags hazards) {
+void barrier(HdCommandBuffer* cb, HdStage before, HdAccess before_access, HdStage after, HdAccess after_access) {
     // TODO: debug layer
     //assert(commands);
     const VkMemoryBarrier2 memory_barrier = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
         .srcStageMask = stage_to_vk(before),
-        .srcAccessMask = to_vk(before_access),
+        .srcAccessMask = access_to_vk(before_access),
         .dstStageMask = stage_to_vk(after),
-        .dstAccessMask = to_vk(after_access),
+        .dstAccessMask = access_to_vk(after_access),
     };
     const VkDependencyInfo dependency = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -27,10 +26,9 @@ void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags h
     };
     vkCmdPipelineBarrier2(cb->buffer, &dependency);
 }
-*/
 
-void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
-void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
+//void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
+//void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
 
 // 
 // State Commands: update gpu state

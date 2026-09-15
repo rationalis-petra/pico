@@ -302,6 +302,46 @@ VkImageViewType texshape_to_vk_view(HdTextureShape type) {
     return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
 }
 
+VkPipelineStageFlags2 stage_to_vk(HdStage stages) {
+    VkPipelineStageFlags2 result = 0;
+    if (stages & StIndirect) result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+    if (stages & StIndexInput) result |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+    if (stages & StVertex) result |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    if (stages & StTask) result |= VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT;
+    if (stages & StMesh) result |= VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+    if (stages & StDepthStencilTests) result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    if (stages & StFragment) result |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    if (stages & StColourOutput) result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    if (stages & StCompute) result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    if (stages & StTransfer) result |= VK_PIPELINE_STAGE_2_COPY_BIT;
+    if (stages & StHost) result |= VK_PIPELINE_STAGE_2_HOST_BIT;
+    if (stages & StAllCommands) result |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    return result;
+}
+
+VkAccessFlags2 access_to_vk(HdAccess accesses) {
+    VkAccessFlags2 result = 0;
+    if (accesses & AccTransferRead) result |= VK_ACCESS_2_TRANSFER_READ_BIT;
+    if (accesses & AccTransferWrite) result |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    if (accesses & AccShaderRead) result |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    if (accesses & AccShaderWrite) result |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    if (accesses & AccColourRead) result |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+    if (accesses & AccColourWrite) result |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    if (accesses & AccDepthStencilRead) result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    if (accesses & AccDepthStencilWrite) result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    if (accesses & AccIndirectRead) result |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+    if (accesses & AccIndexRead) result |= VK_ACCESS_2_INDEX_READ_BIT;
+    if (accesses & AccHostRead) result |= VK_ACCESS_2_HOST_READ_BIT;
+    if (accesses & AccDescriptorRead) result |= VK_ACCESS_2_SAMPLER_HEAP_READ_BIT_EXT | VK_ACCESS_2_RESOURCE_HEAP_READ_BIT_EXT;
+    return result;
+}
+
+// ------------------------------------------------------------ 
+// 
+//    Queries 
+// 
+// ------------------------------------------------------------
+
 HdTextureFormatInfo get_texture_format_info(HdFormat format) {
     switch (format) {
     case Format_R8_SRGB:

@@ -443,19 +443,39 @@ typedef enum : uint64_t {
 } StencilOp;
 
 typedef enum : uint64_t {
-  StageTransfer,
-  StageCompute,
-  StageRasterColourOut,
-  StagePixelShader,
-  StageVertexShader
+    // Specifically designed so that the values match/can be cast to
+    // the vulkan equivalents
+    StNone =              0,
+    StIndirect =          1 << 0,
+    StIndexInput =        1 << 1,
+    StVertex =            1 << 2,
+    StTask =              1 << 3,
+    StMesh =              1 << 4,
+    StDepthStencilTests = 1 << 5,
+    StFragment =          1 << 6,
+    StColourOutput =      1 << 7,
+    StCompute =           1 << 8,
+    StTransfer =          1 << 9,
+    StHost =              1 << 10, // Barrier destination only, paired with host_read.
+    StAllCommands =       1 << 11, // All GPU command stages; excludes host.
 } HdStage;
 
 // TODO: acceleration structure.
 typedef enum : uint64_t {
-  HazardDrawArguments = 0x1,
-  HazardDescriptors = 0x2,
-  HAZARD_DEPTH_STENCIL = 0x4
-} HdHazardFlags; 
+    AccNone =              0,
+    AccTransferRead =      1 << 0,
+    AccTransferWrite =     1 << 1,
+    AccShaderRead =        1 << 2,
+    AccShaderWrite =       1 << 3,
+    AccColourRead =        1 << 4,
+    AccColourWrite =       1 << 5,
+    AccDepthStencilRead =  1 << 6,
+    AccDepthStencilWrite = 1 << 7,
+    AccIndirectRead =      1 << 8,
+    AccIndexRead =         1 << 9,
+    AccHostRead =          1 << 10,
+    AccDescriptorRead =    1 << 11,
+} HdAccess; 
 
 // TODO: investigate what signals need adding (if any)
 typedef enum : uint64_t {
@@ -519,9 +539,9 @@ typedef enum {IdxU16, IdxU32} IndexType;
  * a command buffer recording, whereas (I think) the signal after/wait before
  * can be used between queues? (maybe??)
  */
-void barrier(HdCommandBuffer* cb, HdStage before, HdStage after, HdHazardFlags hazards);
-void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
-void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
+void barrier(HdCommandBuffer* cb, HdStage before, HdAccess before_access, HdStage after, HdAccess after_access);
+//void signal_after(HdCommandBuffer* cb, HdStage before, void *ptrGpu, uint64_t value, HdSignal signal);
+//void wait_before(HdCommandBuffer* cb, HdStage after, void *ptrGpu, uint64_t value, HdCompOp op, HdHazardFlags hazards, uint64_t mask);
 
 typedef struct {
     float x;

@@ -245,6 +245,8 @@ VkAttachmentStoreOp store_op_to_vk(StoreOp op);
 VkFormat format_to_vk(HdFormat format);
 VkImageViewType texshape_to_vk_view(HdTextureShape type);
 VkImageType texshape_to_vk(HdTextureShape type);
+VkPipelineStageFlags2 stage_to_vk(HdStage);
+VkAccessFlags2 access_to_vk(HdAccess);
 
 // Get information about things in useful formats
 uint32_t popcount(uint32_t value);

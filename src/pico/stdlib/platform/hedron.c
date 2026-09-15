@@ -70,6 +70,8 @@ static PiType* pipeline_ty;
 static PiType* semaphore_ty;
 static PiType* command_buffer_ty;
 
+static PiType* stage_ty;
+static PiType* access_ty;
 static PiType* load_op_ty;
 static PiType* store_op_ty;
 static PiType* colour_attachment_ty;
@@ -516,6 +518,17 @@ void build_submit_commands_fn(PiType* type, Assembler* ass, PiAllocator* pia, Al
 
 //   Commands 
 // -------------
+
+void build_barrier_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 5,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "before", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "before-acc", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "after", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "after-acc", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(barrier, &fn_ctype, type, ass, a, point); 
+}
 
 void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
@@ -1592,6 +1605,20 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     type = (PiType) {.sort = TType};
 
+    typep = mk_named_type(pia, "Stage", mk_prim_type(pia, UInt_64));
+    name = string_to_name(mv_string("Stage"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    stage_ty = e->value;
+
+    typep = mk_named_type(pia, "Access", mk_prim_type(pia, UInt_64));
+    name = string_to_name(mv_string("Access"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    access_ty = e->value;
+
     typep =
         mk_named_type(pia, "LoadOp",
                       mk_enum_type(pia, 3, "load", 0, "clear", 0, "discard", 0));
@@ -1669,6 +1696,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     index_type_ty = e->value;
 
     // Commands - Values
+    typep = mk_proc_type(pia, 5, command_buffer_ty, stage_ty, access_ty, stage_ty, access_ty, mk_prim_type(pia, Unit));
+    build_barrier_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("barrier"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
     typep = mk_proc_type(pia, 2, command_buffer_ty, pipeline_ty, mk_prim_type(pia, Unit));
     build_set_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("set-pipeline"));
