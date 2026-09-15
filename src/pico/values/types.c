@@ -1430,7 +1430,8 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TFlags: {
-        return type.flags.flag_size / 8;
+        *out = type.flags.flag_size / 8;
+        return Ok;
     }
 
     case TReset:
@@ -1610,7 +1611,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         return Ok;
     }
     case TFlags: {
-        return type.flags.flag_size / 8;
+        *out = type.flags.flag_size / 8;
+        return Ok;
     }
 
     case TReset:

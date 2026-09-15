@@ -67,10 +67,13 @@ _Noreturn void type_error_incorrect_num_seal_args(PiType* type, SynRef seal, Typ
 _Noreturn void type_error_invalid_unseal_type(PiType* type, SynRef unseal, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, SynRef unseal, TypeCheckContext ctx);
 
-// Constructor / Variant
+// Constructor / Variant / Flag
+_Noreturn void type_error_invalid_constructor_type(PiType* type, SynRef variant, TypeCheckContext ctx);
 _Noreturn void type_error_invalid_variant_type(PiType* type, SynRef variant, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_variant_args(PiType* type, SynRef variant, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_missing_variant_tag(PiType* type, SynRef variant, TypeCheckContext ctx);
+_Noreturn void type_error_missing_flag(PiType* type, SynRef variant, TypeCheckContext ctx);
+_Noreturn void type_error_flag_has_args(PiType* type, SynRef variant, TypeCheckContext ctx);
 
 // Match 
 _Noreturn void type_error_match_invalid_type(PiType* type, SynRef variant, TypeCheckContext ctx);

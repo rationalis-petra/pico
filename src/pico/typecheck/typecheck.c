@@ -723,29 +723,46 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped.variant.has_enum_type == Some) {
             set_type(ref, eval_type(untyped.variant.enum_type, env, ctx), ctx.tape);;
-            PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
+            PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
 
-            if (enum_type->sort != TEnum) {
-                type_error_invalid_variant_type(enum_type, ref, ctx);
+            if ((src_type->sort != TEnum) & (src_type->sort != TFlags))  {
+                type_error_invalid_constructor_type(src_type, ref, ctx);
             }
 
-            bool found_variant = false;
-            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
-                    untyped.variant.tag = i;
-                    found_variant = true;
+            if (src_type->sort == TEnum) {
+                bool found_variant = false;
+                PiType* enum_type = src_type;
+                for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                    if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_variant = true;
 
-                    // Generate variant has no args
-                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                    if (args->len != 0) {
-                        type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        // If this variant expects args, throw error
+                        PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                        if (args->len != 0) {
+                            type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (!found_variant) {
-                type_error_missing_variant_tag(enum_type, ref, ctx);
+                if (!found_variant) {
+                    type_error_missing_variant_tag(enum_type, ref, ctx);
+                }
+            } else {
+                PiType* flags_type = src_type;
+                bool found_flag = false;
+                for (size_t i = 0; i < flags_type->flags.flag_values.len; i++) {
+                    if (symbol_eq(flags_type->flags.flag_values.data[i], untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_flag = true;
+                        break;
+                    }
+                }
+
+                if (!found_flag) {
+                    type_error_missing_flag(flags_type, ref, ctx);
+                }
             }
         } else {
             set_type(ref, mk_uvar(ctx.pia), ctx.tape);;
@@ -767,34 +784,54 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped.variant.has_enum_type == Some) {
             set_type(ref, eval_type(untyped.variant.enum_type, env, ctx), ctx.tape);;
-            PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
+            PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
 
-            if (enum_type->sort != TEnum) {
-                type_error_invalid_variant_type(enum_type, ref, ctx);
+            if ((src_type->sort != TEnum) & (src_type->sort != TFlags)) {
+                type_error_invalid_variant_type(src_type, ref, ctx);
             }
+            if (src_type->sort == TEnum) {
+                PiType* enum_type = src_type;
 
-            bool found_variant = false;
-            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
-                    untyped.variant.tag = i;
-                    found_variant = true;
+                bool found_variant = false;
+                for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                    if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_variant = true;
 
-                    // Generate variant has no args
-                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                    if (args->len != untyped.variant.args.len) {
-                        type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        // Generate variant has no args
+                        PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                        if (args->len != untyped.variant.args.len) {
+                            type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        }
+
+                        for (size_t i = 0; i < args->len; i++) {
+                            Range tysrc = get_range(untyped.variant.enum_type, ctx.tape).term;
+                            type_check_i(untyped.variant.args.data[i], args->data[i], tysrc, env, ctx);
+                        }
+                        break;
                     }
-
-                    for (size_t i = 0; i < args->len; i++) {
-                        Range tysrc = get_range(untyped.variant.enum_type, ctx.tape).term;
-                        type_check_i(untyped.variant.args.data[i], args->data[i], tysrc, env, ctx);
-                    }
-                    break;
                 }
-            }
 
-            if (!found_variant) {
-                type_error_missing_variant_tag(enum_type, ref, ctx);
+                if (!found_variant) {
+                    type_error_missing_variant_tag(enum_type, ref, ctx);
+                }
+            } else {
+                PiType* flags_type = src_type;
+                bool found_flag = false;
+                if (untyped.variant.args.len != 0)
+                    type_error_flag_has_args(flags_type, ref, ctx);
+
+                for (size_t i = 0; i < flags_type->flags.flag_values.len; i++) {
+                    if (symbol_eq(flags_type->flags.flag_values.data[i], untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_flag = true;
+                        break;
+                    }
+                }
+
+                if (!found_flag) {
+                    type_error_missing_flag(flags_type, ref, ctx);
+                }
             }
         } else {
             set_type(ref, mk_uvar(ctx.pia), ctx.tape);;
@@ -2366,42 +2403,77 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SConstructor:  {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
+        PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
 
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
-            if (symbol_eq(cell.key, syn.variant.tagname)) {
-                found_variant = true;
-                syn.variant.tag = i;
-                set_syntax(ref, syn, ctx.tape);
-                break;
+        if (src_type->sort == TEnum) {
+            PiType* enum_type = src_type;
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
+                if (symbol_eq(cell.key, syn.variant.tagname)) {
+                    found_variant = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
             }
-        }
-        if (!found_variant) {
-            panic(mv_string("Unable to find constructor tag in post-unify."));
+            if (!found_variant) {
+                panic(mv_string("Unable to find constructor tag in post-unify."));
+            }
+        } else {
+            PiType* flag_type = src_type;
+            bool found_flag = false;
+            for (size_t i = 0; i < flag_type->flags.flag_values.len; i++) {
+                Symbol sym = flag_type->flags.flag_values.data[i];
+                if (symbol_eq(sym, syn.variant.tagname)) {
+                    found_flag = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
+            }
+            if (!found_flag) {
+                panic(mv_string("Unable to find flag in post-unify."));
+            }
         }
         break;
     }
     case SVariant: {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
-
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
-            if (symbol_eq(cell.key, syn.variant.tagname)) {
-                found_variant = true;
-                syn.variant.tag = i;
-                set_syntax(ref, syn, ctx.tape);
-                break;
+        PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
+        if (src_type->sort == TEnum) {
+            PiType* enum_type = src_type;
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
+                if (symbol_eq(cell.key, syn.variant.tagname)) {
+                    found_variant = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
             }
-        }
-        if (!found_variant) {
-            panic(mv_string("Unable to find variant tag in post-unify."));
-        }
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            post_unify(syn.variant.args.data[i], env, ctx);
+            if (!found_variant) {
+                panic(mv_string("Unable to find variant tag in post-unify."));
+            }
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                post_unify(syn.variant.args.data[i], env, ctx);
+            }
+        } else {
+            PiType* flag_type = src_type;
+            bool found_flag = false;
+            for (size_t i = 0; i < flag_type->flags.flag_values.len; i++) {
+                Symbol sym = flag_type->flags.flag_values.data[i];
+                if (symbol_eq(sym, syn.variant.tagname)) {
+                    found_flag = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
+            }
+            if (!found_flag) {
+                panic(mv_string("Unable to find flag in post-unify."));
+            }
         }
         break;
     }

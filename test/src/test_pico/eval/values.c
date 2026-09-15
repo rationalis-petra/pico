@@ -266,11 +266,9 @@ void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
 
-    if (test_start(log, mv_string("if-match-proc-some"))) {
-        int32_t expected = 9723;
-        RUN("(def SmallTag Enum [:left Unit] [:right U32])");
-        TEST_EQ("(match (SmallTag:left :unit)\n"
-                "  [[:left l] 9723]"
-                "  [[:right e] e])");
+    if (test_start(log, mv_string("flag"))) {
+        int64_t expected = 2;
+        RUN("(def Perms Flags :read :write :execute)");
+        TEST_EQ("(Perms:write)");
     }
 }

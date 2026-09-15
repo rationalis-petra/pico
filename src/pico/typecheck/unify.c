@@ -1161,6 +1161,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
         }
         break;
     }
+    case TFlags:
+        break;
     case TReset: {
         squash_type((PiType*)type->reset.in, ctx);
         squash_type((PiType*)type->reset.out, ctx);

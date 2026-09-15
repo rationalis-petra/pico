@@ -2250,49 +2250,57 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
         } else {
-            PiType* enum_type = strip_type(type);
-            size_t enum_stack_size = pi_size_of(*enum_type);
-            size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+            PiType* src_type = strip_type(type);
+            if (src_type->sort == TEnum) {
+                PiType* enum_type = src_type;
+                size_t enum_stack_size = pi_size_of(*enum_type);
+                size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
-            // Make space to fit the (final) variant
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
-            data_stack_grow(env, enum_stack_size);
+                // Make space to fit the (final) variant
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
+                data_stack_grow(env, enum_stack_size);
 
-            // Set the tag
-            size_t tag_size = enum_type->enumeration.tag_size / 8;
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                // Set the tag
+                size_t tag_size = enum_type->enumeration.tag_size / 8;
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
 
-            // Generate each argument
-            for (size_t i = 0; i < syn.variant.args.len; i++) {
-                generate_i(syn.variant.args.data[i], env, ictx);
+                // Generate each argument
+                for (size_t i = 0; i < syn.variant.args.len; i++) {
+                    generate_i(syn.variant.args.data[i], env, ictx);
+                }
+
+                PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
+
+                // Note: items are placed on the stack in reverse order, i.e. the
+                //  'first' element in the enum is highest up in the stack. We will
+                //  copy in the same order as they were generated, i.e. 'highest'
+                //  goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
+                //  as the 'subtraction' happens in the loop, we just initialize to
+                //  variant_stack_size (same as dest)
+                size_t src_stack_offset = variant_stack_size;
+                size_t dest_stack_offset = variant_stack_size + tag_size;
+                for (size_t i = 0; i < syn.variant.args.len; i++) {
+                    size_t field_size = pi_size_of(*(PiType*)args.data[i]);
+                    size_t field_align = pi_align_of(*(PiType*)args.data[i]);
+                    if (field_size == 0) continue;
+
+                    dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
+                    src_stack_offset -= pi_stack_align(field_size);
+                    generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+                    dest_stack_offset += field_size;
+                }
+
+                // Remove the space occupied by the temporary values, then update
+                // bookkeeping accordingly 
+                build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size), ass, a, point);
+                data_stack_shrink(env, variant_stack_size);
+            } else {
+                // Max size of flag is 64 bit, so push on stack = push 64-bit number
+                build_binary_op(Mov, reg(RCX, sz_64), imm64(1 << syn.variant.tag), ass, a, point);
+                build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+                data_stack_grow(env, 8);
             }
-
-            PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
-
-            // Note: items are placed on the stack in reverse order, i.e. the
-            //  'first' element in the enum is highest up in the stack. We will
-            //  copy in the same order as they were generated, i.e. 'highest'
-            //  goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
-            //  as the 'subtraction' happens in the loop, we just initialize to
-            //  variant_stack_size (same as dest)
-            size_t src_stack_offset = variant_stack_size;
-            size_t dest_stack_offset = variant_stack_size + tag_size;
-            for (size_t i = 0; i < syn.variant.args.len; i++) {
-                size_t field_size = pi_size_of(*(PiType*)args.data[i]);
-                size_t field_align = pi_align_of(*(PiType*)args.data[i]);
-                if (field_size == 0) continue;
-
-                dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
-                src_stack_offset -= pi_stack_align(field_size);
-                generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-                dest_stack_offset += field_size;
-            }
-
-            // Remove the space occupied by the temporary values, then update
-            // bookkeeping accordingly 
-            build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size), ass, a, point);
-            data_stack_shrink(env, variant_stack_size);
         }
         break;
     }

@@ -420,6 +420,20 @@ _Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, SynRef ref, T
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_invalid_constructor_type(PiType *type, SynRef variant, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+    push_ptr(mv_cstr_doc("Contructing a variant/flag from type", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+    push_ptr(mv_cstr_doc("which is not an enum type. Only Enum or Flag types can be used in this instance.", a), &nodes);
+
+    PicoError err = {
+        .range = get_range(variant, ctx.tape).term,
+        .message = mv_sep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void type_error_invalid_variant_type(PiType *type, SynRef variant, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(6, a);
@@ -464,6 +478,38 @@ _Noreturn void type_error_missing_variant_tag(PiType* type, SynRef ref, TypeChec
     push_ptr(mv_cstr_doc("Attempting constructing the variant", a), &nodes);
     push_ptr(mk_paren_doc("'","'", mv_str_doc(view_symbol_string(variant.variant.tagname), a), a), &nodes);
     push_ptr(mv_cstr_doc("which does not exist in the inferred Enum type. The type this should have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_missing_flag(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    Syntax variant = get_syntax(ref, ctx.tape);
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to construct the flag value", a), &nodes);
+    push_ptr(mk_paren_doc("'","'", mv_str_doc(view_symbol_string(variant.variant.tagname), a), a), &nodes);
+    push_ptr(mv_cstr_doc("which does not exist in the inferred Flag type. The type this should have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_flag_has_args(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to add arguments when creating a flag value. This is only legal with Enum types.", a), &nodes);
+    push_ptr(mv_cstr_doc("The type this was inferred to have is:", a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {
