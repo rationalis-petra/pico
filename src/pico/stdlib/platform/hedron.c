@@ -560,27 +560,36 @@ void build_set_sampler_descriptor_heap_fn(PiType* type, Assembler* ass, PiAlloca
     convert_c_fn(set_sampler_descriptor_heap, &fn_ctype, type, ass, a, point); 
 }
 
+void relic_dispatch(uint64_t type_data, HdCommandBuffer* commands, void* data, UVec3 group_count) {
+    dispatch(commands, data, group_count);
+}
+
 void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType dims = mk_struct_ctype(pia, 1,
                                  "vals", mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})));
-    CType fn_ctype = mk_fn_ctype(pia, 3,
+    CType fn_ctype = mk_fn_ctype(pia, 4,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "dimenstions", dims,
                                  (CType){.sort = CSVoid});
-    convert_c_fn(dispatch, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_dispatch, &fn_ctype, type, ass, a, point); 
+}
+void relic_dispatch_indirect(uint64_t type_data, HdCommandBuffer* commands, void* data, DeviceRange arguments) {
+    dispatch_indirect(commands, data, arguments);
 }
 
 void build_dispatch_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType device_range_ctype = mk_struct_ctype(pia, 2,
                                                "data", mk_voidptr_ctype(pia),
                                                "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 3,
+    CType fn_ctype = mk_fn_ctype(pia, 4,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "args", device_range_ctype,
                                  (CType){.sort = CSVoid});
-    convert_c_fn(dispatch_indirect, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_dispatch_indirect, &fn_ctype, type, ass, a, point); 
 }
 
 void build_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -1740,7 +1749,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
 
     PiType* wave_dims = mk_tile_type(pia, 1, 3, mk_prim_type(pia, UInt_32));
-    typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), wave_dims, mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 3, command_buffer_ty, mk_var_type(pia, "A"), wave_dims, mk_prim_type(pia, Unit)));
     build_dispatch_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dispatch"));
     fn_segments.code = get_instructions(ass);
@@ -1748,7 +1758,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), device_range_ty, mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 3, command_buffer_ty, mk_var_type(pia, "A"), device_range_ty, mk_prim_type(pia, Unit)));
     build_dispatch_indirect_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dispatch-indirect"));
     fn_segments.code = get_instructions(ass);

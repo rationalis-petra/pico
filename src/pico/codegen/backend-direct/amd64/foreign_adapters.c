@@ -230,10 +230,16 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     // This function is for converting a c function (assumed platform default
     // ABI) into a pico function. This means that it assumes that all arguments
     // are pushed on the stack in forward order (last at top).
-    if (ctype->sort != CSProc || ptype->sort != TProc) {
+    if (ctype->sort != CSProc || (ptype->sort != TProc && ptype->sort != TAll)) {
         panic(mv_string("convert_c_fun requires types to be functions."));
     }
-    if (ctype->proc.args.len != ptype->proc.args.len) {
+
+    SymAddrPiAMap syms = ptype->sort == TAll ? ptype->binder.vars : (SymAddrPiAMap){};
+    AddrPiList args = ptype->sort == TProc ? ptype->proc.args :
+        ptype->binder.body->sort == TProc ? ptype->binder.body->proc.args : (AddrPiList){};
+    PiType* ret_ty = ptype->sort == TProc ? ptype->proc.ret :
+        ptype->binder.body->sort == TProc ? ptype->binder.body->proc.ret : ptype->binder.body;
+    if (ctype->proc.args.len != syms.len + args.len) {
         String message = string_ncat(a, 4,
                                      mv_string("convert_c_fun requires functions to have same number of args. \n     C Type had : "),
                                      string_u64(ctype->proc.args.len, a),
@@ -242,13 +248,13 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         panic(message);
     }
 
-    if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+    if (!bd_can_reinterpret(ctype->proc.ret, ret_ty)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function return types -", a), &nodes);
         push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
         push_ptr(mv_cstr_doc("and", a), &nodes);
-        push_ptr(pretty_type(ptype->proc.ret, default_ptp, a), &nodes);
+        push_ptr(pretty_type(ret_ty, default_ptp, a), &nodes);
         push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
         panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
     }
@@ -260,18 +266,66 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     U64Array arg_offsets = mk_u64_array(ctype->proc.args.len + 1, a);
     arg_offsets.len = arg_offsets.size;
     uint64_t offset = ADDRESS_SIZE; // To account for return address
-    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+    for (size_t i = 0; i < args.len; i++) {
         size_t idx = arg_offsets.len - (i + 1);
+        size_t p_idx = idx - syms.len - 1;
+        size_t c_idx = idx - 1;
         arg_offsets.data[idx] = offset;
-        offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
+        size_t size;
+        bool is_poly = false;
+        if (pi_maybe_size_of(*(PiType*)args.data[p_idx], &size) != Ok) {
+            offset += ADDRESS_SIZE;
+            is_poly = true;
+        } else  {
+            offset += pi_stack_align(size);
+        }
 
-        if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+        if (!is_poly) {
+            if (!bd_can_reinterpret(&ctype->proc.args.data[c_idx].val, args.data[p_idx])) {
+                // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
+                push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
+                push_ptr(mv_cstr_doc("and", a), &nodes);
+                push_ptr(pretty_type(args.data[p_idx], default_ptp, a), &nodes);
+                push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
+                panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
+            }
+        } else {
+            PiType type_data = (PiType) {
+                .sort = TPrim,
+                .prim = Address,
+            };
+            if (!bd_can_reinterpret(&ctype->proc.args.data[c_idx].val, &type_data)) {
+                // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Attempted to do invalid conversion of c function argument types to polymorphic argument", a), &nodes);
+                push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
+                push_ptr(mv_cstr_doc("is not compatible with:", a), &nodes);
+                push_ptr(pretty_type(args.data[p_idx], default_ptp, a), &nodes);
+                push_ptr(mv_cstr_doc(". Note that any argument in a polymorphic function whose size is dependent on the type is passed as a pointer to c.", a), &nodes);
+                panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
+            }
+        }
+    }
+    for (size_t i = 0; i < syms.len; i++) {
+        size_t idx = arg_offsets.len - (i + 1 + args.len);
+        size_t p_idx = idx - 1;
+        size_t c_idx = idx - 1;
+        arg_offsets.data[idx] = offset;
+        offset += REGISTER_SIZE;
+
+        PiType type_data = (PiType) {
+            .sort = TPrim,
+            .prim = UInt_64,
+        };
+        if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, &type_data)) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
             PtrArray nodes = mk_ptr_array(4, a);
-            push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
-            push_ptr(pretty_ctype(&ctype->proc.args.data[i].val, a), &nodes);
+            push_ptr(mv_cstr_doc("Attempted to do invalid conversion of c function argument types to all type argument -", a), &nodes);
+            push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
             push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(pretty_type(ptype->proc.args.data[i], default_ptp, a), &nodes);
+            push_ptr(pretty_type(syms.data[p_idx].val, default_ptp, a), &nodes);
             push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
             panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
         }
@@ -306,7 +360,12 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     bool pass_return_in_memory =
         (return_classes.len == 1 && return_classes.data[0] == SysVMemory)
         || (return_classes.len > 2);
-    if (pass_return_in_memory) {
+    // We reserve memory for the output only if:
+    // - The Calling convention dictates that the return value is passed in
+    //   memory; and
+    // - The Relic function is not polymorphic; as polymorphic functions have 
+    //   already pre-reseved space for the return value.
+    if (pass_return_in_memory && ptype->sort != TAll) {
         input_area_size += return_arg_size;
         current_integer_register++;
     }
@@ -421,9 +480,16 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R11, sz_64), ass, a, point);
 
     if (pass_return_in_memory) {
-        // pass in memory - reserve space on stack:
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
-        build_binary_op(Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), ass, a, point);
+        if (ptype->sort == TProc) {
+            // pass in memory - reserve space on stack:
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
+            build_binary_op(Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), ass, a, point);
+        } else {
+            // We are given a return destination by the caller - forward that on
+            // to the C function.
+            size_t offset = arg_offsets.data[0] + 0x10;
+            build_binary_op(Mov, reg(integer_registers[0], sz_64), rrefa(RBX, offset, sz_64), ass, a, point);
+        }
     }
 
     for (size_t i = 0; i < in_memory_args.len; i++) {
@@ -509,9 +575,15 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
 
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-
         // The -0x8 accounts for the fact that we just popped the return address! 
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
+
+        if (ptype->sort == TAll) {
+            // Polymorphic function: we also need to pop the desired Vstack Head
+            // and the return destination
+            build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+        }
 
         // Now, push registers onto stack
         size_t current_int_return_register = return_classes.len - 1;
@@ -553,6 +625,14 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
             case SysVMemory:
                 break;
             } 
+        }
+        if (ptype->sort == TAll) {
+            size_t offset = 0;
+            for (size_t ctr = 0; ctr < return_classes.len; ctr++) {
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, rref8(RSI, offset, sz_64), reg(RAX, sz_64), ass, a, point);
+                offset += REGISTER_SIZE;
+            }
         }
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     }

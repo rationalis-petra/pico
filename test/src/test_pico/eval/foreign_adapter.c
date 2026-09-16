@@ -158,6 +158,8 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
                          "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n") ;
     }
 
+    // TODO: Test array <-> tile conversions
+    // TODO: Test all procs 
     
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);

@@ -593,8 +593,8 @@ typedef struct {
     uint32_t y;
     uint32_t z;
 } UVec3;
-void dispatch(HdCommandBuffer* cb, void* dataGpu, UVec3 group_count);
-void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, DeviceRange arguments);
+void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count);
+void dispatch_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments);
 
 void draw(HdCommandBuffer *commands, void *data,
           uint32_t vertex_count, uint32_t instance_count,
