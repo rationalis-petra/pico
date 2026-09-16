@@ -756,6 +756,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     if (symbol_eq(flags_type->flags.flag_values.data[i], untyped.variant.tagname)) {
                         untyped.variant.tag = i;
                         found_flag = true;
+                        set_syntax(ref, untyped, ctx.tape);
                         break;
                     }
                 }
@@ -850,6 +851,19 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             Range range = get_range(ref, ctx.tape).term;
             UnifyResult out = add_variant_constraint(get_type(ref, ctx.tape)->uvar, range, untyped.variant.tagname, types, uctx);
             check_result_out(out, range, (UnifyReason){.type = URNone}, a, point);
+        }
+        break;
+    }
+    case SFlags: {
+        PiType* flag_type = mk_uvar(ctx.pia);
+        if (untyped.flags.flags.len == 0) {
+            set_type(ref, flag_type, ctx.tape);
+        } else {
+            Range range = get_range(ref, ctx.tape).term;
+            for (size_t i = 0; i < untyped.flags.flags.len; i++) {
+                type_check_i(untyped.flags.flags.data[i], flag_type, range, env, ctx);
+            }
+            set_type(ref, flag_type, ctx.tape);
         }
         break;
     }
@@ -2477,6 +2491,14 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SFlags: {
+        PiType* unwrapped = get_type(ref, ctx.tape);
+        PiType* type = unwrap_type(unwrapped, type_env_module(env), ctx.pia, ctx.a);
+        if (type->sort != TFlags) {
+            type_error_flags_not_flag(type, ref, ctx);
+        }
+        break;
+    }
     case SMatch: {
         post_unify(syn.match.val, env, ctx);
         PiType* enum_type = unwrap_type(get_type(syn.match.val, ctx.tape), type_env_module(env), ctx.pia, ctx.a); 
@@ -2880,6 +2902,13 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         
         for (size_t i = 0; i < typed.variant.args.len; i++) {
             squash_types(typed.variant.args.data[i], env, ctx);
+        }
+        break;
+    }
+
+    case SFlags: {
+        for (size_t i = 0; i < typed.flags.flags.len; i++) {
+            squash_types(typed.flags.flags.data[i], env, ctx);
         }
         break;
     }

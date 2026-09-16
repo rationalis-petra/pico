@@ -75,6 +75,9 @@ _Noreturn void type_error_missing_variant_tag(PiType* type, SynRef variant, Type
 _Noreturn void type_error_missing_flag(PiType* type, SynRef variant, TypeCheckContext ctx);
 _Noreturn void type_error_flag_has_args(PiType* type, SynRef variant, TypeCheckContext ctx);
 
+// Flag Operations
+_Noreturn void type_error_flags_not_flag(PiType* type, SynRef variant, TypeCheckContext ctx);
+
 // Match 
 _Noreturn void type_error_match_invalid_type(PiType* type, SynRef variant, TypeCheckContext ctx);
 _Noreturn void type_error_match_duplicate_tag(PiType* type, SynRef match, size_t variant_idx, TypeCheckContext ctx);

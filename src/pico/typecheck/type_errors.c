@@ -519,6 +519,22 @@ _Noreturn void type_error_flag_has_args(PiType* type, SynRef ref, TypeCheckConte
     throw_pi_error(ctx.point, err);
 }
 
+// Flag Operations
+_Noreturn void type_error_flags_not_flag(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Using 'flags', but the terms within do not have a type of sort 'Flags'.", a), &nodes);
+    push_ptr(mv_cstr_doc("Instead, the type they was inferred to have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // Match
 _Noreturn void type_error_match_invalid_type(PiType *type, SynRef ref, TypeCheckContext ctx) {
     Allocator* a = ctx.a;

@@ -2312,6 +2312,17 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         break;
     }
+    case SFlags: {
+        for (size_t i = 0; i < syn.flags.flags.len; i++) {
+            generate_i(syn.flags.flags.data[i], env, ictx);
+        }
+        for (size_t i = 1; i < syn.flags.flags.len; i++) {
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+            data_stack_shrink(env, REGISTER_SIZE);
+        }
+        break;
+    }
     case SMatch: {
         // Generate code for the value
         SynRef match_value = syn.match.val;
