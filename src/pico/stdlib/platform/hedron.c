@@ -382,17 +382,16 @@ void build_write_sampler_descriptor_fn(PiType* type, Assembler* ass, PiAllocator
 //   Pipelines 
 // -------------
 
-HdPipeline* relic_create_compute_pipeline(U32Slice compute_IR, size_t data_size) {
-  HdLogicalDevice* device = get_current_device();
-  return create_compute_pipeline(compute_IR, data_size, device);
+HdPipeline* relic_create_compute_pipeline(U32Slice compute_IR) {
+    HdLogicalDevice* device = get_current_device();
+    return create_compute_pipeline(compute_IR, device);
 }
 
 void build_create_compute_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(pia, 2,
-                               "compute_ir", mk_slice_ctype(pia),
-                               "data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                               mk_voidptr_ctype(pia));
-  convert_c_fn(relic_create_compute_pipeline, &fn_ctype, type, ass, a, point); 
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "compute_ir", mk_slice_ctype(pia),
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(relic_create_compute_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
 typedef struct {
@@ -400,9 +399,9 @@ typedef struct {
   U32Slice ir;
 } EitherVertexMeshIR;
 
-HdPipeline* relic_create_graphics_pipeline(EitherVertexMeshIR first_stage, U32Slice pixelIR, HdRasterDescription desc, size_t data_size) {
-  HdLogicalDevice* device = get_current_device();
-  return create_graphics_pipeline(first_stage.ir, pixelIR, desc, first_stage.tag, data_size, device);
+HdPipeline* relic_create_graphics_pipeline(EitherVertexMeshIR first_stage, U32Slice pixelIR, HdRasterDescription desc) {
+    HdLogicalDevice* device = get_current_device();
+    return create_graphics_pipeline(first_stage.ir, pixelIR, desc, first_stage.tag, device);
 }
 
 void build_create_graphics_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -427,11 +426,10 @@ void build_create_graphics_pipeline_fn(PiType* type, Assembler* ass, PiAllocator
                                             "ir", mk_union_ctype(pia, 2, 
                                                                  "vertex", mk_slice_ctype(pia),
                                                                  "meshlet", mk_slice_ctype(pia)));
-  CType fn_ctype = mk_fn_ctype(pia, 4,
+  CType fn_ctype = mk_fn_ctype(pia, 3,
                                "first_stage_ir", first_stage_ctype,
                                "pixel_ir", mk_slice_ctype(pia),
                                "raster-description", raster_desc_ctype,
-                               "data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                mk_voidptr_ctype(pia));
   convert_c_fn(relic_create_graphics_pipeline, &fn_ctype, type, ass, a, point); 
 }
@@ -561,7 +559,8 @@ void build_set_sampler_descriptor_heap_fn(PiType* type, Assembler* ass, PiAlloca
 }
 
 void relic_dispatch(uint64_t type_data, HdCommandBuffer* commands, void* data, UVec3 group_count) {
-    dispatch(commands, data, group_count);
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    dispatch(commands, device_pc, group_count);
 }
 
 void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -576,7 +575,8 @@ void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator
     convert_c_fn(relic_dispatch, &fn_ctype, type, ass, a, point); 
 }
 void relic_dispatch_indirect(uint64_t type_data, HdCommandBuffer* commands, void* data, DeviceRange arguments) {
-    dispatch_indirect(commands, data, arguments);
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    dispatch_indirect(commands, device_pc, arguments);
 }
 
 void build_dispatch_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -592,8 +592,17 @@ void build_dispatch_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, 
     convert_c_fn(relic_dispatch_indirect, &fn_ctype, type, ass, a, point); 
 }
 
+void relic_draw(uint64_t type_data,
+                HdCommandBuffer *commands, void *data,
+                uint32_t vertex_count, uint32_t instance_count,
+                uint32_t first_vertex, uint32_t first_instance) {
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    draw(commands, device_pc, vertex_count, instance_count, first_vertex, first_instance);
+}
+
 void build_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 6,
+    CType fn_ctype = mk_fn_ctype(pia, 7,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "vertex_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
@@ -601,14 +610,27 @@ void build_draw_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a,
                                  "first_vertex", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  "first_instance", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  (CType){.sort = CSVoid});
-    convert_c_fn(draw, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_draw, &fn_ctype, type, ass, a, point); 
+}
+
+void relic_draw_indexed(uint64_t type_data, 
+                        HdCommandBuffer *cb, void *data, DeviceRange indices,
+                        IndexType type, uint32_t index_count, uint32_t instance_count,
+                        uint32_t first_index, int32_t vertex_offset,
+                        uint32_t first_instance) {
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    draw_indexed(cb, device_pc, indices,
+                 type, index_count, instance_count,
+                 first_index, vertex_offset,
+                 first_instance);
 }
 
 void build_draw_indexed_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType device_range_ctype = mk_struct_ctype(pia, 2,
                                                "data", mk_voidptr_ctype(pia),
                                                "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 9,
+    CType fn_ctype = mk_fn_ctype(pia, 10,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "indices", device_range_ctype,
@@ -619,29 +641,44 @@ void build_draw_indexed_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
                                  "first_vertex", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  "first_instance", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  (CType){.sort = CSVoid});
-    convert_c_fn(draw_indexed, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_draw_indexed, &fn_ctype, type, ass, a, point); 
 }
 
+
+
+void relic_draw_indirect(uint64_t type_data, HdCommandBuffer* cb, void* data, DeviceRange arguments, uint32_t draw_count, uint32_t stride) {
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    draw_indirect(cb, device_pc, arguments, draw_count, stride);
+}
 
 void build_draw_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType device_range_ctype = mk_struct_ctype(pia, 2,
                                                "data", mk_voidptr_ctype(pia),
                                                "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 5,
+    CType fn_ctype = mk_fn_ctype(pia, 6,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "arguments", device_range_ctype,
                                  "draw_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  "stride", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                  (CType){.sort = CSVoid});
-    convert_c_fn(draw_indirect, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_draw_indirect, &fn_ctype, type, ass, a, point); 
 }
 
+
+void relic_indexed_indirect(uint64_t type_data, HdCommandBuffer *cb, void *data, DeviceRange indices,
+                           IndexType type, DeviceRange arguments,
+                           uint32_t draw_count, uint32_t stride) {
+    U8Slice device_pc = {.len = (type_data >> 28) & 0xFFFFFFF, .data = data};
+    draw_indexed_indirect(cb, device_pc, indices, type, arguments, draw_count, stride);
+}
 void build_draw_indexed_indirect_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType device_range_ctype = mk_struct_ctype(pia, 2,
                                                "data", mk_voidptr_ctype(pia),
                                                "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 7,
+    CType fn_ctype = mk_fn_ctype(pia, 8,
+                                 "type_data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
                                  "indices", device_range_ctype,
@@ -1476,9 +1513,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     pipeline_ty = e->value;
 
-    typep = mk_proc_type(pia, 2,
+    typep = mk_proc_type(pia, 1,
                          mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)),
-                         mk_prim_type(pia, UInt_64),
                          pipeline_ty);
     build_create_compute_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-compute-pipeline"));
@@ -1496,11 +1532,10 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     PiType* first_stage_ir_ty = e->value;
 
-    typep = mk_proc_type(pia, 4,
+    typep = mk_proc_type(pia, 3,
                          first_stage_ir_ty,
                          mk_type_app(pia, get_slice_type(), mk_prim_type(pia, UInt_32)),
                          raster_description_ty,
-                         mk_prim_type(pia, UInt_64),
                          pipeline_ty);
     build_create_graphics_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-graphics-pipeline"));
@@ -1767,14 +1802,15 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 6,
-                         command_buffer_ty,
-                         mk_prim_type(pia, Address),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 6,
+                                     command_buffer_ty,
+                                     mk_var_type(pia, "A"),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, Unit)));
     build_draw_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("draw"));
     fn_segments.code = get_instructions(ass);
@@ -1782,17 +1818,18 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     
-    typep = mk_proc_type(pia, 9,
-                         command_buffer_ty,
-                         mk_prim_type(pia, Address),
-                         device_range_ty,
-                         index_type_ty,
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 9,
+                                     command_buffer_ty,
+                                     mk_var_type(pia, "A"),
+                                     device_range_ty,
+                                     index_type_ty,
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, Unit)));
     build_draw_indexed_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("draw-indexed"));
     fn_segments.code = get_instructions(ass);
@@ -1800,13 +1837,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 5,
-                         command_buffer_ty,
-                         mk_prim_type(pia, Address),
-                         device_range_ty,
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 5,
+                                     command_buffer_ty,
+                                     mk_var_type(pia, "A"),
+                                     device_range_ty,
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, Unit)));
     build_draw_indirect_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("draw-indirect"));
     fn_segments.code = get_instructions(ass);
@@ -1814,15 +1852,16 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 7,
-                         command_buffer_ty,
-                         mk_prim_type(pia, Address),
-                         device_range_ty,
-                         index_type_ty,
-                         device_range_ty,
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, UInt_32),
-                         mk_prim_type(pia, Unit));
+    typep = mk_all_type(pia, 1, "A",
+                        mk_proc_type(pia, 7,
+                                     command_buffer_ty,
+                                     mk_var_type(pia, "A"),
+                                     device_range_ty,
+                                     index_type_ty,
+                                     device_range_ty,
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, UInt_32),
+                                     mk_prim_type(pia, Unit)));
     build_draw_indexed_indirect_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("draw-indexed-indirect"));
     fn_segments.code = get_instructions(ass);

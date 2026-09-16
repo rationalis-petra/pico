@@ -952,12 +952,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
       SymAddrPiAMap type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
       SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
       for (size_t i = 0; i < type_vars.len; i++) {
-        push_symbol(type_vars.data[i].key, &ctype_vars);
+          push_symbol(type_vars.data[i].key, &ctype_vars);
       }
       for (size_t i = 0; i < syn.all_application.types.len; i++) {
-        PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
-        generate_pi_type(type, env, ass, a, point);
-        static_arg_size += ADDRESS_SIZE;
+          PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
+          generate_pi_type(type, env, ass, a, point);
+          static_arg_size += ADDRESS_SIZE;
       }
 
       bool mismatch_variable_args = false;

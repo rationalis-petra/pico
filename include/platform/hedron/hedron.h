@@ -400,8 +400,8 @@ typedef struct {
 } HdRasterDescription;
 
 typedef struct HdPipeline HdPipeline;
-HdPipeline* create_compute_pipeline(U32Slice computeIR, size_t data_size, HdLogicalDevice* device);
-HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, bool is_meshlet, size_t data_size, HdLogicalDevice* device);
+HdPipeline* create_compute_pipeline(U32Slice computeIR, HdLogicalDevice* device);
+HdPipeline* create_graphics_pipeline(U32Slice vertexIR, U32Slice pixelIR, HdRasterDescription desc, bool is_meshlet, HdLogicalDevice* device);
 void destroy_pipeline(HdPipeline* pipeline, HdLogicalDevice* device);
 
 // Semaphores
@@ -593,18 +593,18 @@ typedef struct {
     uint32_t y;
     uint32_t z;
 } UVec3;
-void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count);
-void dispatch_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments);
+void dispatch(HdCommandBuffer* cb, U8Slice data, UVec3 group_count);
+void dispatch_indirect(HdCommandBuffer* cb, U8Slice data, DeviceRange arguments);
 
-void draw(HdCommandBuffer *commands, void *data,
+void draw(HdCommandBuffer *commands, U8Slice data,
           uint32_t vertex_count, uint32_t instance_count,
           uint32_t first_vertex, uint32_t first_instance);
-void draw_indexed(HdCommandBuffer *cb, void *data, DeviceRange indices,
+void draw_indexed(HdCommandBuffer *cb, U8Slice data, DeviceRange indices,
                   IndexType type, uint32_t index_count, uint32_t instance_count,
                   uint32_t first_index, int32_t vertex_offset,
                   uint32_t first_instance);
-void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint32_t draw_count, uint32_t stride);
-void draw_indexed_indirect(HdCommandBuffer *cb, void *data, DeviceRange indices,
+void draw_indirect(HdCommandBuffer* cb, U8Slice data, DeviceRange arguments, uint32_t draw_count, uint32_t stride);
+void draw_indexed_indirect(HdCommandBuffer* cb, U8Slice data, DeviceRange indices,
                            IndexType type, DeviceRange arguments,
                            uint32_t draw_count, uint32_t stride);
 

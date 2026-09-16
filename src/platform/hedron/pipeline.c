@@ -11,7 +11,7 @@ typedef enum {
 } PipelineType;
 
 const char* universal_entry_point = "main";
-HdPipeline* create_compute_pipeline(U32Slice compute_ir, size_t data_size, HdLogicalDevice* device) {
+HdPipeline* create_compute_pipeline(U32Slice compute_ir, HdLogicalDevice* device) {
     // TODO: debug layer: device not null
     // TODO: debug layer: compute_ir not empty/null
 
@@ -46,12 +46,11 @@ HdPipeline* create_compute_pipeline(U32Slice compute_ir, size_t data_size, HdLog
     *hd_pipeline = (HdPipeline) {
       .pipeline = pipeline,
       .bind_point = VK_PIPELINE_BIND_POINT_COMPUTE,
-      .data_size = data_size,
     };
     return hd_pipeline;
 }
 
-HdPipeline* create_graphics_pipeline(U32Slice initial_IR, U32Slice pixel_IR, HdRasterDescription raster_desc, bool is_meshlet, size_t data_size, HdLogicalDevice* device) {
+HdPipeline* create_graphics_pipeline(U32Slice initial_IR, U32Slice pixel_IR, HdRasterDescription raster_desc, bool is_meshlet, HdLogicalDevice* device) {
     // TODO: if we look at aaltonen's create_raster_pso, is asserts some things
     // about formats existing & being implemented. We want to make sure we use
     // constructive types to eliminate these checks, e.g. (depth_enabled = true
@@ -200,7 +199,6 @@ HdPipeline* create_graphics_pipeline(U32Slice initial_IR, U32Slice pixel_IR, HdR
     *hd_pipeline = (HdPipeline) {
       .pipeline = pipeline,
       .bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS,
-      .data_size = data_size,
     };
     return hd_pipeline;
 }

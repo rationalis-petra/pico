@@ -124,28 +124,28 @@ void set_sampler_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap) {
     commands->device->fns.vkCmdBindSamplerHeapEXT(commands->buffer, &bind_info);
 }
 
-void emit_root_data(HdCommandBuffer* commands, void* data) {
+void emit_root_data(HdCommandBuffer* commands, U8Slice data) {
     const VkPushDataInfoEXT info = {
         .sType = VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT,
         .data = {
-            .address = data,
-            .size = commands->current_pipeline->data_size,
+            .address = data.data,
+            .size = data.len,
         },
     };
     commands->device->fns.vkCmdPushDataEXT(commands->buffer, &info);
 }
 
-void dispatch(HdCommandBuffer* cb, void* data, UVec3 group_count) {
+void dispatch(HdCommandBuffer* cb, U8Slice data, UVec3 group_count) {
     // TODO: input validation with debug layers
 
     emit_root_data(cb, data);
     vkCmdDispatch(cb->buffer, group_count.x, group_count.y, group_count.z);
 }
 
-void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, DeviceRange arguments) {
+void dispatch_indirect(HdCommandBuffer* cb, U8Slice data, DeviceRange arguments) {
     // TODO: debug layer/asserts
     //assert(commands && commands->state);
-    emit_root_data(cb, dataGpu);
+    emit_root_data(cb, data);
     const VkDispatchIndirect2InfoKHR info = {
         .sType = VK_STRUCTURE_TYPE_DISPATCH_INDIRECT_2_INFO_KHR,
         .addressRange = {
@@ -157,7 +157,7 @@ void dispatch_indirect(HdCommandBuffer* cb, void* dataGpu, DeviceRange arguments
     cb->device->fns.vkCmdDispatchIndirect2KHR(cb->buffer, &info);
 }
 
-void draw(HdCommandBuffer* cb, void* data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
+void draw(HdCommandBuffer* cb, U8Slice data, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
     // TODO: debug tests
     //const bool valid = commands && commands->recording && commands->rendering;
     //assert(valid && "draw requires an active rendering scope");
@@ -166,7 +166,7 @@ void draw(HdCommandBuffer* cb, void* data, uint32_t vertex_count, uint32_t insta
     vkCmdDraw(cb->buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
-void draw_indexed(HdCommandBuffer *cb, void *data,
+void draw_indexed(HdCommandBuffer* cb, U8Slice data,
                   DeviceRange indices, IndexType type,
                   uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                   int32_t vertex_offset, uint32_t first_instance) {
@@ -185,7 +185,7 @@ void draw_indexed(HdCommandBuffer *cb, void *data,
     vkCmdDrawIndexed(cb->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
-void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint32_t draw_count, uint32_t stride) {
+void draw_indirect(HdCommandBuffer* cb, U8Slice data, DeviceRange arguments, uint32_t draw_count, uint32_t stride) {
     //assert(commands && commands->state);
     emit_root_data(cb, data);
     const VkDrawIndirect2InfoKHR info = {
@@ -201,7 +201,7 @@ void draw_indirect(HdCommandBuffer* cb, void* data, DeviceRange arguments, uint3
     cb->device->fns.vkCmdDrawIndirect2KHR(cb->buffer, &info);
 }
 
-void draw_indexed_indirect(HdCommandBuffer *cb, void *data,
+void draw_indexed_indirect(HdCommandBuffer *cb, U8Slice data,
                            DeviceRange indices, IndexType type, DeviceRange arguments, uint32_t draw_count,
                            uint32_t stride) {
     //assert(commands && commands->state);
