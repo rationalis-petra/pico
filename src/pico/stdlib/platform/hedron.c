@@ -538,19 +538,6 @@ void build_set_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
     convert_c_fn(set_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
-void build_set_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType dims = mk_struct_ctype(pia, 3,
-                                 "x", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
-                                 "y", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
-                                 "z", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(pia, 3,
-                                 "commands", mk_voidptr_ctype(pia),
-                                 "data", mk_voidptr_ctype(pia),
-                                 "dimenstions", dims,
-                                 (CType){.sort = CSVoid});
-    convert_c_fn(dispatch, &fn_ctype, type, ass, a, point); 
-}
-
 void build_set_texture_descriptor_heap_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType device_range_ctype = mk_struct_ctype(pia, 2,
                                                "data", mk_voidptr_ctype(pia),
@@ -574,10 +561,8 @@ void build_set_sampler_descriptor_heap_fn(PiType* type, Assembler* ass, PiAlloca
 }
 
 void build_dispatch_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType dims = mk_struct_ctype(pia, 3,
-                                 "x", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
-                                 "y", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
-                                 "z", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType dims = mk_struct_ctype(pia, 1,
+                                 "vals", mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})));
     CType fn_ctype = mk_fn_ctype(pia, 3,
                                  "commands", mk_voidptr_ctype(pia),
                                  "data", mk_voidptr_ctype(pia),
@@ -1754,10 +1739,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType *wave_dims = mk_struct_type(pia, 3,
-                                       "x", mk_prim_type(pia, UInt_32),
-                                       "y", mk_prim_type(pia, UInt_32),
-                                       "z", mk_prim_type(pia, UInt_32));
+    PiType* wave_dims = mk_tile_type(pia, 1, 3, mk_prim_type(pia, UInt_32));
     typep = mk_proc_type(pia, 3, command_buffer_ty, mk_prim_type(pia, Address), wave_dims, mk_prim_type(pia, Unit));
     build_dispatch_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("dispatch"));

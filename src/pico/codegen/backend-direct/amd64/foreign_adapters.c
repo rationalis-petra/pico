@@ -57,7 +57,7 @@ SysVArgClass merge_sysv_classes(SysVArgClass c1, SysVArgClass c2) {
     return SysVSSE;
 }
 
-void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a) {
+void populate_sysv_words(U8Array* out, size_t offset, bool in_composite, CType* type, Allocator* a) {
     // We probably want to recurse and merge arrays from subclasses
     switch (type->sort) {
     case CSVoid:
@@ -78,7 +78,6 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
         out->data[offset / 8] = merge_sysv_classes(SysVSSE, out->data[offset / 8]);
         break;
     case CSPtr:
-    case CSStaticArray:
     case CSProc:
             out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         break;
@@ -102,16 +101,31 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
             offset = c_size_align(offset, field_al);
             
             // We need now to figure out get the eightbytes
-            populate_sysv_words(out, offset, &field_ty, a);
+            populate_sysv_words(out, offset, true, &field_ty, a);
 
             offset += field_sz; 
+        }
+        break;
+    }
+    case CSStaticArray: {
+            CType elt_ty = *type->array.element;
+            size_t field_sz = c_size_of(elt_ty);
+            size_t field_al = c_align_of(elt_ty);
+            for (size_t i = 0; i < type->array.len; i++) {
+                offset = c_size_align(offset, field_al);
+                populate_sysv_words(out, offset, true, &elt_ty, a);
+                offset += field_sz;
+            }
+        if (in_composite) {
+        } else {
+            out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         }
         break;
     }
     case CSUnion:
         for (size_t i = 0; i < type->cunion.fields.len; i++) {
             CType* field_ty = type->cunion.fields.data[i].val;
-            populate_sysv_words(out, offset, field_ty, a);
+            populate_sysv_words(out, offset, true, field_ty, a);
         }
         break;
     case CSCEnum:
@@ -133,7 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
         for (size_t i = 0; i < num_words; i++) {
             push_u8(SysVNoClass, &out);
         }
-        populate_sysv_words(&out, 0, type, a);
+        populate_sysv_words(&out, 0, false, type, a);
     } 
 
     // Post merger cleanup:
@@ -985,17 +999,22 @@ bool bd_can_reinterpret_internal(CType* ctype, PiType* ptype, bool in_composite)
         return true;
     }
     case TTile: {
-        if (!in_composite)
+        if (!in_composite && ctype->sort != CSStruct)
             return false;
-        if (ctype->sort != CSStaticArray)
+        if (ctype->sort != CSStaticArray && ctype->sort != CSStruct)
             return false;
-        if (ptype->tile.dimensions.len != 1)
-            return false;
-        if (ctype->array.len != ptype->tile.dimensions.data[0].val)
-            return false;
-        return bd_can_reinterpret_internal(ctype->array.element,
-                                           ptype->tile.element,
-                                           false);
+        if (ctype->sort == CSStaticArray)  {
+            if (ptype->tile.dimensions.len != 1)
+                return false;
+            if (ctype->array.len != ptype->tile.dimensions.data[0].val)
+                return false;
+            return bd_can_reinterpret_internal(ctype->array.element,
+                                               ptype->tile.element,
+                                               false);
+        } else {
+            if (ctype->structure.fields.len != 1) return false;
+            return bd_can_reinterpret_internal(&ctype->structure.fields.data[0].val, ptype, true);
+        }
     }
     case TEnum: {
         PiType tag_type;
