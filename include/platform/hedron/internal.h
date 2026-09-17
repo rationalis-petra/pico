@@ -50,6 +50,8 @@ struct HdPhysicalDevice {
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkPhysicalDeviceDescriptorHeapPropertiesEXT heap_properties;
+
+    HdDeviceInfo info; 
 };
 
 typedef struct {
@@ -149,8 +151,6 @@ struct HdLogicalDevice {
 
     // Function pointers for extensions we need go here.
     DeviceFunctions fns;
-
-    HdDeviceCapabilities capabilities; 
 };
 
 // called during device creation

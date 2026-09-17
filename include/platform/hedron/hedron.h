@@ -83,10 +83,19 @@ void destroy_window_surface(HdSurface* surface);
 // Physical & Logical Devices
 typedef struct HdPhysicalDevice HdPhysicalDevice;
 typedef struct HdLogicalDevice HdLogicalDevice;
+
+typedef enum : uint64_t {
+    HdDeviceOther,
+    HdDeviceIntegratedGPU,
+    HdDeviceDiscreteGPU,
+    HdDeviceVirtualGPU,
+    HdDeviceCPU,
+} HdDeviceType;
+
 typedef struct {
     String name;
+    HdDeviceType device_type;
     uint64_t max_push_data_size;
-    uint64_t texture_heap_alignment;
     uint64_t texture_descriptor_size;
     uint64_t sampler_descriptor_size;
     float timestamp_period_ns;
@@ -94,14 +103,16 @@ typedef struct {
     bool texture_compression_bc;
     bool texture_compression_astc;
     bool storage_input_output16;
-} HdDeviceCapabilities;
+} HdDeviceInfo;
 
 PtrSlice get_physical_devices(HdInstance* instance, Allocator* a);
+HdDeviceInfo get_device_info(HdPhysicalDevice* device);
 
 HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance);
 void destroy_logical_device(HdLogicalDevice* device);
 
-HdDeviceCapabilities get_device_capabilities(HdLogicalDevice* device);
+HdPhysicalDevice* get_physical_device(HdLogicalDevice* device);
+uint32_t get_texture_heap_alignment(HdLogicalDevice* device);
 
 // Swapchain & Render Views
 // -------------------------

@@ -154,6 +154,19 @@ bool check_and_populate_physical_device(VkPhysicalDevice device, Allocator* a, H
   vkGetPhysicalDeviceProperties2(device, &properties2);
   out->properties = properties2.properties;
 
+    // Populate Capabilities (exposed to user)
+  out->info = (HdDeviceInfo) {
+      .name = mv_string(out->properties.deviceName),
+      .max_push_data_size = out->heap_properties.maxPushDataSize,
+      .texture_descriptor_size = out->heap_properties.imageDescriptorSize,
+      .sampler_descriptor_size = out->heap_properties.samplerDescriptorSize,
+      .timestamp_period_ns = out->properties.limits.timestampPeriod,
+      .sub_texel_precision_bits = out->properties.limits.subTexelPrecisionBits,
+      //.texture_compression_bc = device->texture_compression_bc,
+      //.texture_compression_astc = device->texture_compression_astc,
+      //.storage_input_output16 = device->storage_input_output16,
+  };
+
   return true;
 };
 
@@ -494,20 +507,6 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     };
     ldevice->queue = queue;
 
-    // Populate Capabilities (exposed to user)
-    ldevice->capabilities = (HdDeviceCapabilities) {
-        .name = mv_string(device->properties.deviceName),
-        .max_push_data_size = device->heap_properties.maxPushDataSize,
-        .texture_heap_alignment = ldevice->texture_heap_alignment,
-        .texture_descriptor_size = device->heap_properties.imageDescriptorSize,
-        .sampler_descriptor_size = device->heap_properties.samplerDescriptorSize,
-        .timestamp_period_ns = device->properties.limits.timestampPeriod,
-        .sub_texel_precision_bits = device->properties.limits.subTexelPrecisionBits,
-        //.texture_compression_bc = device->texture_compression_bc,
-        //.texture_compression_astc = device->texture_compression_astc,
-        //.storage_input_output16 = device->storage_input_output16,
-    };
-
     return (HdPtrResult) {.type = Ok, .val = ldevice};
 }
 
@@ -536,8 +535,16 @@ void destroy_logical_device(HdLogicalDevice* device) {
 
 }
 
-HdDeviceCapabilities get_device_capabilities(HdLogicalDevice* device) {
-    return device->capabilities;
+HdDeviceInfo get_device_info(HdPhysicalDevice* device) {
+    return device->info;
+}
+
+HdPhysicalDevice* get_physical_device(HdLogicalDevice* device) {
+    return device->physical_device;
+}
+
+uint32_t get_texture_heap_alignment(HdLogicalDevice* device) {
+    return device->texture_heap_alignment;
 }
 
 #endif

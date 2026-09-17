@@ -23,7 +23,8 @@ static PiType* surface_ty;
 
 static PiType* physical_device_ty;
 static PiType* logical_device_ty;
-static PiType* device_capabilities_ty;
+static PiType* device_type_ty;
+static PiType* device_info_ty;
 
 static PiType* swapchain_ty;
 static PiType* render_view_ty;
@@ -133,6 +134,24 @@ static void build_get_physical_devices_fn(PiType* type, Assembler* ass, PiAlloca
     convert_c_fn(relic_get_physical_devices, &fn_ctype, type, ass, a, point); 
 }
 
+static void build_get_device_info_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType info = mk_struct_ctype(pia, 10,
+                                 "name", mk_string_ctype(pia),
+                                 "device_type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "max_push_data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "texture_descriptor_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "sampler_descriptor_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "timestamp_period_ns", (CType){.sort = CSFloat},
+                                 "sub_texel_precision_bits", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                 "texture_compression_bc", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                                 "texture_compression_astc", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                                 "storage_input_output_16", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "physical_device", mk_voidptr_ctype(pia),
+                                 info);
+    convert_c_fn(get_device_info, &fn_ctype, type, ass, a, point); 
+}
+
 static void build_create_logical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
                                  "physical_device", mk_voidptr_ctype(pia),
@@ -148,22 +167,18 @@ static void build_destroy_logical_device_fn(PiType* type, Assembler* ass, PiAllo
     convert_c_fn(destroy_logical_device, &fn_ctype, type, ass, a, point); 
 }
 
-static void build_get_device_capabilities_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType caps = mk_struct_ctype(pia, 10,
-                                 "name", mk_string_ctype(pia),
-                                 "max_push_data_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "texture_heap_alignment", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "texture_descriptor_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "sampler_descriptor_size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 "timestamp_period_ns", (CType){.sort = CSFloat},
-                                 "sub_texel_precision_bits", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
-                                 "texture_compression_bc", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
-                                 "texture_compression_astc", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
-                                 "storage_input_output_16", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+static void build_get_physical_device_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1,
                                  "logical_device", mk_voidptr_ctype(pia),
-                                 caps);
-    convert_c_fn(get_device_capabilities, &fn_ctype, type, ass, a, point); 
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(get_physical_device, &fn_ctype, type, ass, a, point); 
+}
+
+static void build_get_texture_heap_alignment_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "logical_device", mk_voidptr_ctype(pia),
+                                 mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    convert_c_fn(get_texture_heap_alignment, &fn_ctype, type, ass, a, point); 
 }
 
 static uint64_t current_device; 
@@ -381,7 +396,7 @@ void relic_write_sampler_descriptor(void* cpu_destination, HdSamplerDescription 
 
 void build_write_sampler_descriptor_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType desc =
-        mk_struct_ctype(pia, 6,
+        mk_struct_ctype(pia, 8,
                         "min_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                         "mag_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                         "mip_filter", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
@@ -984,11 +999,24 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     logical_device_ty = e->value;
 
-    typep = mk_named_type(pia, "DeviceCapabilities",
+    typep = mk_named_type(pia, "DeviceType",
+                          mk_enum_type(pia, 5,
+                                       "other", 0,
+                                       "integrated-gpu", 0,
+                                       "discrete-gpu", 0,
+                                       "virtual-gpu", 0,
+                                       "cpu", 0));
+    name = string_to_name(mv_string("DeviceType"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    device_type_ty = e->value;
+
+    typep = mk_named_type(pia, "DeviceInfo",
                           mk_struct_type(pia, 10,
                                          "name", mk_string_type(pia),
+                                         "device-type", device_type_ty,
                                          "max_push_data_size", mk_prim_type(pia, UInt_64),
-                                         "texture_heap_alignment", mk_prim_type(pia, UInt_64),
                                          "texture_descriptor_size", mk_prim_type(pia, UInt_64),
                                          "sampler_descriptor_size", mk_prim_type(pia, UInt_64),
                                          "timestamp_period_ns", mk_prim_type(pia, Float_32),
@@ -1000,7 +1028,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
-    device_capabilities_ty = e->value;
+    device_info_ty = e->value;
 
     HdLogicalDevice* initial_val = NULL;
     typep = mk_dynamic_type(pia, logical_device_ty);
@@ -1011,6 +1039,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 1, instance_ty, mk_type_app(pia, get_slice_type(), physical_device_ty));
     build_get_physical_devices_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("get-physical-devices"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, physical_device_ty, device_info_ty);
+    build_get_device_info_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("get-device-info"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
@@ -1032,9 +1068,17 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, logical_device_ty, device_capabilities_ty);
-    build_get_device_capabilities_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("get-device-capabilities"));
+    typep = mk_proc_type(pia, 1, logical_device_ty, physical_device_ty);
+    build_get_physical_device_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("get-physical-device"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, logical_device_ty, mk_prim_type(pia, UInt_32));
+    build_get_texture_heap_alignment_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("get-texture-heap-alignment"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
@@ -1395,7 +1439,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     filter_ty = e->value;
 
     typep = mk_named_type(pia, "SamplerDescription",
-                          mk_struct_type(pia, 6,
+                          mk_struct_type(pia, 8,
                                          "min-filter", filter_ty,
                                          "mag-filter", filter_ty,
                                          "mip-filter", filter_ty,
@@ -1605,12 +1649,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     depth_bias_ty = e->value;
 
-    typep = mk_struct_type(pia, 5,
-                           "cull", cull_ty,
-                           "depth-format", mk_type_app(pia, get_maybe_type(), format_ty),
-                           "depth-bias", mk_type_app(pia, get_maybe_type(), depth_bias_ty),
-                           "stencil-format", mk_type_app(pia, get_maybe_type(), format_ty),
-                           "colour-targets", mk_type_app(pia, get_slice_type(), colour_target_ty));
+    typep =
+        mk_named_type(pia, "RasterDescription",
+                      mk_struct_type(pia, 5,
+                                     "cull", cull_ty,
+                                     "depth-format", mk_type_app(pia, get_maybe_type(), format_ty),
+                                     "depth-bias", mk_type_app(pia, get_maybe_type(), depth_bias_ty),
+                                     "stencil-format", mk_type_app(pia, get_maybe_type(), format_ty),
+                                     "colour-targets", mk_type_app(pia, get_slice_type(), colour_target_ty)));
     name = string_to_name(mv_string("RasterDescription"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
