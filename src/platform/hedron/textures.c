@@ -10,14 +10,6 @@ struct HdTextureHeapOwner {
 };
 
 // Internal funcions
-VkImageAspectFlags image_aspects(HdFormat format) {
-    VkImageAspectFlags result = 0;
-    if (has_depth_aspect(format)) result |= VK_IMAGE_ASPECT_DEPTH_BIT;
-    if (has_stencil_aspect(format)) result |= VK_IMAGE_ASPECT_STENCIL_BIT;
-    if (result == 0) result = VK_IMAGE_ASPECT_COLOR_BIT;
-    return result;
-}
-
 void append_texture_initialization(HdTextureInitializationList* list, HdTextureInitialization* initialization) {
     // TODO: debug layer
     //assert(!initialization.owner && !initialization.previous && !initialization.next);
@@ -220,8 +212,47 @@ void destroy_texture(HdTexture* texture) {
     mem_free(texture, texture->device->gpa);
 }
 
-HdRenderView* create_render_view(HdTexture* texture, HdRenderViewDescription desc);
-void destroy_render_view(HdRenderView* render_view);
+HdRenderView* create_render_view(HdTexture* texture, HdRenderViewDescription desc) {
+    // TODO: debug layer
+    //assert(texture && texture->state);
+    HdLogicalDevice* device = texture->device;
+    Allocator* a = device->gpa;
+
+    uint32_t width = texture->width >> desc.mip_level;
+    uint32_t height = texture->height >> desc.mip_level;
+    if (width == 0) width = 1;
+    if (height == 0) height = 1;
+    HdRenderView* result = mem_alloc(sizeof(HdRenderView), a);
+    *result = (HdRenderView) {
+        .device = device,
+        .extent.width = width,
+        .extent.height = height,
+    };
+    const VkImageViewCreateInfo view_info ={
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = texture->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format_to_vk(texture->format),
+        .subresourceRange = {
+            .aspectMask = image_aspects(texture->format),
+            .baseMipLevel = desc.mip_level,
+            .levelCount = 1,
+            .baseArrayLayer = desc.slice,
+            .layerCount = 1,
+        },
+    };
+    VkResult vkresult = vkCreateImageView(device->device, &view_info, NULL, &result->image_view);
+    if (vkresult != VK_SUCCESS) 
+        panic(mv_string("TODO: errorhandling in create-render-view"));
+    return result;
+}
+
+void destroy_render_view(HdRenderView* render_view) {
+    if (render_view->swapchain) {
+        panic(mv_string("TODO: Render Views deletion for swapchain views is the parent swapchain!"));
+    }
+    vkDestroyImageView(render_view->device->device, render_view->image_view, NULL);
+}
 
 void write_texture_descriptor(void *cpu_destination, HdTexture *texture,
                               HdTextureDescriptorType type,

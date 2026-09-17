@@ -245,6 +245,9 @@ void populate_device_functions(HdLogicalDevice* device) {
       .vkCmdDrawIndirect2KHR = (PFN_vkCmdDrawIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndirect2KHR"),
       .vkCmdDrawIndexedIndirect2KHR = (PFN_vkCmdDrawIndexedIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDrawIndexedIndirect2KHR"),
       .vkCmdDispatchIndirect2KHR = (PFN_vkCmdDispatchIndirect2KHR)vkGetDeviceProcAddr(vkdevice, "vkCmdDispatchIndirect2KHR"),
+      .vkCmdCopyMemoryKHR = (PFN_vkCmdCopyMemoryKHR) vkGetDeviceProcAddr(vkdevice, "vkCmdCopyMemoryKHR"),
+      .vkCmdCopyMemoryToImageKHR = (PFN_vkCmdCopyMemoryToImageKHR) vkGetDeviceProcAddr(vkdevice, "vkCmdCopyMemoryToImageKHR"),
+      .vkCmdCopyImageToMemoryKHR = (PFN_vkCmdCopyImageToMemoryKHR) vkGetDeviceProcAddr(vkdevice, "vkCmdCopyImageToMemoryKHR"),
     };
 }
 

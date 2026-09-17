@@ -41,6 +41,7 @@ static PiType* compare_op_ty;
 static PiType* texture_shape_ty;
 static PiType* texture_usage_ty;
 static PiType* texture_description_ty;
+static PiType* texture_copy_description_ty;
 
 static PiType* texture_heap_ty;
 static PiType* texture_heap_owner_ty;
@@ -281,6 +282,23 @@ void build_destroy_texture_heap_fn(PiType* type, Assembler* ass, PiAllocator* pi
     convert_c_fn(destroy_texture_heap, &fn_ctype, type, ass, a, point); 
 }
 
+void build_create_render_view_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType rvdesc = mk_struct_ctype(pia, 2,
+                                   "mip_level", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                   "slice", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "texture", mk_voidptr_ctype(pia),
+                                 "rv_desc", rvdesc,
+                                 mk_voidptr_ctype(pia));
+    convert_c_fn(create_render_view, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_render_view_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "view", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(destroy_render_view, &fn_ctype, type, ass, a, point); 
+}
 
 SizeAlign relic_get_texture_size_align(HdTextureDescription desc) {
     HdLogicalDevice* device = get_current_device();
@@ -556,6 +574,64 @@ void build_set_sampler_descriptor_heap_fn(PiType* type, Assembler* ass, PiAlloca
                                  "heap", device_range_ctype,
                                  (CType){.sort = CSVoid});
     convert_c_fn(set_sampler_descriptor_heap, &fn_ctype, type, ass, a, point); 
+}
+
+void build_copy_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType devrange = mk_struct_ctype(pia, 2,
+                                     "data", mk_voidptr_ctype(pia),
+                                     "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 3,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "source", devrange,
+                                 "dest", devrange,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(copy_memory, &fn_ctype, type, ass, a, point); 
+}
+
+void build_copy_memory_to_texture_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType extent_3d = mk_struct_ctype(pia, 1, "val",
+                                      mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})));
+    CType tcopy = mk_struct_ctype(pia, 7,
+                                  "mip_level", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "base_slice", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "slice_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "offset", extent_3d,
+                                  "extent", extent_3d,
+                                  "row_pitch_bytes", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                  "slice_pitch_bytes", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType devrange = mk_struct_ctype(pia, 2,
+                                     "data", mk_voidptr_ctype(pia),
+                                     "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 4,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "source", devrange,
+                                 "dest", mk_voidptr_ctype(pia),
+                                 "desc", tcopy,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(copy_memory_to_texture, &fn_ctype, type, ass, a, point); 
+}
+
+void build_copy_texture_to_memory_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType extent_3d = mk_struct_ctype(pia, 1, "val",
+                                      mk_array_ctype(pia, 3, mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned})));
+    CType tcopy = mk_struct_ctype(pia, 7,
+                                  "mip_level", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "base_slice", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "slice_count", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                                  "offset", extent_3d,
+                                  "extent", extent_3d,
+                                  "row_pitch_bytes", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                  "slice_pitch_bytes", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType devrange = mk_struct_ctype(pia, 2,
+                                     "data", mk_voidptr_ctype(pia),
+                                     "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 4,
+                                 "commands", mk_voidptr_ctype(pia),
+                                 "source", mk_voidptr_ctype(pia),
+                                 "dest", devrange,
+                                 "desc", tcopy,
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(copy_texture_to_memory, &fn_ctype, type, ass, a, point); 
 }
 
 void relic_dispatch(uint64_t type_data, HdCommandBuffer* commands, void* data, UVec3 group_count) {
@@ -1253,6 +1329,21 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     texture_description_ty = e->value;
 
+    typep = mk_named_type(pia, "TextureCopyDescription",
+                          mk_struct_type(pia, 7,
+                                         "mip-level", mk_prim_type(pia, UInt_32),
+                                         "base-slice", mk_prim_type(pia, UInt_32),
+                                         "slice-count", mk_prim_type(pia, UInt_32),
+                                         "offsed", mk_tile_type(pia, 1, 3, mk_prim_type(pia, UInt_32)),
+                                         "extent", mk_tile_type(pia, 1, 3, mk_prim_type(pia, UInt_32)),
+                                         "row-pitch-bytes", mk_prim_type(pia, UInt_64),
+                                         "slice-pitch-bytes", mk_prim_type(pia, UInt_64)));
+    name = string_to_name(mv_string("TextureCopyDescription"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    texture_copy_description_ty = e->value;
+
     typep = mk_named_type(pia, "TextureDescriptorType",
                           mk_enum_type(pia, 2,
                                        "sampled", 0, "storage", 0));
@@ -1343,6 +1434,26 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          mk_prim_type(pia, Unit));
     build_destroy_texture_heap_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("destory-texture-heap"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2,
+                         texture_ty,
+                         render_view_description_ty,
+                         render_view_ty);
+    build_create_render_view_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("create-render-view"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, render_view_ty,
+                         mk_prim_type(pia, Unit));
+    build_destroy_render_view_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("destroy-render_view"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
@@ -1778,6 +1889,30 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 2, command_buffer_ty, device_range_ty, mk_prim_type(pia, Unit));
     build_set_texture_descriptor_heap_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("set-texture-descriptor-heap"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 3, command_buffer_ty, device_range_ty, device_range_ty, mk_prim_type(pia, Unit));
+    build_copy_memory_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("copy-memory"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 4, command_buffer_ty, device_range_ty, texture_ty, texture_copy_description_ty, mk_prim_type(pia, Unit));
+    build_copy_memory_to_texture_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("copy-memory-to-texture"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 4, command_buffer_ty, texture_ty, device_range_ty, texture_copy_description_ty,  mk_prim_type(pia, Unit));
+    build_copy_texture_to_memory_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("copy-texture-to-memory"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

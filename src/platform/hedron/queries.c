@@ -33,6 +33,14 @@ bool is_usable_memory_type(VkPhysicalDeviceMemoryProperties properties, uint32_t
     return (properties.memoryHeaps[type.heapIndex].flags & VK_MEMORY_HEAP_TILE_MEMORY_BIT_QCOM) == 0;
 }
 
+VkImageAspectFlags image_aspects(HdFormat format) {
+    VkImageAspectFlags result = 0;
+    if (has_depth_aspect(format)) result |= VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (has_stencil_aspect(format)) result |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    if (result == 0) result = VK_IMAGE_ASPECT_COLOR_BIT;
+    return result;
+}
+
 VkFormatFeatureFlags2 required_format_features(HdTextureUsage usage) {
     VkFormatFeatureFlags2 result = 0;
     if (usage & UsageSampled)

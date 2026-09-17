@@ -64,6 +64,12 @@ typedef struct {
     uint32_t height;
 } HdExtent;
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+} HdExtent3D;
+
 // Instances
 typedef struct HdInstance HdInstance;
 HdPtrResult create_hedron_instance(Allocator* a);
@@ -275,6 +281,16 @@ typedef struct {
     bool mutable_format;
     HdTextureUsage usage;
 } HdTextureDescription;
+
+typedef struct {
+    uint32_t mip_level;
+    uint32_t base_slice; // Physical array slice; cube faces are individual slices.
+    uint32_t slice_count; // Zero selects every remaining physical slice.
+    HdExtent3D offset;
+    HdExtent3D extent; // Zero components select the remaining mip extent.
+    uint64_t row_pitch_bytes;   // Zero is tightly packed.
+    uint64_t slice_pitch_bytes; // Zero is tightly packed.
+} TextureCopyDesc;
 
 typedef enum : uint64_t {
     TDescSampled, TDescStorage
@@ -586,6 +602,10 @@ void set_depth_stencil(HdCommandBuffer* cb, HdDepthStencilState depth_stencil);
 
 void set_texture_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap);
 void set_sampler_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap);
+
+void copy_memory(HdCommandBuffer* cb, DeviceRange source, DeviceRange destination);
+void copy_memory_to_texture(HdCommandBuffer* cb, DeviceRange source, HdTexture* destination, TextureCopyDesc copy);
+void copy_texture_to_memory(HdCommandBuffer* cb, HdTexture* source, DeviceRange destination, TextureCopyDesc copy);
 
 // Dispatch Shaders (graphics/compute)
 typedef struct {

@@ -91,6 +91,10 @@ typedef struct {
     PFN_vkCmdDrawIndirect2KHR vkCmdDrawIndirect2KHR;
     PFN_vkCmdDrawIndexedIndirect2KHR vkCmdDrawIndexedIndirect2KHR;
     PFN_vkCmdDispatchIndirect2KHR vkCmdDispatchIndirect2KHR;
+    // TODO: meshlet functions...
+    PFN_vkCmdCopyMemoryKHR vkCmdCopyMemoryKHR;
+    PFN_vkCmdCopyMemoryToImageKHR vkCmdCopyMemoryToImageKHR;
+    PFN_vkCmdCopyImageToMemoryKHR vkCmdCopyImageToMemoryKHR;
 } DeviceFunctions;
 
 typedef struct HdTextureInitializationList HdTextureInitializationList;
@@ -251,6 +255,7 @@ VkAccessFlags2 access_to_vk(HdAccess);
 uint32_t popcount(uint32_t value);
 bool has_depth_aspect(HdFormat format);
 bool has_stencil_aspect(HdFormat format);
+VkImageAspectFlags image_aspects(HdFormat format);
 VkMemoryRequirements image_memory_requirements(HdLogicalDevice* device, const VkImageCreateInfo image_info);
 VkFormatFeatureFlags2 required_format_features(HdTextureUsage usage);
 

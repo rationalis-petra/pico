@@ -7,7 +7,7 @@
 
 // 
 // Scheduling Commands  
-//  
+//
 
 void barrier(HdCommandBuffer* cb, HdStage before, HdAccess before_access, HdStage after, HdAccess after_access) {
     // TODO: debug layer
@@ -122,6 +122,105 @@ void set_sampler_descriptor_heap(HdCommandBuffer* commands, DeviceRange heap) {
     VkBindHeapInfoEXT bind_info = {};
     make_heap_bind_info(heap, properties.samplerDescriptorAlignment, properties.minSamplerHeapReservedRange, &bind_info);
     commands->device->fns.vkCmdBindSamplerHeapEXT(commands->buffer, &bind_info);
+}
+
+void copy_memory(HdCommandBuffer* cb, DeviceRange source, DeviceRange destination) {
+    // TODO: debug layer
+    //assert(commands && commands->state);
+    const VkDeviceMemoryCopyKHR region = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_MEMORY_COPY_KHR,
+        .srcRange = {
+            .address = (VkDeviceAddress)source.address.val,
+            .size = source.size,
+        },
+        .srcFlags = ADDRESS_FLAGS,
+        .dstRange = {
+            .address = (VkDeviceAddress)destination.address.val,
+            .size = destination.size,
+        },
+        .dstFlags = ADDRESS_FLAGS,
+    };
+    const VkCopyDeviceMemoryInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_COPY_DEVICE_MEMORY_INFO_KHR,
+        .regionCount = 1,
+        .pRegions = &region,
+    };
+    cb->device->fns.vkCmdCopyMemoryKHR(cb->buffer, &info);
+}
+
+uint64_t divide_up(uint64_t value, uint64_t divisor) {
+    //assert(divisor != 0);
+    return value / divisor + (value % divisor != 0 ? 1u : 0u);
+}
+
+VkDeviceMemoryImageCopyKHR make_texture_copy_region(HdTexture texture, TextureCopyDesc copy, DeviceRange memory) {
+    uint32_t mip_width = texture.width >> copy.mip_level;
+    uint32_t mip_height = texture.height >> copy.mip_level;
+    uint32_t mip_depth = texture.depth >> copy.mip_level;
+    if (mip_width == 0) mip_width = 1;
+    if (mip_height == 0) mip_height = 1;
+    if (mip_depth == 0) mip_depth = 1;
+
+    const uint32_t width = copy.extent.width == 0 ? mip_width - copy.offset.width : copy.extent.width;
+    const HdTextureFormatInfo format_info = get_texture_format_info(texture.format);
+    const uint64_t row_pitch = copy.row_pitch_bytes == 0
+                                 ? divide_up(width, format_info.block_extent.width) * format_info.bytes_per_block
+                                 : copy.row_pitch_bytes;
+    // TODO: debug layer
+    //assert((copy.slice_pitch_bytes == 0 || row_pitch != 0) && "slice pitch conversion requires a non-zero row pitch");
+    return (VkDeviceMemoryImageCopyKHR) {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_MEMORY_IMAGE_COPY_KHR,
+        .addressRange = {
+            .address = (VkDeviceAddress)memory.address.val,
+            .size = memory.size,
+        },
+        .addressFlags = ADDRESS_FLAGS,
+        .addressRowLength = (uint32_t)(copy.row_pitch_bytes / format_info.bytes_per_block * format_info.block_extent.width),
+        .addressImageHeight = copy.slice_pitch_bytes == 0 ? 0u : (uint32_t)(copy.slice_pitch_bytes / row_pitch * format_info.block_extent.height),
+        .imageSubresource = {
+            .aspectMask = image_aspects(texture.format),
+            .mipLevel = copy.mip_level,
+            .baseArrayLayer = copy.base_slice,
+            .layerCount = copy.slice_count == 0 ? texture.layer_count - copy.base_slice : copy.slice_count,
+        },
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .imageOffset = {
+            .x = copy.offset.width,
+            .y = copy.offset.height,
+            .z = copy.offset.depth,
+        },
+        .imageExtent = {
+            .width = width,
+            .height = copy.extent.height == 0 ? mip_height - copy.offset.height : copy.extent.height,
+            .depth = copy.extent.depth == 0 ? mip_depth - copy.offset.depth : copy.extent.depth,
+        },
+    };
+}
+
+void copy_memory_to_texture(HdCommandBuffer* cb, DeviceRange source, HdTexture* destination, TextureCopyDesc copy) {
+    // TODO: debug layer
+    //assert(commands && commands->state && destination);
+    const VkDeviceMemoryImageCopyKHR region = make_texture_copy_region(*destination, copy, source);
+    const VkCopyDeviceMemoryImageInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_COPY_DEVICE_MEMORY_IMAGE_INFO_KHR,
+        .image = destination->image,
+        .regionCount = 1,
+        .pRegions = &region,
+    };
+    cb->device->fns.vkCmdCopyMemoryToImageKHR(cb->buffer, &info);
+}
+
+void copy_texture_to_memory(HdCommandBuffer* cb, HdTexture* source, DeviceRange destination, TextureCopyDesc copy) {
+    // TODO: debug layer
+    //assert(commands && commands->state && source);
+    const VkDeviceMemoryImageCopyKHR region = make_texture_copy_region(*source, copy, destination);
+    const VkCopyDeviceMemoryImageInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_COPY_DEVICE_MEMORY_IMAGE_INFO_KHR,
+        .image = source->image,
+        .regionCount = 1,
+        .pRegions = &region,
+    };
+    cb->device->fns.vkCmdCopyImageToMemoryKHR(cb->buffer, &info);
 }
 
 void emit_root_data(HdCommandBuffer* commands, U8Slice data) {
