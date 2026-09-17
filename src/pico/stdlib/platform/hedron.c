@@ -1327,7 +1327,10 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     texture_shape_ty = e->value;
 
     // TODO: define usage, eventually add flags to language
-    typep = mk_named_type(pia, "TextureUsage", mk_prim_type(pia, UInt_64));
+    typep = mk_named_type(pia, "TextureUsage",
+                          mk_flags_type(pia, 6,
+                                        "sampled", "storage", "colour-attachment",
+                                        "depth-stencil-attachment", "transfer-source", "transfer-destination"));
     name = string_to_name(mv_string("TextureUsage"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
