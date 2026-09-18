@@ -638,7 +638,7 @@ void gen_mk_flags_ty(Location dest, uint8_t flagsize, SymbolArray flags, Assembl
     build_binary_op(Mov, reg(RSI, sz_64), imm64(flags.len), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)flags.data), ass, a, point);
 #elif ABI == WIN_64
-    build_binary_op(Mov, reg(RCX, sz_8), imm8((uint8_t)tagsize), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_8), imm8((uint8_t)flagsize), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64(flags.len), ass, a, point);
     build_binary_op(Mov, reg(R8, sz_64), imm64((uint64_t)flags.data), ass, a, point);
 #else 
