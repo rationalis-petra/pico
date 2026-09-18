@@ -19,41 +19,45 @@
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     Allocator gpa = ra_to_gpa(region);
     Allocator* a = &gpa;
+    PiAllocator pregion = convert_to_pallocator(&gpa);
 
     Allocator exalloc = mk_executable_allocator(&gpa);
 
-    PiAllocator pregion = convert_to_pallocator(&gpa);
-    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
-    Package* base = get_base_package();
+    Environment* env = NULL;
+    Module* module = NULL;
+    Package* base = NULL;
 
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, a),
-    };
-    add_import_all(&imports.clauses, a, 2, "core", "kernel");
-    add_import_all(&imports.clauses, a, 2, "core", "prim");
+    if (suite_setup(log)) {
+        base = get_base_package();
 
-    ReExports re_exports = (ReExports) {
-        .clauses = mk_import_clause_array(0, a),
-    };
-    Exports exports = (Exports) {
-        .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
-    };
-    ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(mv_string("typecheck-test-module")),
-        .imports = imports,
-        .re_exports = re_exports,
-        .exports = exports,
-    };
-    Module* module = mk_module(header, base, NULL);
+        Imports imports = (Imports) {
+            .clauses = mk_import_clause_array(4, a),
+        };
+        add_import_all(&imports.clauses, a, 2, "core", "kernel");
+        add_import_all(&imports.clauses, a, 2, "core", "prim");
 
-    ErrorPoint point;
-    if (catch_error(point)) {
-        panic(mv_string("Error in tests: test_pico/typecheck.c"));
+        ReExports re_exports = (ReExports) {
+            .clauses = mk_import_clause_array(0, a),
+        };
+        Exports exports = (Exports) {
+            .export_all = true,
+            .clauses = mk_export_clause_array(0, a),
+        };
+        ModuleHeader header = (ModuleHeader) {
+            .name = string_to_name(mv_string("typecheck-test-module")),
+            .imports = imports,
+            .re_exports = re_exports,
+            .exports = exports,
+        };
+        module = mk_module(header, base, NULL);
+
+        ErrorPoint point;
+        if (catch_error(point)) {
+            panic(mv_string("Error in tests: test_pico/typecheck.c"));
+        }
+        env = env_from_module(module, &point, a);
+        delete_module_header(header);
     }
-    Environment* env = env_from_module(module, &point, a);
-    delete_module_header(header);
-
 
     TestContext context = (TestContext) {
         .env = env,
@@ -61,6 +65,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .log = log,
         .target = target,
     };
+
     if (test_start(log, mv_string("with-creates-tile"))) {
         PiType* expected = mk_tile_type(&pregion, 2, 2, 4, mk_prim_type(&pregion, UInt_64));
         TEST_TYPE("(with [i j] [2 4] j)");
@@ -95,6 +100,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    //  Structure Typechecking
+    // -------------------------
     if (test_start(log, mv_string("Default struct from field constraints"))) {
         RUN("(def i64-fn proc [(x I64) (y I64)] x)");
         PiAllocator current_old = get_std_current_allocator();
@@ -107,6 +114,36 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("struct-missing-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.x 8])");
+    }
+
+    /*
+     * TODO: move the below test to abstraction: it is an abstraction failure test
+    if (test_start(log, mv_string("struct-duplicate-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.x I64] [.y I64] [.y I64])");
+    }
+    */
+
+    if (test_start(log, mv_string("struct-incorrect-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 3] [.y 3])");
+    }
+
+    if (test_start(log, mv_string("struct-extra-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 1] [.y 2] [.z 3])");
+    }
+
+    if (test_start(log, mv_string("struct-extra-middle-field-fails"))) {
+        RUN("(def Sct Struct [.x I64] [.y I64])");
+        TEST_TYPE_FAIL("(struct Sct [.p 1] [.z 3] [.y 2])");
+    }
+
+    //  Variant/Match Typechecking
+    // -------------------------
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
         // We deduce that Right A has A = address (from use of address-to-num)
         // We deduce that Left V  has V = U64 (as must be same return type as right)
@@ -243,8 +280,9 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
     */
 
-    delete_env(env, a);
-    remove_module(base, string_to_name(mv_string("typecheck-test-module")));
-    delete_assembler(ass);
-    release_executable_allocator(exalloc);
+    if (suite_teardown(log)) {
+        delete_env(env, a);
+        remove_module(base, string_to_name(mv_string("typecheck-test-module")));
+        release_executable_allocator(exalloc);
+    }
 }

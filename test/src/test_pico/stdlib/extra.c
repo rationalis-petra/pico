@@ -31,13 +31,29 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         reset_subregion(region);
     }
 
-    /* TODO: this test fails for some reason...
     if (test_start(log, mv_string("thread-end-involved"))) {
-        int64_t expected = -6;
+        int64_t expected = -4;
         TEST_EQ("(->> 4 (- 3) (+ 10) (- 5))");
         reset_subregion(region);
     }
-    */
+
+    if (test_start(log, mv_string("fold-one-val"))) {
+        int64_t expected = 1;
+        TEST_EQ("(` + 1)");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("fold-two-vals"))) {
+        int64_t expected = 3;
+        TEST_EQ("(` + 1 2)");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("fold-n-vals"))) {
+        int64_t expected = 15;
+        TEST_EQ("(` + 1 2 3 4 5)");
+        reset_subregion(region);
+    }
 
     if (test_start(log, mv_string("single-for-upto"))) {
         PiAllocator current_old = get_std_current_allocator();
@@ -101,6 +117,18 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         TEST_STDOUT("(loop [for i from 1 upto 10]"
                     "  (loop [for j from 1 upto 2]"
                     "    (terminal.write-string (show j))))");
+        set_std_current_allocator(current_old);
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("triple-nested-loop"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        const char* expected = "00000000000000000000012302460369000002460481206121800000369061218091827";
+        TEST_STDOUT("(loop [for x from 0 below 4]"
+                    "  (loop [for y from 0 below 4]"
+                    "    (loop [for z from 0 below 4]"
+                    "      (terminal.write-string (show (` * x y z))))))");
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }

@@ -177,9 +177,9 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
 
-    if (raw.branch.nodes.len <= 2) {
+    if (raw.branch.nodes.len < 2) {
         err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting keyword module header to have at least two elements - (module <modulename>). Got nothing!", a);
+        err.message = mv_cstr_doc("Expecting module header to have at least two elements - (module <modulename>). Got nothing!", a);
         throw_pi_error(point, err);
     }
     if (raw.branch.nodes.len > 4) {
@@ -1044,6 +1044,31 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             return res;
         }
+    }
+    case FFlags: {
+        SynArray arr = mk_syn_array(raw.branch.nodes.len - 1, a);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            SynRef flag = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(flag, &arr);
+        }
+
+        Syntax syn = {
+            .type = SFlags,
+            .flags.flags = arr,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FHasFlag: {
+        break;
+    }
+    case FHasFlags: {
+        break;
+    }
+    case FIntersectFlags: {
+        break;
     }
     case FMatch: {
         if (raw.branch.nodes.len < 2) {
@@ -2236,6 +2261,80 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
+    case FFlagsType: {
+        SymbolArray flag_values = mk_symbol_array(raw.branch.nodes.len, a);
+
+        uint8_t flag_size = 64;
+        size_t start_idx = 1;
+        RawTree esz = raw.branch.nodes.data[1];
+        if (esz.type == RawAtom && esz.atom.type == AIntegral) {
+            start_idx++;
+            int64_t ilit = esz.atom.int_64;
+            if (ilit == 8) {
+                flag_size = 8;
+            } else if (ilit == 16) {
+                flag_size = 16;
+            } else if (ilit == 32) {
+                flag_size = 32;
+            } else if (ilit == 64) {
+                flag_size = 64;
+            } else {
+                err.range = esz.range;
+                err.message = mv_cstr_doc("The flag tagsize (in bits) must be one of 8, 16, 32 or 64.", a);
+                throw_pi_error(ctx.point, err);
+            }
+        }
+
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
+            RawTree edesc = raw.branch.nodes.data[i];
+
+            if (edesc.type != RawBranch) {
+                err.range = edesc.range;
+                err.message = mv_cstr_doc("Flags type expects all variant descriptors to be lists of the form (: <flagname>).\n"
+                                          "These can be written shorthand as :flagname.", a);
+                throw_pi_error(ctx.point, err);
+            };
+            
+            if (edesc.branch.nodes.len < 1) {
+                err.range = edesc.branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Flags type expects all variant descriptors to be lists of the form (: <flagname>).\n"
+                                          "These can be written shorthand as :flagname.", a);
+                throw_pi_error(ctx.point, err);
+            };
+
+            // First, see if 'edesc' has ':' followed by 1 symbol
+            RawTree mcol = edesc.branch.nodes.data[0];
+            // TODO replace ":" with 'a symbol that resolves to the constructor/variant
+            // term former!
+            if (edesc.branch.nodes.len != 2 || !is_symbol(mcol) || !symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+                err.range = edesc.branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Flags type expects all variant descriptors to be lists of the form (: <flagname>).\n"
+                                          "These can be written shorthand as :flagname.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            RawTree mname = edesc.branch.nodes.data[1];
+            if (!is_symbol(mname)) {
+                err.range = mname.range;
+                err.message = mv_cstr_doc("Enumeration type expects variant descriptors to have a symbol name.", a);
+                throw_pi_error(ctx.point, err);
+            } 
+
+            PtrArray* types = mem_alloc(sizeof(PtrArray), a);
+            *types = mk_ptr_array(0, a);
+            push_symbol(mname.atom.symbol, &flag_values);
+        }
+
+        Syntax syn = {
+            .type = SFlagsType,
+            .flags_type.size = flag_size,
+            .flags_type.flags = flag_values,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+
     case FResetType: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;

@@ -214,19 +214,20 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x A)] (let [y x] y)) -27)");
     }
 
-    RUN("(def Point Struct [.x I64] [.y I64])");
     if (test_start(log, mv_string("large-let"))) {
+        RUN("(def Point Struct [.x I64] [.y I64])");
         int64_t expected[2] = {3, -10};
         TEST_EQ("((all [A] (let [x (struct Point [.x 3] [.y -10])] x)) {Unit})");
     }
 
-    RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
     if (test_start(log, mv_string("simple-if-true"))) {
+        RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
         int64_t expected = 3;
         TEST_EQ("(choose :true 3 4)");
     }
 
     if (test_start(log, mv_string("simple-if-false"))) {
+        RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
         int64_t expected = 4;
         TEST_EQ("(choose :false 3 4)");
     }
@@ -287,20 +288,22 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     // 
     // -----------------------------------------------------
 
-    RUN("(def FourElt Struct [.x I64] [.y I64] [.z I64] [.p I64])");
+
     if (test_start(log, mv_string("struct-simple"))) {
+        RUN("(def FourElt Struct [.x I64] [.y I64] [.z I64] [.p I64])");
         int64_t expected[] = {1, -2, 3, -4};
         TEST_EQ("((all [A] struct FourElt [.x 1] [.y -2] [.z 3] [.p -4]) {Unit})");
     }
 
     if (test_start(log, mv_string("struct-simple-alter"))) {
+        RUN("(def FourElt Struct [.x I64] [.y I64] [.z I64] [.p I64])");
         RUN("(def ss struct FourElt [.x 1] [.y -2] [.z 3] [.p -4])");
         int64_t expected[] = {100, -2, 3, -27};
         TEST_EQ("((all [A] struct ss [.x 100] [.p -27]) {Unit})");
     }
 
-    RUN("(def NonAligned Struct [.x I32] [.y I64] [.z I8] [.p I16])");
     if (test_start(log, mv_string("struct-nonaligned"))) {
+        RUN("(def NonAligned Struct [.x I32] [.y I64] [.z I8] [.p I16])");
         typedef struct {int32_t x; int64_t y; int8_t z; int16_t p;} NonAligned;
         NonAligned expected = (NonAligned) {.x = 1, .y = -2, .z = 3, .p = -4};
         TEST_EQ("((all [A] struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4]) {Unit})");
@@ -474,7 +477,9 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    RUN("(def dvar dynamic -10)");
+    if (suite_setup(log)) {
+        RUN("(def dvar dynamic -10)");
+    }
     if (test_start(log, mv_string("dynamic-use"))) {
         int64_t expected = -10;
         TEST_EQ("((all [A] (use dvar)) {Unit})");
@@ -486,7 +491,9 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (use dvar)) {Unit})");
     }
 
-    RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
+    if (suite_setup(log)) {
+        RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
+    }
     if (test_start(log, mv_string("large-dynamic-use"))) {
         int64_t expected[2] = {-10, 10};
         TEST_EQ("((all [A] (use ldvar)) {Unit})");

@@ -420,6 +420,20 @@ _Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, SynRef ref, T
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_invalid_constructor_type(PiType *type, SynRef variant, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+    push_ptr(mv_cstr_doc("Contructing a variant/flag from type", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+    push_ptr(mv_cstr_doc("which is not an enum type. Only Enum or Flag types can be used in this instance.", a), &nodes);
+
+    PicoError err = {
+        .range = get_range(variant, ctx.tape).term,
+        .message = mv_sep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void type_error_invalid_variant_type(PiType *type, SynRef variant, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(6, a);
@@ -464,6 +478,54 @@ _Noreturn void type_error_missing_variant_tag(PiType* type, SynRef ref, TypeChec
     push_ptr(mv_cstr_doc("Attempting constructing the variant", a), &nodes);
     push_ptr(mk_paren_doc("'","'", mv_str_doc(view_symbol_string(variant.variant.tagname), a), a), &nodes);
     push_ptr(mv_cstr_doc("which does not exist in the inferred Enum type. The type this should have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_missing_flag(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    Syntax variant = get_syntax(ref, ctx.tape);
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to construct the flag value", a), &nodes);
+    push_ptr(mk_paren_doc("'","'", mv_str_doc(view_symbol_string(variant.variant.tagname), a), a), &nodes);
+    push_ptr(mv_cstr_doc("which does not exist in the inferred Flag type. The type this should have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_flag_has_args(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to add arguments when creating a flag value. This is only legal with Enum types.", a), &nodes);
+    push_ptr(mv_cstr_doc("The type this was inferred to have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+// Flag Operations
+_Noreturn void type_error_flags_not_flag(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Using 'flags', but the terms within do not have a type of sort 'Flags'.", a), &nodes);
+    push_ptr(mv_cstr_doc("Instead, the type they was inferred to have is:", a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {
@@ -532,9 +594,59 @@ _Noreturn void type_error_struct_invalid_type(PiType *type, SynRef strct, TypeCh
     }
     throw_pi_error(ctx.point, err);
 }
-_Noreturn void type_error_struct_missing_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+
+_Noreturn void type_error_struct_missing_fields(PiType* type, SynRef strct, SymbolArray missing_fields, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray docs = mk_ptr_array(2 + missing_fields.len, a);
+    if (missing_fields.len == 1) {
+        push_ptr(mv_cstr_doc("Structure value definition is missing the field:", a), &docs);
+        push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[0]), a), &docs);
+    } else {
+        push_ptr(mv_cstr_doc("Structure value definition is missing the fields:", a), &docs);
+        for (size_t i = 0; i < missing_fields.len; i++) {
+            if (i < missing_fields.len - 2) {
+                push_ptr(mv_str_doc(string_cat(view_symbol_string(missing_fields.data[i]), mv_string(","), a), a), &docs);
+            } else if (i == missing_fields.len - 2) {
+                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+                push_ptr(mv_cstr_doc("and", a), &docs);
+            } else {
+                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+            }
+        }
+    }
+    PicoError err = {
+        .message = mv_hsep_doc(docs, a),
+        .range = get_range(strct, ctx.tape).term,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void type_error_struct_dupliate_field(PiType* type, SynRef strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_extra_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_extra_fields(PiType* type, SynRef strct, SymbolArray extra_fields, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray docs = mk_ptr_array(2 + extra_fields.len, a);
+    if (extra_fields.len == 1) {
+        push_ptr(mv_cstr_doc("Structure value definition has an extra (unexpected) field:", a), &docs);
+        push_ptr(mk_str_doc(view_symbol_string(extra_fields.data[0]), a), &docs);
+    } else {
+        push_ptr(mv_cstr_doc("Structure value definition has extra (execpected) fields:", a), &docs);
+        for (size_t i = 0; i < extra_fields.len; i++) {
+            if (i < extra_fields.len - 2) {
+                push_ptr(mv_str_doc(string_cat(view_symbol_string(extra_fields.data[i]), mv_string(","), a), a), &docs);
+            } else if (i == extra_fields.len - 2) {
+                push_ptr(mk_str_doc(view_symbol_string(extra_fields.data[i]), a), &docs);
+                push_ptr(mv_cstr_doc("and", a), &docs);
+            } else {
+                push_ptr(mk_str_doc(view_symbol_string(extra_fields.data[i]), a), &docs);
+            }
+        }
+    }
+    PicoError err = {
+        .message = mv_hsep_doc(docs, a),
+        .range = get_range(strct, ctx.tape).term,
+    };
+    throw_pi_error(ctx.point, err);
+}
 
 // Projection
 _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef ref, TypeCheckContext ctx) {
@@ -558,6 +670,31 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef ref, TypeCheckC
         push_ptr(mv_cstr_doc("which does not allow field access.", a), &nodes);
     }
 
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_proj_missing_field(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    Syntax proj = get_syntax(ref, ctx.tape);
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
+    push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj.projector.field), a), a), &nodes);
+    push_ptr(mv_cstr_doc("however, this field does not exist on the type", a), &nodes);
+    push_ptr(pretty_type(get_type(proj.projector.val, ctx.tape), default_ptp, a),  &nodes);
+    if (type->sort == TStruct) {
+        PtrArray fields = mk_ptr_array(type->structure.fields.len, a);
+        push_ptr(mv_cstr_doc("Avaliable fields are:", a), &nodes);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(type->structure.fields.data[i].key), a), &nodes);
+        }
+        push_ptr(mv_sep_doc(fields, a), &nodes);
+    }
+    
     PicoError err = {
         .range = get_range(ref, ctx.tape).term,
         .message = mv_hsep_doc(nodes, a),

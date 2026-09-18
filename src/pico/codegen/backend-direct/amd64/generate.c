@@ -837,7 +837,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                         args_size += ADDRESS_SIZE;;
                         generate_stack_size_of(RAX, aty, env, ass, a, point);
                         build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
-                        build_binary_op(Mov, reg(RDX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+                        build_binary_op(Mov, reg(RDX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
                         generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
                     } else {
 
@@ -853,7 +853,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 
                 // Copy down the function itself & call
                 // TODO (BUG!!): This is returning 0x0 for division
-                build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RCX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
                 build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
                 data_stack_shrink(env, args_size);
 
@@ -952,12 +952,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
       SymAddrPiAMap type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
       SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
       for (size_t i = 0; i < type_vars.len; i++) {
-        push_symbol(type_vars.data[i].key, &ctype_vars);
+          push_symbol(type_vars.data[i].key, &ctype_vars);
       }
       for (size_t i = 0; i < syn.all_application.types.len; i++) {
-        PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
-        generate_pi_type(type, env, ass, a, point);
-        static_arg_size += ADDRESS_SIZE;
+          PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
+          generate_pi_type(type, env, ass, a, point);
+          static_arg_size += ADDRESS_SIZE;
       }
 
       bool mismatch_variable_args = false;
@@ -1112,7 +1112,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         args_size += ADDRESS_SIZE;
                 
         // Copy down the function itself & call
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), rrefa(RBP, arg_base - args_size, sz_64), ass, a, point);
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         build_binary_op(Add, reg(RSP, sz_64), imma(args_size), ass, a, point);
 
@@ -2158,21 +2158,29 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SConstructor: {
-        if (is_variable_in(type, env)) {
-            PiType* enum_type = strip_type(type);
-            generate_size_of(RAX, enum_type, env, ass, a, point);
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
-            build_binary_op(Mov, rref8(R14, 0, sz), imm32(syn.constructor.tag), ass, a, point);
-            build_unary_op(Push, reg(R14, sz_64), ass, a, point);
-            data_stack_grow(env, ADDRESS_SIZE);
+        PiType* src_type = strip_type(type); 
+        if (src_type->sort == TEnum) {
+            if (is_variable_in(type, env)) {
+                PiType* enum_type = src_type;
+                generate_size_of(RAX, enum_type, env, ass, a, point);
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, rref8(R14, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+                data_stack_grow(env, ADDRESS_SIZE);
+            } else {
+                PiType* enum_type = src_type;
+                size_t enum_size = pi_stack_size_of(*enum_type);
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                data_stack_grow(env, enum_size);
+            }
         } else {
-            PiType* enum_type = strip_type(type);
-            size_t enum_size = pi_stack_size_of(*enum_type);
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
-            data_stack_grow(env, enum_size);
+            // Max size of flag is 64 bit, so push on stack = push 64-bit number
+            build_binary_op(Mov, reg(RCX, sz_64), imm64(1 << syn.variant.tag), ass, a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            data_stack_grow(env, 8);
         }
         break;
     }
@@ -2250,49 +2258,68 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
         } else {
-            PiType* enum_type = strip_type(type);
-            size_t enum_stack_size = pi_size_of(*enum_type);
-            size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+            PiType* src_type = strip_type(type);
+            if (src_type->sort == TEnum) {
+                PiType* enum_type = src_type;
+                size_t enum_stack_size = pi_size_of(*enum_type);
+                size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
-            // Make space to fit the (final) variant
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
-            data_stack_grow(env, enum_stack_size);
+                // Make space to fit the (final) variant
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
+                data_stack_grow(env, enum_stack_size);
 
-            // Set the tag
-            size_t tag_size = enum_type->enumeration.tag_size / 8;
-            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
-            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
+                // Set the tag
+                size_t tag_size = enum_type->enumeration.tag_size / 8;
+                LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
 
-            // Generate each argument
-            for (size_t i = 0; i < syn.variant.args.len; i++) {
-                generate_i(syn.variant.args.data[i], env, ictx);
+                // Generate each argument
+                for (size_t i = 0; i < syn.variant.args.len; i++) {
+                    generate_i(syn.variant.args.data[i], env, ictx);
+                }
+
+                PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
+
+                // Note: items are placed on the stack in reverse order, i.e. the
+                //  'first' element in the enum is highest up in the stack. We will
+                //  copy in the same order as they were generated, i.e. 'highest'
+                //  goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
+                //  as the 'subtraction' happens in the loop, we just initialize to
+                //  variant_stack_size (same as dest)
+                size_t src_stack_offset = variant_stack_size;
+                size_t dest_stack_offset = variant_stack_size + tag_size;
+                for (size_t i = 0; i < syn.variant.args.len; i++) {
+                    size_t field_size = pi_size_of(*(PiType*)args.data[i]);
+                    size_t field_align = pi_align_of(*(PiType*)args.data[i]);
+                    if (field_size == 0) continue;
+
+                    dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
+                    src_stack_offset -= pi_stack_align(field_size);
+                    generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+                    dest_stack_offset += field_size;
+                }
+
+                // Remove the space occupied by the temporary values, then update
+                // bookkeeping accordingly 
+                build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size), ass, a, point);
+                data_stack_shrink(env, variant_stack_size);
+            } else {
+                // Max size of flag is 64 bit, so push on stack = push 64-bit number
+                build_binary_op(Mov, reg(RCX, sz_64), imm64(1 << syn.variant.tag), ass, a, point);
+                build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+                data_stack_grow(env, 8);
             }
-
-            PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
-
-            // Note: items are placed on the stack in reverse order, i.e. the
-            //  'first' element in the enum is highest up in the stack. We will
-            //  copy in the same order as they were generated, i.e. 'highest'
-            //  goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
-            //  as the 'subtraction' happens in the loop, we just initialize to
-            //  variant_stack_size (same as dest)
-            size_t src_stack_offset = variant_stack_size;
-            size_t dest_stack_offset = variant_stack_size + tag_size;
-            for (size_t i = 0; i < syn.variant.args.len; i++) {
-                size_t field_size = pi_size_of(*(PiType*)args.data[i]);
-                size_t field_align = pi_align_of(*(PiType*)args.data[i]);
-                if (field_size == 0) continue;
-
-                dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
-                src_stack_offset -= pi_stack_align(field_size);
-                generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-                dest_stack_offset += field_size;
-            }
-
-            // Remove the space occupied by the temporary values, then update
-            // bookkeeping accordingly 
-            build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size), ass, a, point);
-            data_stack_shrink(env, variant_stack_size);
+        }
+        break;
+    }
+    case SFlags: {
+        for (size_t i = 0; i < syn.flags.flags.len; i++) {
+            generate_i(syn.flags.flags.data[i], env, ictx);
+        }
+        for (size_t i = 1; i < syn.flags.flags.len; i++) {
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+            data_stack_shrink(env, REGISTER_SIZE);
         }
         break;
     }
@@ -2781,8 +2808,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             data_stack_shrink(env, bind_sz);
         } else {
             size_t stack_sz = pi_stack_size_of(*type);
-            // HERE IS !!BUG!!
-            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rrefa(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
             build_binary_op(Add, reg(RSP, sz_64), imma(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
@@ -3553,6 +3579,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         // Finally, generate function call to make type
         gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, syn.enum_type.tag_size, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
+    case SFlagsType: {
+        gen_mk_flags_ty(reg(RAX, sz_64), syn.flags_type.size, syn.flags_type.flags, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
