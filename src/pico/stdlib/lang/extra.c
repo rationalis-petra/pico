@@ -822,6 +822,45 @@ void build_thread_end_macro(PiType* type, Assembler* ass, PiAllocator* pia,  All
     convert_c_fn(thread_end_macro, &fn_ctype, type, ass, a, point); 
 }
 
+MacroResult fold_macro(RawTreePiList nodes) {
+    if (nodes.len < 3) {
+        return (MacroResult) {
+            .result_type = Left,
+            .err.message = mv_string("Malformed fold macro ` expected at least two terms!"),
+            .err.range = nodes.data[0].range,
+        };
+    }
+
+    PiAllocator pia = get_std_current_allocator();
+    RawTree op_node = nodes.data[1];
+    RawTree rhs = nodes.data[nodes.len - 1];
+    for (size_t i = 2; i + 1 < nodes.len; i++) {
+        size_t idx = nodes.len - i;
+        RawTreePiList new_nodes = mk_rawtree_list(3, &pia);
+        push_rawtree(op_node, &new_nodes);
+        push_rawtree(nodes.data[idx], &new_nodes);
+        push_rawtree(rhs, &new_nodes);
+        rhs = (RawTree) {
+            .type = RawBranch,
+            .range.start = nodes.data[idx].range.start,
+            .range.end = rhs.range.end,
+            .branch.hint = HExpression,
+            .branch.nodes = new_nodes,
+        };
+    }
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term = rhs,
+    };
+}
+
+void build_fold_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "nodes", mk_list_ctype(pia), mk_macro_result_ctype(pia));
+
+    convert_c_fn(fold_macro, &fn_ctype, type, ass, a, point); 
+}
+
 void add_extra_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
@@ -914,6 +953,14 @@ void add_extra_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     typep = mk_prim_type(pia, TMacro);
     build_thread_end_macro(macro_proc, ass, pia, &ra, &point);
     name = string_to_name(mv_string("->>"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_prim_type(pia, TMacro);
+    build_fold_macro(macro_proc, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("`"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

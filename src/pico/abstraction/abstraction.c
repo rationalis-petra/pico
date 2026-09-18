@@ -177,9 +177,9 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
 
-    if (raw.branch.nodes.len <= 2) {
+    if (raw.branch.nodes.len < 2) {
         err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting keyword module header to have at least two elements - (module <modulename>). Got nothing!", a);
+        err.message = mv_cstr_doc("Expecting module header to have at least two elements - (module <modulename>). Got nothing!", a);
         throw_pi_error(point, err);
     }
     if (raw.branch.nodes.len > 4) {

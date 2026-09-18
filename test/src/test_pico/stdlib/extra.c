@@ -31,13 +31,29 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         reset_subregion(region);
     }
 
-    /* TODO: this test fails for some reason...
     if (test_start(log, mv_string("thread-end-involved"))) {
-        int64_t expected = -6;
+        int64_t expected = -4;
         TEST_EQ("(->> 4 (- 3) (+ 10) (- 5))");
         reset_subregion(region);
     }
-    */
+
+    if (test_start(log, mv_string("fold-one-val"))) {
+        int64_t expected = 1;
+        TEST_EQ("(` + 1)");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("fold-two-vals"))) {
+        int64_t expected = 3;
+        TEST_EQ("(` + 1 2)");
+        reset_subregion(region);
+    }
+
+    if (test_start(log, mv_string("fold-n-vals"))) {
+        int64_t expected = 15;
+        TEST_EQ("(` + 1 2 3 4 5)");
+        reset_subregion(region);
+    }
 
     if (test_start(log, mv_string("single-for-upto"))) {
         PiAllocator current_old = get_std_current_allocator();
