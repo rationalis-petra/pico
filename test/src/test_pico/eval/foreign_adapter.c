@@ -16,6 +16,10 @@ typedef struct {
     int64_t d; 
 } Struct4Words;
 
+typedef struct {
+    float data[4];
+} Float4;
+
 int64_t foreign_add_10(int64_t val) {
     return val + 10;
 }
@@ -37,7 +41,35 @@ bool examine_struct(Struct4Words st) {
     return out;
 }
 
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+bool examine_float4(Float4 tile) {
+    return tile.data[0] == 1.0f && tile.data[1] == -2.5f
+        && tile.data[2] == 3.25f && tile.data[3] == 4.5f;
+}
+
+bool expect_polymorphic_minus_90(uint64_t type_data, void* data) {
+    uint64_t size = (type_data >> 28) & 0xFFFFFFF;
+    uint64_t stack_size = type_data & 0xFFFFFFF;
+    uint64_t alignment = type_data >> 56;
+
+    if (size == sizeof(int64_t) && stack_size == sizeof(int64_t) && alignment == _Alignof(int64_t)) {
+        return*(int64_t*)data == -90;
+    }
+
+    return false;
+}
+
+bool expect_polymorphic_struct(uint64_t type_data, void* data) {
+    uint64_t size = (type_data >> 28) & 0xFFFFFFF;
+    uint64_t stack_size = type_data & 0xFFFFFFF;
+    uint64_t alignment = type_data >> 56;
+
+    if (size == sizeof(Struct4Words) && stack_size == sizeof(Struct4Words) && alignment == _Alignof(Struct4Words)) {
+        Struct4Words* value = data;
+        return value->a == 0 && value->b == -1 && value->c == 2 && value->d == -3;;
+    }
+
+    return false;
+}
 
 void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Target target, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
@@ -158,9 +190,91 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
                          "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n") ;
     }
 
-    // TODO: Test array <-> tile conversions
-    // TODO: Test all procs 
-    
+    if (test_start(log, mv_string("float4-tile-as-struct"))) {
+        ErrorPoint point;
+        if (catch_error(point)) {
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
+            test_fail(log);
+        }
+
+        CType float4_ctype = mk_struct_ctype(pia, 1,
+                                             "data", mk_array_ctype(pia, 4, (CType){.sort = CSFloat}));
+        CType ctype = mk_fn_ctype(pia, 1, "tile", float4_ctype,
+                                  mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+        PiType* tile_type = mk_tile_type(pia, 1, 4, mk_prim_type(pia, Float_32));
+        PiType* ptype = mk_proc_type(pia, 1, tile_type, mk_prim_type(pia, Bool));
+        convert_c_fn(examine_float4, &ctype, ptype, ass, &ra, &point);
+
+        Name name = string_to_name(mv_string("examine-float4"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
+
+        refresh_env(env);
+        bool expected = true;
+        TEST_EQ("(examine-float4 (tile [(is F32 1.0) (is F32 -2.5) "
+                 "(is F32 3.25) (is F32 4.5)]))");
+    }
+
+    if (test_start(log, mv_string("polymorphic-value"))) {
+        ErrorPoint point;
+        if (catch_error(point)) {
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
+            test_fail(log);
+        }
+
+        CType ctype = mk_fn_ctype(pia, 2,
+                                  "type-data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                                                    "data", mk_voidptr_ctype(pia),
+                                                                    (CType){.sort = CSVoid});
+        PiType* ptype = mk_all_type(pia, 1, "A",
+                                                                        mk_proc_type(pia, 1, mk_var_type(pia, "A"), mk_prim_type(pia, Unit)));
+        convert_c_fn(expect_polymorphic_minus_90, &ctype, ptype, ass, &ra, &point);
+
+        Name name = string_to_name(mv_string("expect-minus-90"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
+
+        refresh_env(env);
+        bool expected = true;
+        TEST_EQ("(expect-minus-90 -90)\n");
+    }
+
+    if (test_start(log, mv_string("polymorphic-struct-value"))) {
+        ErrorPoint point;
+        if (catch_error(point)) {
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
+            test_fail(log);
+        }
+
+        CType ctype = mk_fn_ctype(pia, 2,
+                                  "type-data", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                                                    "data", mk_voidptr_ctype(pia),
+                                                                    (CType){.sort = CSVoid});
+        PiType* ptype = mk_all_type(pia, 1, "A",
+                                                                        mk_proc_type(pia, 1, mk_var_type(pia, "A"), mk_prim_type(pia, Unit)));
+        convert_c_fn(expect_polymorphic_struct, &ctype, ptype, ass, &ra, &point);
+
+        Name name = string_to_name(mv_string("expect-struct"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, name, *ptype, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
+
+        refresh_env(env);
+        bool expected = true;
+        TEST_EQ("(expect-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]))");
+    }
+
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
