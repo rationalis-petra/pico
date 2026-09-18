@@ -120,4 +120,16 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
+
+    if (test_start(log, mv_string("triple-nested-loop"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        const char* expected = "00000000000000000000012302460369000002460481206121800000369061218091827";
+        TEST_STDOUT("(loop [for x from 0 below 4]"
+                    "  (loop [for y from 0 below 4]"
+                    "    (loop [for z from 0 below 4]"
+                    "      (terminal.write-string (show (` * x y z))))))");
+        set_std_current_allocator(current_old);
+        reset_subregion(region);
+    }
 }

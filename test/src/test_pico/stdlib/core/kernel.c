@@ -149,6 +149,26 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
                 "  [end 3])");
     }
 
+    if (test_start(log, mv_string("multiply-nested-labels"))) {
+        int64_t expected = 4;
+        TEST_EQ("(seq (labels (go-to loop-continue 0)"
+            "    [loop-continue [x]"
+            "      (seq (if (< x 4) :unit (go-to exit))"
+            "        (labels (go-to loop-continue 0)"
+            "          [loop-continue [y]"
+            "            (seq (if (< y 4) :unit (go-to exit))"
+            "              (labels (go-to loop-continue 0)"
+            "                [loop-continue [z]"
+            "                  (seq (if (< z 4) :unit (go-to exit))"
+            "                    (go-to loop-continue (+ z 1)))]"
+            "                [exit :unit])"
+            "              (go-to loop-continue (+ y 1)))]"
+            "          [exit :unit])"
+            "        (go-to loop-continue (+ x 1)))]"
+            "    [exit :unit])"
+            "  4)");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Dynamic binding - dynamic/use/bind/modify

@@ -2808,8 +2808,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             data_stack_shrink(env, bind_sz);
         } else {
             size_t stack_sz = pi_stack_size_of(*type);
-            // HERE IS !!BUG!!
-            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rrefa(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
             build_binary_op(Add, reg(RSP, sz_64), imma(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
