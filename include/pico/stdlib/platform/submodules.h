@@ -43,7 +43,7 @@ void add_process_module(Assembler* ass, Module* platform, RegionAllocator* regio
 void add_terminal_module(Assembler* ass, Module* platform, RegionAllocator* region);
 void add_filesystem_module(Assembler* ass, Module* platform, RegionAllocator* region);
 void add_window_module(Assembler* ass, Module* platform, RegionAllocator* region);
-void add_time_module(Assembler* ass, Module* platform, RegionAllocator* region);
+void add_chrono_module(Assembler* ass, Module* platform, RegionAllocator* region);
 
 
 #endif

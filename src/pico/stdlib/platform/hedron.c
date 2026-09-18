@@ -1163,7 +1163,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      */
     type = (PiType) {.sort = TType};
 
-    typep = mk_enum_type(pia, 5, "default", 0, "writeback", 0, "device", 0, "texture-descriptor", 0, "sampler-descriptor", 0);
+    typep = mk_named_type(pia, "HeapType",
+                        mk_enum_type(pia, 5, "default", 0, "writeback", 0, "device", 0, "texture-descriptor", 0, "sampler-descriptor", 0));
     name = string_to_name(mv_string("HeapType"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);

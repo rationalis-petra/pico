@@ -84,7 +84,7 @@ void build_hours_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a
     convert_c_fn(seconds_to_hours, &fn_ctype, type, ass, a, point); 
 }
 
-void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) {
+void add_chrono_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -100,7 +100,7 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(mv_string("time")),
+        .name = string_to_name(mv_string("chrono")),
         .imports = imports,
         .re_exports = re_exports,
         .exports = exports,
