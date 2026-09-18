@@ -206,6 +206,7 @@ Win64ArgClass win_64_arg_class(CType* type) {
         return Win64Floating;
     case CSPtr:
     case CSProc:
+    case CSStaticArray:
         return Win64Integer;
     case CSIncomplete:
         panic(mv_string("Incomplete type does not have arg class"));
@@ -653,7 +654,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     size_t input_area_size = 0;
 
     // Calculate input area size:
-    if (pass_in_memory) {
+    if (pass_in_memory && ptype->sort != TAll) {
         input_area_size += pi_stack_align(return_arg_size);
     }
 
@@ -691,9 +692,14 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
 
     // Check for return arg/space
     if (pass_in_memory) {
-        Regname next_reg = integer_registers[current_register++];
-        build_binary_op(Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), ass, a, point);
-        build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
+         Regname next_reg = integer_registers[current_register++];
+        if (ptype->sort == TProc) {
+            build_binary_op(Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), ass, a, point);
+            build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
+        } else {
+            size_t offset = arg_offsets.data[0] + 0x10;
+            build_binary_op(Mov, reg(next_reg, sz_64), rrefa(RBX, offset, sz_64), ass, a, point);
+        }
     }
 
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
@@ -853,6 +859,11 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
 
         // The offsets account for the return address (which we just popped!), therefore subtract 0x8
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
+
+        if (ptype->sort == TAll) {
+            build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+        }
 
         // Now, push result onto stack
         if (return_arg_size > 0)
