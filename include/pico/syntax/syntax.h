@@ -55,8 +55,7 @@ typedef enum {
     SConstructor,
     SVariant,
     SFlags,
-    SHasFlags,
-    SIntesectFlags,
+    SFlagsIntersect,
     SMatch,
     STile,
     STileElt,
@@ -217,13 +216,13 @@ typedef struct {
 } SynFlags;
 
 typedef struct {
-    SymbolArray flags; 
-    SynRef ref;
-} SynHasFlags;
+    SynArray flags;
+} SynFlagsIntersect;
 
 typedef struct {
-    SynArray flags;
-} SynIntersectFlags;
+    SymbolArray flags; 
+    SynRef ref;
+} SynFlagsEmpty;
 
 typedef struct {
     Symbol tagname;
@@ -507,8 +506,8 @@ struct Syntax {
         SynConstructor constructor;
         SynVariant variant;
         SynFlags flags;
-        SynHasFlags has_flags;
-        SynIntersectFlags intersect_flags;
+        SynFlagsIntersect flags_intersect;
+        SynFlagsEmpty flags_empty;
         SynMatch match;
         SynMkTile array;
         SynTileElt array_elt;

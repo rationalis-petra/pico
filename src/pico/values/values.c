@@ -302,14 +302,11 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FFlags:
         out = mk_str_doc(mv_string("::flags"), a);
         break;
-    case FHasFlag:
-        out = mk_str_doc(mv_string("::has-flag"), a);
+    case FFlagsIntersect:
+        out = mk_str_doc(mv_string("::flags-intersect"), a);
         break;
-    case FHasFlags:
-        out = mk_str_doc(mv_string("::has-flags"), a);
-        break;
-    case FIntersectFlags:
-        out = mk_str_doc(mv_string("::intersect-flags"), a);
+    case FFlagsEmpty:
+        out = mk_str_doc(mv_string("::flags-empty?"), a);
         break;
     case FMatch:
         out = mk_str_doc(mv_string("::match"), a);

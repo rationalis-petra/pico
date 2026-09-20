@@ -1061,13 +1061,23 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
-    case FHasFlag: {
-        break;
+    case FFlagsIntersect: {
+        SynArray arr = mk_syn_array(raw.branch.nodes.len - 1, a);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            SynRef flag = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(flag, &arr);
+        }
+
+        Syntax syn = {
+            .type = SFlagsIntersect,
+            .flags_intersect.flags = arr,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
     }
-    case FHasFlags: {
-        break;
-    }
-    case FIntersectFlags: {
+    case FFlagsEmpty: {
         break;
     }
     case FMatch: {

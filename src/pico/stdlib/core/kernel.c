@@ -175,6 +175,10 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string("flags"));
     add_def(module, name, type, &former, null_segments, NULL);
 
+    former = FFlagsIntersect;
+    name = string_to_name(mv_string("flags-intersect"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
     former = FMatch;
     name = string_to_name(mv_string("match"));
     add_def(module, name, type, &former, null_segments, NULL);

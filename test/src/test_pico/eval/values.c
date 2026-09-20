@@ -278,13 +278,19 @@ void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(flags Perms:read Perms:execute)");
     }
 
-    /*
-    if (test_start(log, mv_string("has-flag"))) {
-        bool expected = true;
+    if (test_start(log, mv_string("flag-basic-intersection"))) {
+        int64_t expected = 2;
         RUN("(def Perms Flags :read :write :execute)");
-        TEST_EQ("(has-flags :read (flags Perms:read Perms:write) (Perms:write Perms:execute))");
+        TEST_EQ("(flags-intersect (flags Perms:read Perms:write) (flags Perms:write Perms:execute))");
     }
 
+    if (test_start(log, mv_string("flag-multi-intersection"))) {
+        int64_t expected = 0;
+        RUN("(def Perms Flags :read :write :execute)");
+        TEST_EQ("(flags-intersect (flags Perms:read Perms:write) (flags Perms:write Perms:execute) Perms:execute)");
+    }
+
+    /*
     if (test_start(log, mv_string("has-flags"))) {
         bool expected = true;
         RUN("(def Perms Flags :read :write :execute)");

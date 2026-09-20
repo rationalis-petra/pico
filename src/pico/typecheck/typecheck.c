@@ -970,6 +970,19 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SFlagsIntersect: {
+        PiType* flag_type = mk_uvar(ctx.pia);
+        if (untyped.flags.flags.len == 0) {
+            set_type(ref, flag_type, ctx.tape);
+        } else {
+            Range range = get_range(ref, ctx.tape).term;
+            for (size_t i = 0; i < untyped.flags_intersect.flags.len; i++) {
+                type_check_i(untyped.flags_intersect.flags.data[i], flag_type, range, env, ctx);
+            }
+            set_type(ref, flag_type, ctx.tape);
+        }
+        break;
+    }
     case SMatch: {
         // Typecheck the input 
         type_infer_i(untyped.match.val, env, ctx);
@@ -2548,6 +2561,14 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SFlagsIntersect: {
+        PiType* unwrapped = get_type(ref, ctx.tape);
+        PiType* type = unwrap_type(unwrapped, type_env_module(env), ctx.pia, ctx.a);
+        if (type->sort != TFlags) {
+            type_error_flags_not_flag(type, ref, ctx);
+        }
+        break;
+    }
     case SMatch: {
         post_unify(syn.match.val, env, ctx);
         PiType* enum_type = unwrap_type(get_type(syn.match.val, ctx.tape), type_env_module(env), ctx.pia, ctx.a); 
@@ -2809,6 +2830,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case STileType:
     case SStructType:
     case SEnumType:
+    case SFlagsType:
     case SResetType:
     case SDynamicType:
     case SNamedType:
@@ -2958,6 +2980,12 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case SFlags: {
         for (size_t i = 0; i < typed.flags.flags.len; i++) {
             squash_types(typed.flags.flags.data[i], env, ctx);
+        }
+        break;
+    }
+    case SFlagsIntersect: {
+        for (size_t i = 0; i < typed.flags.flags.len; i++) {
+            squash_types(typed.flags_intersect.flags.data[i], env, ctx);
         }
         break;
     }

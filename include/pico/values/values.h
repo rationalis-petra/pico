@@ -85,9 +85,8 @@ typedef enum TermFormer {
     FProjector,
     FVariant,
     FFlags,
-    FHasFlag,
-    FHasFlags,
-    FIntersectFlags,
+    FFlagsIntersect,
+    FFlagsEmpty,
     FMatch,
     FInstance,
 
