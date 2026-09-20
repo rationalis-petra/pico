@@ -157,6 +157,29 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         .logger = ctx.logger,
     };
 
+    // Case 1: Eliminator expressions. Unlike constructors, these expressions
+    //   have no matching type. This means that we simply propagate constraints
+    //   inward. If the match is successful then we return, not progressing to
+    //   case 2.
+    switch (untyped.type) {
+    case SIf: {
+      PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+      *t = (PiType) {.sort = TPrim,.prim = Bool};
+      type_check_i(untyped.if_expr.condition, t, (Range){}, env, ctx);
+      type_check_i(untyped.if_expr.true_branch, type, tysrc, env, ctx);
+      type_check_i(untyped.if_expr.false_branch, type, tysrc, env, ctx);
+      set_type(ref, type, ctx.tape);;
+      return;
+    }
+    default:
+      break;
+    }
+
+    // Case 2: Constructor expressions. Unlike elimnators, these expressions
+    //   have a matching type, e.g. SStructure and TStruct. This means that we
+    //   cannot simply propagate constraints inward, we must deconstruct the
+    //   type and match appropriate parts of the type to appropriate parts of
+    //   the expression. In the default case, we resort to simple inference
     if (type->sort == TProc && untyped.type == SProcedure) {
         if (untyped.procedure.implicits.len != type->proc.implicits.len) {
             type_error_proc_incorrect_num_implicits(ref, type, ctx);
@@ -274,7 +297,6 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         set_type(ref, type, ctx.tape);
         type_check_i(untyped.all.body, type->binder.body, tysrc, env, ctx); 
         pop_types(env, untyped.all.args.len);
-
     } else if (type->sort == TStruct && untyped.type == SStructure) {
       if (untyped.structure.has_base == None) {
         SynRef tyref = new_syntax(ctx.tape);

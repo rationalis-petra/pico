@@ -196,6 +196,21 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    //  Control Flow. Typechecking
+    // -------------------------
+    if (test_start(log, mv_string("if-propagaes-type-check-i"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        PiType *expected = 
+            mk_struct_type(&pregion, 2,
+                         "x", 1, mk_prim_type(&pregion, UInt_32),
+                         "y", 1, mk_prim_type(&pregion, UInt_32));
+        TEST_TYPE("(is (Struct [.x U32] [.y U32]) (if :true (struct [.y 3] [.x 3]) (struct [.y 1] [.x 1])))") ;
+        set_std_current_allocator(current_old);
+    }
+
+    //  Misc. Typechecking
+    // -------------------------
     if (test_start(log, mv_string("declaration"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
