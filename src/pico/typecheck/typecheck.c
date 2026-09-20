@@ -175,23 +175,26 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
       break;
     }
 
+    PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+
     // Case 2: Constructor expressions. Unlike elimnators, these expressions
     //   have a matching type, e.g. SStructure and TStruct. This means that we
     //   cannot simply propagate constraints inward, we must deconstruct the
     //   type and match appropriate parts of the type to appropriate parts of
     //   the expression. In the default case, we resort to simple inference
-    if (type->sort == TProc && untyped.type == SProcedure) {
-        if (untyped.procedure.implicits.len != type->proc.implicits.len) {
+    if (unwrapped->sort == TProc && untyped.type == SProcedure) {
+        PiType* proc = unwrapped;
+        if (untyped.procedure.implicits.len != proc->proc.implicits.len) {
             type_error_proc_incorrect_num_implicits(ref, type, ctx);
         }
-        if (untyped.procedure.args.len != type->proc.args.len) {
+        if (untyped.procedure.args.len != proc->proc.args.len) {
             type_error_proc_incorrect_num_args(ref, type, ctx);
         }
 
         PiType* kind0 = call_alloc(sizeof(PiType), ctx.pia);
         *kind0 = (PiType){.sort = TType,};
-        for (size_t i = 0; i < type->proc.implicits.len; i++) {
-            PiType* ann = type->proc.implicits.data[i];
+        for (size_t i = 0; i < proc->proc.implicits.len; i++) {
+            PiType* ann = proc->proc.implicits.data[i];
             SymPtrCell cell = untyped.procedure.implicits.data[i];
             if (cell.val) {
                 PiType* aty = eval_type(*(SynRef*)cell.val, env, ctx);
@@ -223,8 +226,8 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
             }
             type_var(cell.key, ann, env);
         }
-        for (size_t i = 0; i < type->proc.args.len; i++) {
-            PiType* ann = type->proc.args.data[i];
+        for (size_t i = 0; i < proc->proc.args.len; i++) {
+            PiType* ann = proc->proc.args.data[i];
             SymPtrCell cell = untyped.procedure.args.data[i];
             if (cell.val) {
                 PiType* aty = eval_type(*(SynRef*)cell.val, env, ctx);
@@ -255,14 +258,15 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         set_type(ref, type, ctx.tape);
-        type_check_i(untyped.procedure.body, type->proc.ret, tysrc, env, ctx);
+        type_check_i(untyped.procedure.body, proc->proc.ret, tysrc, env, ctx);
         pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
         if (untyped.procedure.is_recursive) {
             pop_type(env);
         }
         
-    } else if (type->sort == TAll && untyped.type == SAll) {
-        if (untyped.all.args.len != type->binder.vars.len) {
+    } else if (unwrapped->sort == TAll && untyped.type == SAll) {
+        PiType* all = unwrapped;
+        if (untyped.all.args.len != all->binder.vars.len) {
             type_error_all_incorrect_num_vars(ref, type, ctx);
         }
 
@@ -295,36 +299,20 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         set_type(ref, type, ctx.tape);
-        type_check_i(untyped.all.body, type->binder.body, tysrc, env, ctx); 
+        type_check_i(untyped.all.body, all->binder.body, tysrc, env, ctx); 
         pop_types(env, untyped.all.args.len);
-    } else if (type->sort == TStruct && untyped.type == SStructure) {
-      if (untyped.structure.has_base == None) {
-        SynRef tyref = new_syntax(ctx.tape);
-        Syntax synty = (Syntax) {
-          .type = SCheckedType,
-          .type_val = type,
-        };
-        set_syntax(tyref, synty, ctx.tape);
-
-        PiType* struct_type = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
-        if (struct_type->sort != TStruct) {
-          type_error_struct_invalid_type(type, ref, ctx);
-        }
-        PiType* tt = call_alloc(sizeof(PiType), ctx.pia);
-        *tt = (PiType){.sort = TType};
-        set_type(tyref, tt, ctx.tape);
-
-        untyped.structure.has_base = Some;
-        untyped.structure.base = tyref;
-        set_syntax(ref, untyped, ctx.tape);
-        type_infer_i(ref, env, ctx);
-      } else {
+    } else if (unwrapped->sort == TStruct && untyped.type == SStructure) {
+      bool all_fields_required = true;
+      PiType* struct_type = unwrapped;
+      if (untyped.structure.has_base == Some) {
         type_infer_i(untyped.structure.base, env, ctx);
         PiType* base_ty;
         if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
           base_ty = eval_type(untyped.structure.base, env, ctx);
+          all_fields_required = true;
         } else {
           base_ty = get_type(untyped.structure.base, ctx.tape);
+          all_fields_required = false;
         }
         UnifyResult out = unify(type, base_ty, uctx);
         UnifyReason reason = {
@@ -334,8 +322,61 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
           .check.actual = base_ty
         };
         check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
-        type_infer_i(ref, env, ctx);
       }
+
+      if (all_fields_required) {
+        // If we expect this structure to have a particular type
+        // (provided), then there are two checks that need doing:
+        // 1. Check if any fields are missing when a new struct is being created
+        // TODO (PERFORMANCE): feels like there should be a more
+        //      efficient algorithm here?
+        SymbolArray missing_fields = mk_symbol_array(4, ctx.a);
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+          Symbol field = struct_type->structure.fields.data[i].key;
+          bool has_field = false;
+          for (size_t j = 0; j < untyped.structure.fields.len; j++) {
+            if (symbol_eq(field, untyped.structure.fields.data[j].key))
+              has_field = true;
+          }
+          if (!has_field) {
+            push_symbol(field, &missing_fields);
+          }
+        }
+                
+        if (missing_fields.len > 0) {
+          type_error_struct_missing_fields(struct_type, ref, missing_fields, ctx);
+        }
+      }
+
+      // 2. Check if any fields are present but should not be
+      SymbolArray extra_fields = mk_symbol_array(4, ctx.a);
+      for (size_t i = 0; i < untyped.structure.fields.len; i++) {
+        Symbol field = untyped.structure.fields.data[i].key;
+        bool has_field = false;
+        for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+          if (symbol_eq(field, struct_type->structure.fields.data[j].key))
+            has_field = true;
+        }
+        if (!has_field) {
+          push_symbol(field, &extra_fields);
+        }
+      }
+
+      if (extra_fields.len > 0) {
+        type_error_struct_extra_fields(struct_type, ref, extra_fields, ctx);
+      }
+
+      for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+        SynRef* field_syn = sym_syn_lookup(struct_type->structure.fields.data[i].key, untyped.structure.fields);
+        if (field_syn) {
+          PiType* field_ty = struct_type->structure.fields.data[i].val;
+          Range tysrc = get_range(untyped.structure.base, ctx.tape).term;
+          type_check_i(*field_syn, field_ty, tysrc, env, ctx);
+        } else if (all_fields_required) {
+          panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
+        }
+      }
+      set_type(ref, type, ctx.tape);
     } else {
         // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
@@ -349,6 +390,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         };
         check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
     }
+
 }
 
 // "internal" type inference. Destructively mutates types.
@@ -1149,14 +1191,11 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SStructure: {
         if (untyped.structure.has_base == Some) {
-            bool all_fields_required;
             type_infer_i(untyped.structure.base, env, ctx);
             if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
                 set_type(ref, eval_type(untyped.structure.base, env, ctx), ctx.tape);
-                all_fields_required = true;
             } else {
                 set_type(ref, get_type(untyped.structure.base, ctx.tape), ctx.tape);
-                all_fields_required = false;
             }
 
             PiType* struct_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
@@ -1165,58 +1204,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 type_error_struct_invalid_type(struct_type, ref, ctx);
             }
 
-            if (get_type(untyped.structure.base, ctx.tape)->sort == TType) {
-                // If we expect this structure to have a particular type
-                // (povided), then there are two checks that need doing:
-                // 1. Check if any fields are missing when a new struct is being created
-                // TODO (PERFORMANCE): feels like there should be a more
-                //      efficient algorithm here?
-                SymbolArray missing_fields = mk_symbol_array(4, a);
-                for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                    Symbol field = struct_type->structure.fields.data[i].key;
-                    bool has_field = false;
-                    for (size_t j = 0; j < untyped.structure.fields.len; j++) {
-                        if (symbol_eq(field, untyped.structure.fields.data[j].key))
-                            has_field = true;
-                    }
-                    if (!has_field) {
-                        push_symbol(field, &missing_fields);
-                    }
-                }
-                
-                if (missing_fields.len > 0) {
-                    type_error_struct_missing_fields(struct_type, ref, missing_fields, ctx);
-                }
-
-                // 2. Check if any fields are present but should not be
-                SymbolArray extra_fields = mk_symbol_array(4, a);
-                for (size_t i = 0; i < untyped.structure.fields.len; i++) {
-                    Symbol field = untyped.structure.fields.data[i].key;
-                    bool has_field = false;
-                    for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
-                        if (symbol_eq(field, struct_type->structure.fields.data[j].key))
-                            has_field = true;
-                    }
-                    if (!has_field) {
-                        push_symbol(field, &extra_fields);
-                    }
-                }
-
-                if (extra_fields.len > 0) {
-                    type_error_struct_extra_fields(struct_type, ref, extra_fields, ctx);
-                }
-            }
-
-            for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                SynRef* field_syn = sym_syn_lookup(struct_type->structure.fields.data[i].key, untyped.structure.fields);
-                if (field_syn) {
-                    PiType* field_ty = struct_type->structure.fields.data[i].val;
-                    Range tysrc = get_range(untyped.structure.base, ctx.tape).term;
-                    type_check_i(*field_syn, field_ty, tysrc, env, ctx);
-                } else if (all_fields_required) {
-                    panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
-                }
-            }
+            type_check_i(ref, get_type(ref, ctx.tape), get_range(untyped.structure.base, ctx.tape).term, env, ctx);
         } else {
             PiType struct_type = (PiType) {
                 .sort = TStruct,
@@ -1433,8 +1421,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         *t = (PiType) {.sort = TPrim,.prim = Bool};
         type_check_i(untyped.if_expr.condition, t, (Range){}, env, ctx);
 
-        PiType* out_type = mk_uvar(ctx.pia);
-        type_check_i(untyped.if_expr.true_branch, out_type, (Range){}, env, ctx);
+        type_infer_i(untyped.if_expr.true_branch, env, ctx);
+        PiType* out_type = get_type(untyped.if_expr.true_branch, ctx.tape);
         Range tysrc = get_range(untyped.if_expr.true_branch, ctx.tape).term;
         type_check_i(untyped.if_expr.false_branch, out_type, tysrc, env, ctx);
         set_type(ref, out_type, ctx.tape);;

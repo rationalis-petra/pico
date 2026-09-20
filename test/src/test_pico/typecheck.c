@@ -143,6 +143,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE_FAIL("(struct Sct [.p 1] [.z 3] [.y 2])");
     }
 
+    if (test_start(log, mv_string("struct-extra-field-value-base fails"))) {
+        RUN("(def val struct [.x 3] [.y 7])");
+        TEST_TYPE_FAIL("(struct val [.x 7] [.y 3] [.z 2])");
+    }
+
     if (test_start(log, mv_string("struct-checks-nested-field"))) {
         PiType *expected = mk_struct_type(&pregion, 2,
                                           "nest",
@@ -152,6 +157,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         RUN("(def Nested Struct [.nest Struct [.x U32] [.y U32]] [.val U32])");
         TEST_TYPE("(struct Nested [.nest struct [.y 5] [.x 7]] [.val 1])");
     }
+
 
     //  Variant/Match Typechecking
     // -------------------------
