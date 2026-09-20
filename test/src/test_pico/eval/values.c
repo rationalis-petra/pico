@@ -278,6 +278,12 @@ void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(flags Perms:read Perms:execute)");
     }
 
+    if (test_start(log, mv_string("flags-empty"))) {
+        int64_t expected = 0;
+        RUN("(def Perms Flags :read :write :execute)");
+        TEST_EQ("(is Perms (flags))");
+    }
+
     if (test_start(log, mv_string("flag-basic-intersection"))) {
         int64_t expected = 2;
         RUN("(def Perms Flags :read :write :execute)");
@@ -288,6 +294,12 @@ void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 0;
         RUN("(def Perms Flags :read :write :execute)");
         TEST_EQ("(flags-intersect (flags Perms:read Perms:write) (flags Perms:write Perms:execute) Perms:execute)");
+    }
+
+    if (test_start(log, mv_string("flag-empty-intersection"))) {
+        int64_t expected = 1 | 2 | 4;
+        RUN("(def Perms Flags :read :write :execute)");
+        TEST_EQ("(is Perms (flags-intersect))");
     }
 
     /*

@@ -3,7 +3,6 @@
 
 #include "data/array.h"
 #include "data/result.h"
-#include "data/option.h"
 #include "components/pretty/document.h"
 #include "components/logging/structured_logging.h"
 

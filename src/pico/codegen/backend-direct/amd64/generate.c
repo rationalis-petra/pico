@@ -2313,6 +2313,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SFlags: {
+        if (syn.flags.flags.len == 0) {
+            build_unary_op(Push, imm8(0), ass, a, point);
+            data_stack_grow(env, REGISTER_SIZE);
+        }
         for (size_t i = 0; i < syn.flags.flags.len; i++) {
             generate_i(syn.flags.flags.data[i], env, ictx);
         }
@@ -2324,6 +2328,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SFlagsIntersect: {
+        PiType* flags_type = strip_type(get_type(ref, ictx.tape));
+        if (syn.flags.flags.len == 0) {
+            build_binary_op(Mov, reg(RCX, sz_64), imm64(UINT64_MAX >> (64 - flags_type->flags.flag_values.len)), ass, a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            data_stack_grow(env, REGISTER_SIZE);
+        }
         for (size_t i = 0; i < syn.flags_intersect.flags.len; i++) {
             generate_i(syn.flags_intersect.flags.data[i], env, ictx);
         }
