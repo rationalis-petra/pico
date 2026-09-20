@@ -275,6 +275,45 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         type_check_i(untyped.all.body, type->binder.body, tysrc, env, ctx); 
         pop_types(env, untyped.all.args.len);
 
+    } else if (type->sort == TStruct && untyped.type == SStructure) {
+      if (untyped.structure.has_base == None) {
+        SynRef tyref = new_syntax(ctx.tape);
+        Syntax synty = (Syntax) {
+          .type = SCheckedType,
+          .type_val = type,
+        };
+        set_syntax(tyref, synty, ctx.tape);
+
+        PiType* struct_type = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+        if (struct_type->sort != TStruct) {
+          type_error_struct_invalid_type(type, ref, ctx);
+        }
+        PiType* tt = call_alloc(sizeof(PiType), ctx.pia);
+        *tt = (PiType){.sort = TType};
+        set_type(tyref, tt, ctx.tape);
+
+        untyped.structure.has_base = Some;
+        untyped.structure.base = tyref;
+        set_syntax(ref, untyped, ctx.tape);
+        type_infer_i(ref, env, ctx);
+      } else {
+        type_infer_i(untyped.structure.base, env, ctx);
+        PiType* base_ty;
+        if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
+          base_ty = eval_type(untyped.structure.base, env, ctx);
+        } else {
+          base_ty = get_type(untyped.structure.base, ctx.tape);
+        }
+        UnifyResult out = unify(type, base_ty, uctx);
+        UnifyReason reason = {
+          .type = URCheck,
+          .check.range = get_range(ref, ctx.tape).term,
+          .check.expected = type,
+          .check.actual = base_ty
+        };
+        check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
+        type_infer_i(ref, env, ctx);
+      }
     } else {
         // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
@@ -543,7 +582,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                              tysrc, env, ctx);
             }
 
-            set_type(ref, fn_type->proc.ret, ctx.tape);;
+            set_type(ref, fn_type->proc.ret, ctx.tape);
 
         } else if (fn_type->sort == TAll) {
             SynArray types = mk_syn_array(fn_type->binder.vars.len, a);

@@ -259,15 +259,15 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     key_ty = e->value;
 
 
-    typep = mk_enum_type(pia, 4,
-                         "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                         "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
-                         "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                         "keymap", 1, keymap_ty);
-
+    typep = mk_named_type(pia, "WindowMessage",
+        mk_enum_type(pia, 4,
+                     "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                     "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
+                     "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                     "keymap", 1, keymap_ty));
 
     type = (PiType) {.sort = TType};
-    name = string_to_name(mv_string("Message"));
+    name = string_to_name(mv_string("WindowMessage"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);

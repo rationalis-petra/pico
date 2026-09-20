@@ -20,6 +20,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Allocator gpa = ra_to_gpa(region);
     Allocator* a = &gpa;
     PiAllocator pregion = convert_to_pallocator(&gpa);
+    PiAllocator* pia = &pregion;
 
     Allocator exalloc = mk_executable_allocator(&gpa);
 
@@ -140,6 +141,16 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     if (test_start(log, mv_string("struct-extra-middle-field-fails"))) {
         RUN("(def Sct Struct [.x I64] [.y I64])");
         TEST_TYPE_FAIL("(struct Sct [.p 1] [.z 3] [.y 2])");
+    }
+
+    if (test_start(log, mv_string("struct-checks-nested-field"))) {
+        PiType *expected = mk_struct_type(&pregion, 2,
+                                          "nest",
+                                          mk_struct_type(pia, 2, "x", mk_prim_type(pia, UInt_64),
+                                                         "y", mk_prim_type(pia, UInt_64)),
+                                          "val", mk_prim_type(pia, UInt_32));
+        RUN("(def Nested Struct [.nest Struct [.x U32] [.y U32]] [.val U32])");
+        TEST_TYPE("(struct Nested [.nest struct [.y 5] [.x 7]] [.val 1])");
     }
 
     //  Variant/Match Typechecking
