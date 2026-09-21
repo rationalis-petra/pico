@@ -3,6 +3,7 @@
 
 #include "data/meta/slice_header.h"
 #include "data/string.h"
+#include "data/option.h"
 
 #include "platform/window/keycodes.h"
 
@@ -48,7 +49,6 @@ typedef struct {
     uint32_t height;
 } WindowDimensions;
 
-
 typedef struct KeyMap KeyMap;
 typedef struct KeyboardState KeyboardState;
 
@@ -69,6 +69,25 @@ SLICE_TYPE(WinMessage, WinMessage);
 //  - add window ID to window events?
 WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a);
 
+typedef struct {
+    uint32_t* pixels;
+    uint64_t memsize;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+} FrameBuffer;
+
+OPTION_TYPE(FrameBuffer, FrameBuffer)
+
+/**
+ * Used when CPU rendering to windows. 
+ */
+FrameBufferOption acquire_framebuffer(PlWindow* window);
+void present_framebuffer(FrameBuffer frame, PlWindow* window);
+
+/**
+ * Human interaction.
+ */
 KeyboardState* create_keyboard_state(KeyMap* keymap);
 void destroy_keyboard_state(KeyboardState*);
 

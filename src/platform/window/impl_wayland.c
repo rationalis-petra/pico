@@ -70,54 +70,13 @@ static struct wl_keyboard* kb;
 
 // ---------------------------------------- 
 
-int32_t alc_shm(uint64_t sz) {
-    // TODO: make a unique string/name - this can be done by, e.g. using printf
-    // on the window pointer
-    const char* name = "wl_64-shared-memory";
-
-    int32_t fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, S_IWUSR | S_IRUSR | S_IWOTH | S_IROTH);
-    shm_unlink(name); // this name is no longer used??
-    ftruncate(fd, sz);
-
-    return fd;
-}
-
-void resize(PlWindow* window) {
-    const size_t memsize = window->width * window->height * 4;
-    int32_t fd = alc_shm(memsize); // rgba
-
-    window->pixles = mmap(0, memsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    
-    struct wl_shm_pool* pool = wl_shm_create_pool(wl_sharer, fd, memsize);
-    window->buffer = wl_shm_pool_create_buffer(pool,0, window->width, window->height, window->width * 4, WL_SHM_FORMAT_ARGB8888);
-    wl_shm_pool_destroy(pool);
-    close(fd);
-}
-
-void window_draw(PlWindow* window) {
-    // colour = grep
-    uint8_t colour = 128;
-	memset(window->pixles, colour, window->width * window->height * 4);
-
-    // 0, 0 = position
-    wl_surface_attach(window->surface, window->buffer, 0, 0);
-
-    // update a specific portion of the surface, starting at x, y, with width & height
-    wl_surface_damage(window->surface, 0, 0, window->width, window->height); 
-
-    // we are done rendering, we are done drawing, it's yours now
-    wl_surface_commit(window->surface); 
-}
-
 // The xdg surface configure event is sent by wayland whenever the window's configuration
-// 
+// changes.
 void xdg_surface_conf(void *data, struct xdg_surface* xdg_surface, uint32_t serial) {
     PlWindow* window = data;
 
     xdg_surface_ack_configure(xdg_surface, serial);
-    // TODO: see if we can get the window passed in via data?
-    if (!window->pixles) resize(window);
-    //window_draw(window);
+    window->configured = true;
 }
 
 // callback
@@ -154,7 +113,6 @@ void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
     PlWindow* win = data;
     win->should_close = true;
 }
-
 
 void kb_map(void* data, struct wl_keyboard* kb, uint32_t format, int32_t fd, uint32_t size) {
     // set xkb keymap...
@@ -300,6 +258,77 @@ static struct wl_registry_listener wl_listener = (struct wl_registry_listener) {
 struct wl_display *get_wl_display() {
     return wl_display;
 }
+static void win_buffer_release(void* data, struct wl_buffer* wl_buffer) {
+    WinBuffer* buf = (WinBuffer*)data;
+    buf->busy = false;
+}
+
+static const struct wl_buffer_listener buffer_listener = {
+    .release = win_buffer_release,
+};
+
+static bool create_win_buffer(PlWindow* win, WinBuffer* buf, uint32_t width, uint32_t height) {
+    uint32_t stride_bytes = width * sizeof(uint32_t);
+    size_t size = (size_t)stride_bytes * height;
+
+    /* 1. Create an anonymous shared memory file descriptor */
+    // 
+    int fd = memfd_create("wayland_shm_buffer", MFD_CLOEXEC);
+    if (fd < 0) return false;
+
+    if (ftruncate(fd, size) < 0) {
+        close(fd);
+        return false;
+    }
+
+    /* 2. Map memory into caller's address space */
+    uint32_t* pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (pixels == MAP_FAILED) {
+        close(fd);
+        return false;
+    }
+
+    /* 3. Create Wayland SHM pool and buffer wrapper */
+    struct wl_shm_pool* pool = wl_shm_create_pool(wl_sharer, fd, size);
+    struct wl_buffer* wl_buf = wl_shm_pool_create_buffer(
+        pool,
+        0,                  /* Offset */
+        width,
+        height,
+        stride_bytes,       /* Stride in bytes */
+        WL_SHM_FORMAT_XRGB8888
+    );
+    wl_shm_pool_destroy(pool);
+
+    *buf = (WinBuffer) {
+        .wl_buf = wl_buf,
+        .pixels = pixels,
+        .memsize = size,
+        .width = width,
+        .height = height,
+        .busy = false,
+        .fd = fd,
+    };
+
+    /* Listen for release events from compositor */
+    wl_buffer_add_listener(wl_buf, &buffer_listener, buf);
+    return true;
+}
+
+static void destroy_win_buffer(WinBuffer* buf) {
+    if (buf->wl_buf) {
+        wl_buffer_destroy(buf->wl_buf);
+        buf->wl_buf = NULL;
+    }
+    if (buf->pixels) {
+        munmap(buf->pixels, buf->memsize);
+        buf->pixels = NULL;
+    }
+    if (buf->fd > 0) {
+        close(buf->fd);
+    };
+    *buf = (WinBuffer){};
+}
 
 int pl_init_window_system(Allocator* a) {
     wsa = a;
@@ -321,7 +350,7 @@ void pl_teardown_window_system() {
     wl_display_disconnect(wl_display);
 }
 
-PlWindow *pl_create_window(String name, int width, int height) {
+PlWindow* pl_create_window(String name, int width, int height) {
     PlWindow* window = mem_alloc(sizeof(PlWindow), wsa);
     *window = (PlWindow) {
         .width = width,
@@ -349,18 +378,25 @@ PlWindow *pl_create_window(String name, int width, int height) {
     xdg_toplevel_set_title(top, c_name);
     mem_free(c_name, wsa);
 
-    wl_surface_commit(surface); // TOOD: necessary?
-    push_ptr(window, &windows);
+    /* Trigger initial layout calculation on compositor */
+    wl_surface_commit(surface);
 
+    /* Flush requests to the socket so the compositor receives the commit immediately */
+    wl_display_flush(wl_display);
+
+    while (!window->configured)  {
+        // When the window is not configured, we use the (blocking) 
+        // roundtrip() function. 
+        wl_display_roundtrip(wl_display);
+    }
+
+    push_ptr(window, &windows);
     return window;
 }
 
 void pl_destroy_window(PlWindow *window) {
-    if (window->buffer) {
-        wl_buffer_destroy(window->buffer);
-    }
-    if (window->pixles) {
-        munmap(window->pixles, 4 * window->width * window->height);
+    for (size_t i = 0; i < 2; i++) {
+        destroy_win_buffer(&window->render.buffers[i]);
     }
 
     // TODO (BUG INVESTIGATE): we may be leaking the shared memory in window->pixles!
@@ -381,6 +417,106 @@ WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
     return (WinMessageSlice){.data = out.data, .len = out.len};
+}
+
+FrameBufferOption acquire_framebuffer(PlWindow* window) {
+    if (!window || window->width == 0 || window->height == 0 || window->render.claimed_by_hedron || !window->configured) {
+        return (FrameBufferOption){.type = None};
+    }
+    // TODO: thread safety here?
+    window->render.claimed_by_cpu = true;
+
+    uint32_t w = window->width;
+    uint32_t h = window->height;
+
+    /* Flush pending display events to check if compositor released buffers */
+    wl_display_dispatch_pending(wl_display);
+
+    /* Ping-pong to the next backbuffer */
+    int idx = (window->render.current_buffer + 1) % 2;
+    WinBuffer* buf = &window->render.buffers[idx];
+
+    /* If the buffer is still in use by compositor, dispatch and wait briefly */
+    while (buf->busy) {
+        if (wl_display_dispatch(wl_display) == -1) {
+            return (FrameBufferOption){.type = None};
+        }
+    }
+
+    /* Resize buffer if window dimensions changed */
+    bool size_changed = (buf->width != w) | (buf->height != h);
+    if (!buf->pixels || size_changed) {
+        size_t required_bytes = w * h * sizeof(uint32_t);
+        if (buf->memsize < required_bytes) {
+            // Need to recreate buffer with larger allocation
+            destroy_win_buffer(buf);
+            if (!create_win_buffer(window, buf, w, h)) {
+                return (FrameBufferOption){.type = None};
+            }
+        } else {
+            /* 
+             * Capacity is sufficient (e.g. window shrank)!
+             * Just destroy the old wl_buffer handle and create a new one 
+             * with the updated (smaller) width and height.
+             */
+            if (buf->wl_buf) {
+                wl_buffer_destroy(buf->wl_buf);
+            }
+
+            struct wl_shm_pool* pool = wl_shm_create_pool(wl_sharer, buf->fd, buf->memsize);
+            buf->wl_buf = wl_shm_pool_create_buffer(
+                pool,
+                0,                  /* Offset */
+                w,                  /* New width */
+                h,                  /* New height */
+                w * sizeof(uint32_t),/* Stride in bytes */
+                WL_SHM_FORMAT_XRGB8888
+            );
+            wl_shm_pool_destroy(pool);
+            wl_buffer_add_listener(buf->wl_buf, &buffer_listener, buf);
+
+            buf->width = w;
+            buf->height = h;
+        }
+    }
+
+    window->render.current_buffer = idx;
+
+    /* Populate user view */
+    return (FrameBufferOption) {
+        .type = Some,
+        .val = {
+            .pixels = buf->pixels,
+            .width  = w,
+            .height = h,
+            .stride = w, /* Stride in pixels */
+        },
+    };
+}
+
+void present_framebuffer(FrameBuffer frame, PlWindow* window) {
+    if (!window || !frame.pixels) {
+        return;
+    }
+
+    // TODO: if try and acquire twice, this may be the wrong buffer index!
+    WinBuffer* buf = &window->render.buffers[window->render.current_buffer];
+
+    /* Mark buffer busy until compositor sends release event */
+    buf->busy = true;
+
+    /* Attach, damage (mark whole area dirty), and commit */
+    wl_surface_attach(window->surface, buf->wl_buf, 0, 0);
+    wl_surface_damage_buffer(
+        window->surface,
+        0, 0,
+        (int32_t)frame.width,
+        (int32_t)frame.height
+    );
+    wl_surface_commit(window->surface);
+
+    /* Flush out queued protocol requests to the Wayland socket */
+    wl_display_flush(wl_display);
 }
 
 KeyboardState* create_keyboard_state(KeyMap* map) {
