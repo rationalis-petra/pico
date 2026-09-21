@@ -10,11 +10,6 @@
 #include "pico/data/string_array.h"
 #include "pico/data/range.h"
 
-typedef struct {
-    Option_t type;
-    Name value;
-} NameOption;
-
 typedef enum {
     StExecutable,
     StLibrary,

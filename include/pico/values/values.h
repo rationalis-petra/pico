@@ -5,6 +5,7 @@
 
 #include "data/array.h"
 #include "data/string.h"
+#include "data/option.h"
 #include "components/pretty/document.h"
 
 typedef uint64_t Name;
@@ -18,6 +19,8 @@ typedef struct {
     Name name;
     uint64_t did;
 } Symbol;
+
+OPTION_TYPE(Name, Name)
 
 // Forward declarations of environment.h (to avoid circular includes!)
 typedef struct env_capture env_capture;

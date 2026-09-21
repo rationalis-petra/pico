@@ -79,6 +79,14 @@ void delete_atlas_instance(AtlasInstance* instance) {
     mem_free(instance, a);
 }
 
+AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance) {
+    return (AtlasDefaultTargets) { 
+        .build = instance->project.package.default_build,
+        .run = instance->project.package.default_run,
+        .test = instance->project.package.default_test,
+    };
+}
+
 static Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point);
 
 void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, AtErrorPoint* point) {
@@ -148,11 +156,11 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def_external(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.val, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(target->entrypoint.val), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
@@ -172,7 +180,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             {
                 PtrArray ep_nodes = mk_ptr_array(5, &ra);
                 push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_name_string(target->entrypoint.val), &ra), &ep_nodes);
                 push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
                 push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
             }
@@ -263,11 +271,11 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def_external(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.val, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(target->entrypoint.val), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
@@ -306,7 +314,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
             }
 
             // TODO: replace with proper allocator??
-            RelicProgram* program = build_program(module, entry.value, &build_point, &ra);
+            RelicProgram* program = build_program(module, entry.val, &build_point, &ra);
             String image = path_cat(mv_string("build"), target_name, &ra);
             write_program(program, image, &ra);
             //link_program(String program, String lib, String out_name);
@@ -320,7 +328,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
             {
                 PtrArray ep_nodes = mk_ptr_array(5, &ra);
                 push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_name_string(target->entrypoint.val), &ra), &ep_nodes);
                 push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
                 push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
             }
@@ -711,7 +719,7 @@ void add_executable(Executable executable, String path, AtlasInstance* instance)
           .val = string_ncat(instance->gpa, 4,
                                path, mv_string("/"), executable.filename, mv_string(".rl")),
         },
-        .entrypoint = (NameOption) {.type = Some, .value = executable.entry_point },
+        .entrypoint = (NameOption) {.type = Some, .val = executable.entry_point },
         .target_dependencies = scopy_name_array(executable.dependencies, instance->gpa),
         .file_dependencies = mk_string_array(0, instance->gpa),
         .module = NULL,

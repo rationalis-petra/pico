@@ -23,6 +23,17 @@ AtlasInstance* make_atlas_instance(Allocator* a);
 void delete_atlas_instance(AtlasInstance* instance);
 
 /**
+ * Given that a project has been loaded, check what the default value for the
+ * commands 'run', 'build' or 'test' are:
+ */
+typedef struct {
+    NameOption build;
+    NameOption run;
+    NameOption test;
+} AtlasDefaultTargets;
+AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance);
+
+/**
  * Given that a project has been loaded, lookup the 'target' in the atlas
  * configuration. If it is an executable, call the function which is designated
  * as the entry point. Otherwise, throw an error.

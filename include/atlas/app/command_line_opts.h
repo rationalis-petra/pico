@@ -2,6 +2,7 @@
 #define __ATLAS_APP_COMMAND_LINE_OPTS
 
 #include "data/string.h"
+#include "data/option.h"
 #include "pico/data/string_array.h"
 #include <stdbool.h>
 
@@ -20,11 +21,11 @@ typedef struct {
 } InitOpts;
 
 typedef struct {
-    String target;
+    StringOption target;
 } BuildOpts;
 
 typedef struct {
-    String target;
+    StringOption target;
 } RunOpts;
 
 typedef struct {

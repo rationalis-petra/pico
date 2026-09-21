@@ -12,11 +12,22 @@ typedef enum {
     PString,
     PStringOption,
     PStringArray,
+
+    PCallback,
 } PropType;
 
 typedef struct {
+    PropCb callback;
+    void* in;
+    void* out;
+} CallbackInfo;
+
+typedef struct {
     String name;
-    void* location;
+    union {
+        CallbackInfo cb_info; 
+        void* location;
+    };
     PropType type;
 } Prop;
 
@@ -95,7 +106,15 @@ void add_name_array_prop(String propname, NameArray* location, PropSet* props) {
         .type = PNameArray,
     };
     push_prop(prop, &props->props);
+}
 
+void add_callback_prop(String propname, PropCb callback, void* in, void* out, PropSet* props) {
+    Prop prop = {
+        .name = propname,
+        .cb_info = {.callback = callback, .in = in, .out = out},
+        .type = PCallback,
+    };
+    push_prop(prop, &props->props);
 }
 
 void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* point, Allocator* a) {
@@ -250,6 +269,10 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
 
                 StringArray* dest = prop.location;
                 *dest = arr;
+                break;
+            }
+            case PCallback: {
+                prop.cb_info.callback(term, point, prop.cb_info.in, prop.cb_info.out);
                 break;
             }
             }

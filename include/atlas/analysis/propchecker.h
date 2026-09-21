@@ -19,6 +19,9 @@ void add_name_prop(String propname, Name* location, PropSet* props);
 void add_name_option_prop(String propname, NameOption* location, PropSet* props);
 void add_name_array_prop(String propname, NameArray* location, PropSet* props);
 
+typedef void (*PropCb)(RawAtlas raw, PiErrorPoint *point, void* in, void* out);
+void add_callback_prop(String propname, PropCb callback, void* in, void* out, PropSet* props);
+
 void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* point, Allocator* a);
 
 void check_props(PropSet* props, bool checks[], Range range, PiErrorPoint* point, Allocator* a);
