@@ -56,6 +56,7 @@ typedef enum {
     SVariant,
     SFlags,
     SFlagsIntersect,
+    SFlagsEmpty,
     SMatch,
     STile,
     STileElt,
@@ -220,8 +221,7 @@ typedef struct {
 } SynFlagsIntersect;
 
 typedef struct {
-    SymbolArray flags; 
-    SynRef ref;
+    SynRef val;
 } SynFlagsEmpty;
 
 typedef struct {

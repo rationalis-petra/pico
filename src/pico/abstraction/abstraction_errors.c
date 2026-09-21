@@ -192,6 +192,16 @@ _Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, Abstracti
     throw_pi_error(ctx.point, err);
 }
 
+// Flags
+// ------
+_Noreturn void flags_empty_requires_val(RawTree raw, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("flags-empty? has been provided no values: flags empty requires a value (flag).", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // ------------------------------------------------------------
 //   Type Formers
 // ------------------------------------------------------------

@@ -77,6 +77,7 @@ _Noreturn void type_error_flag_has_args(PiType* type, SynRef variant, TypeCheckC
 
 // Flag Operations
 _Noreturn void type_error_flags_not_flag(PiType* type, SynRef variant, TypeCheckContext ctx);
+_Noreturn void type_error_flags_empty_not_flag(PiType* type, SynRef variant, TypeCheckContext ctx);
 
 // Match 
 _Noreturn void type_error_match_invalid_type(PiType* type, SynRef variant, TypeCheckContext ctx);

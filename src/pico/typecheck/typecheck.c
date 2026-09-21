@@ -983,6 +983,13 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SFlagsEmpty: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType) {.sort = TPrim, .prim = Bool};
+        type_infer_i(untyped.flags_empty.val, env, ctx);
+        set_type(ref, t, ctx.tape);
+        break;
+    }
     case SMatch: {
         // Typecheck the input 
         type_infer_i(untyped.match.val, env, ctx);
@@ -2562,10 +2569,18 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SFlagsIntersect: {
-        PiType* unwrapped = get_type(ref, ctx.tape);
-        PiType* type = unwrap_type(unwrapped, type_env_module(env), ctx.pia, ctx.a);
-        if (type->sort != TFlags) {
+        PiType* type = get_type(ref, ctx.tape);
+        PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+        if (unwrapped->sort != TFlags) {
             type_error_flags_not_flag(type, ref, ctx);
+        }
+        break;
+    }
+    case SFlagsEmpty: {
+        PiType* type = get_type(syn.flags_empty.val, ctx.tape);
+        PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+        if (unwrapped->sort != TFlags) {
+            type_error_flags_empty_not_flag(type, ref, ctx);
         }
         break;
     }
@@ -2976,7 +2991,6 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
-
     case SFlags: {
         for (size_t i = 0; i < typed.flags.flags.len; i++) {
             squash_types(typed.flags.flags.data[i], env, ctx);
@@ -2987,6 +3001,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < typed.flags.flags.len; i++) {
             squash_types(typed.flags_intersect.flags.data[i], env, ctx);
         }
+        break;
+    }
+    case SFlagsEmpty: {
+        squash_types(typed.flags_empty.val, env, ctx);
         break;
     }
     case SMatch: {

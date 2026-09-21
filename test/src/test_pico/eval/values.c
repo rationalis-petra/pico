@@ -302,17 +302,15 @@ void run_pico_eval_values_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(is Perms (flags-intersect))");
     }
 
-    /*
-    if (test_start(log, mv_string("has-flags"))) {
+    if (test_start(log, mv_string("flag-check-empty"))) {
         bool expected = true;
         RUN("(def Perms Flags :read :write :execute)");
-        TEST_EQ("(has-flags [:read :write] (flags Perms:read Perms:write))");
+        TEST_EQ("(flags-empty? (is Perms (flags)))");
     }
 
-    if (test_start(log, mv_string("flags"))) {
-        int64_t expected = 2;
+    if (test_start(log, mv_string("flag-check-nonempty"))) {
+        bool expected = false;
         RUN("(def Perms Flags :read :write :execute)");
-        TEST_EQ("(intersect-flags (flags Perms:read Perms:write) (Perms:write Perms:execute))");
+        TEST_EQ("(flags-empty? (flags Perms:read Perms:write))");
     }
-    */
 }

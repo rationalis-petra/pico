@@ -1078,17 +1078,22 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FFlagsEmpty: {
-        SynArray arr = mk_syn_array(raw.branch.nodes.len - 1, a);
-        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            SynRef flag = abstract_expr_i(raw.branch.nodes.data[i], ctx);
-            push_syn(flag, &arr);
+        if (raw.branch.nodes.len < 2) {
+            flags_empty_requires_val(raw, ctx);
         }
 
-        Syntax syn = {
-            .type = SFlagsIntersect,
-            .flags_intersect.flags = arr,
-        };
         SynRef res = new_syntax(ctx.tape);
+
+        RawTree *raw_term = (raw.branch.nodes.len == 2)
+            ? &raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1, ctx.pia);
+
+        SynRef body = abstract_expr_i(*raw_term, ctx);
+        Syntax syn = {
+            .type = SFlagsEmpty,
+            .flags_empty.val = body,
+        };
+
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;

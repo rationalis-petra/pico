@@ -524,8 +524,23 @@ _Noreturn void type_error_flags_not_flag(PiType* type, SynRef ref, TypeCheckCont
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(6, a);
 
-    push_ptr(mv_cstr_doc("Using 'flags', but the terms within do not have a type of sort 'Flags'.", a), &nodes);
+    push_ptr(mv_cstr_doc("Using 'flags' or 'intersect-flags', but the terms within do not have a type of sort 'Flags'.", a), &nodes);
     push_ptr(mv_cstr_doc("Instead, the type they was inferred to have is:", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
+
+    PicoError err = {
+        .range = get_range(ref, ctx.tape).term,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_flags_empty_not_flag(PiType* type, SynRef ref, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Using 'flags-empty?', but the term proveded does not have a type of sort 'Flags'.", a), &nodes);
+    push_ptr(mv_cstr_doc("Instead, the type provided was:", a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {

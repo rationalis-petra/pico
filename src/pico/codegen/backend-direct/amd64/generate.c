@@ -2344,6 +2344,15 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         break;
     }
+    case SFlagsEmpty: {
+        generate_i(syn.flags_empty.val, env, ictx);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
+        build_binary_op(Cmp, reg(RAX, sz_64), reg(RDX, sz_64), ass, a, point);
+        build_unary_op(SetE, reg(RCX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+        break;
+    }
     case SMatch: {
         // Generate code for the value
         SynRef match_value = syn.match.val;
