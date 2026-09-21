@@ -1,4 +1,5 @@
 #ifdef USE_VULKAN
+#ifdef WINDOW_SYSTEM
 
 #include "platform/signals.h"
 #include "platform/hedron/hedron.h"
@@ -7,14 +8,45 @@
 void retire_swapchain(HdSwapchain* swapchain);
 void wait_present_context(HdLogicalDevice* device, HdPresentContext* context);
 
-static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, HdSurface* surface) {
+VkResult create_window_surface(struct PlWindow *window, HdInstance* instance, VkSurfaceKHR* out) {
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+    VkXlibSurfaceCreateInfoKHR create_info = (VkXlibSurfaceCreateInfoKHR){
+        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+        .dpy = get_x11_display(),
+        .window = window->x11_window,
+    };
+
+    return vkCreateXlibSurfaceKHR(instance->vk_instance, &create_info, NULL, out);
+
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
+    VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
+    create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+    create_info.display = get_wl_display();
+    create_info.surface = window->surface;
+
+    return vkCreateWaylandSurfaceKHR(instance->vk_instance, &create_info, NULL, out);
+
+#elif OS_FAMILY == WINDOWS
+    VkWin32SurfaceCreateInfoKHR create_info = (VkWin32SurfaceCreateInfoKHR) {
+        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+        .hwnd = window->impl,
+        .hinstance = GetModuleHandle(NULL),
+    };
+
+    return vkCreateWin32SurfaceKHR(instance->vk_instance, &create_info, NULL, out);
+#else
+#error "unrecognized OS"
+#endif
+}
+
+static VkSurfaceFormatKHR choose_swap_surface_format(HdLogicalDevice* device, VkSurfaceKHR surface) {
     uint32_t num_formats;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device->device,
-                                         surface->surface,
+                                         surface,
                                          &num_formats, NULL);
     VkSurfaceFormatKHR* available_formats = mem_alloc(sizeof(VkSurfaceFormatKHR) * num_formats, device->gpa);
     vkGetPhysicalDeviceSurfaceFormatsKHR(device->physical_device->device,
-                                         surface->surface, &num_formats,
+                                         surface, &num_formats,
                                          available_formats);
 
     VkSurfaceFormatKHR selected_format = available_formats[0];
@@ -78,11 +110,11 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     // TODO: aaltonen's version requires a lot more checking/assertions...
     // probably want to add taht...
     HdLogicalDevice* device = swapchain->device;
-    HdSurface* surface = swapchain->surface;
+    VkSurfaceKHR surface = swapchain->surface;
     // TODO: We do use check result here for 'correct' return values, but
     //       should make sure memory is cleaned up properly if/when that is the case.
     VkSurfaceCapabilitiesKHR surface_capabilities;
-    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device->device, surface->surface, &surface_capabilities);
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device->device, surface, &surface_capabilities);
     if (result != VK_SUCCESS) return result;
 
     // requested_image_count = min(max(info.requested, minPossiple), maxPossible)
@@ -96,14 +128,14 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     }
 
     HdExtent desired_extent = {
-        .width = surface->window->width,
-        .height = surface->window->height,
+        .width = swapchain->window->width,
+        .height = swapchain->window->height,
     };
     VkExtent2D extent = choose_swap_extent(surface_capabilities, desired_extent);
     VkSurfaceFormatKHR surface_format = choose_swap_surface_format(device, surface);
     VkSwapchainCreateInfoKHR swapchain_create_info = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = surface->surface,
+        .surface = surface,
         .minImageCount = requested_image_count,
 
         .imageFormat = surface_format.format,
@@ -176,6 +208,7 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
 
     *swapchain = (HdSwapchain) {
         .swapchain = vk_swapchain,
+        .window = swapchain->window,
         .surface = surface,
         .device = device,
         .extent = {.width = extent.width, .height = extent.height},
@@ -195,14 +228,26 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
     return VK_SUCCESS;
 }
 
-HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surface) {
+HdPtrResult create_swapchain(HdLogicalDevice* device, struct PlWindow* window) {
+    // TODO: check for present support on graphics queue
+
+    VkSurfaceKHR surface;
+    VkResult result = create_window_surface(window, device->instance, &surface);
+    if (result != VK_SUCCESS) {
+        return (HdPtrResult) {
+            .type = Err,
+            .error = convert_error_type(result),
+        };
+    }
+
     HdSwapchain* swapchain = mem_alloc(sizeof(HdSwapchain), device->gpa);
     *swapchain = (HdSwapchain) {
         .swapchain = VK_NULL_HANDLE,
+        .window = window,
         .surface = surface,
         .device = device,
     };
-    VkResult result = rebuild_swapchain(swapchain);
+    result = rebuild_swapchain(swapchain);
     if (result == VK_SUCCESS) {
         push_ptr(swapchain, &device->swapchains);
         return (HdPtrResult) {
@@ -245,6 +290,7 @@ void destroy_swapchain(HdSwapchain* swapchain) {
         vkDestroySemaphore(swapchain->device->device, swapchain->present_contexts[i].rendered, NULL);
         vkDestroyFence(swapchain->device->device, swapchain->present_contexts[i].presented, NULL);
     }
+    vkDestroySurfaceKHR(swapchain->device->instance->vk_instance, swapchain->surface, NULL);
     mem_free(swapchain->initialized, swapchain->device->gpa);
     mem_free(swapchain->present_contexts, swapchain->device->gpa);
     mem_free(swapchain->render_views, swapchain->device->gpa);
@@ -254,7 +300,7 @@ void destroy_swapchain(HdSwapchain* swapchain) {
 
 bool swapchain_surface_configuration_changed(HdSwapchain* swapchain) {
     VkSurfaceCapabilitiesKHR capabilities = {};
-    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(swapchain->device->physical_device->device, swapchain->surface->surface, &capabilities);
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(swapchain->device->physical_device->device, swapchain->surface, &capabilities);
     if (result != VK_SUCCESS) {
         panic(mv_string("TODO: handle failure in swapchain_surface_configuration_changed"));
     }
@@ -368,4 +414,5 @@ void present(HdSwapchain* swapchain)  {
     }
 }
 
+#endif
 #endif

@@ -19,8 +19,6 @@ static PiType* error_code_ty;
 
 static PiType* instance_ty;
 
-static PiType* surface_ty;
-
 static PiType* physical_device_ty;
 static PiType* logical_device_ty;
 static PiType* device_type_ty;
@@ -107,22 +105,6 @@ static void build_teardown_hedron_instance_fn(PiType* type, Assembler* ass, PiAl
     convert_c_fn(teardown_hedron_instance, &fn_ctype, type, ass, a, point); 
 }
 
-
-#ifdef WINDOW_SYSTEM
-static void build_create_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 2,
-                                 "window", mk_voidptr_ctype(pia),
-                                 "instance", mk_voidptr_ctype(pia),
-                                 mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
-    convert_c_fn(create_window_surface, &fn_ctype, type, ass, a, point); 
-}
-
-static void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
-    convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
-}
-#endif
-
 static PtrSlice relic_get_physical_devices(HdInstance* instance) {
     PiAllocator curr = get_std_current_allocator();
     Allocator alloc = convert_to_callocator(&curr);
@@ -191,10 +173,11 @@ HdLogicalDevice* get_current_device() {
 //   Swapchain
 // ------------
 
+#ifdef WINDOW_SYSTEM
 void build_create_swapchain_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
                                  "device", mk_voidptr_ctype(pia),
-                                 "surface", mk_voidptr_ctype(pia),
+                                 "window", mk_voidptr_ctype(pia),
                                  mk_result_ctype(pia, mk_voidptr_ctype(pia), mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned})));
     convert_c_fn(create_swapchain, &fn_ctype, type, ass, a, point); 
 }
@@ -231,6 +214,7 @@ void build_present_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator*
                                  (CType){.sort = CSVoid});
     convert_c_fn(present, &fn_ctype, type, ass, a, point); 
 }
+#endif
 
 //   Memory & Resources
 // ----------------------
@@ -945,38 +929,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
 
     /** 
-     * Window System Definitions.
-     * -------------------------
-     *  These allow hedron to interact with a window system, but are only present
-     *  if the 'WINDOW_SYSTEM' component is requested in the build (see default.config).
-     */
-    typep = mk_opaque_type(pia, "Surface", module, mk_prim_type(pia, Address));
-    type = (PiType) {.sort = TType};
-    name = string_to_name(mv_string("Surface"));
-    add_def(module, name, type, &typep, null_segments, NULL);
-    clear_assembler(ass);
-    e = get_def_internal(name, module);
-    surface_ty = e->value;
-
-#ifdef WINDOW_SYSTEM
-    typep = mk_proc_type(pia, 2, get_window_ty(), instance_ty, mk_type_app(pia, get_result_type(), surface_ty, error_code_ty));
-    build_create_window_surface_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("create-surface"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, Unit));
-    build_destroy_window_surface_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("destroy-surface"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-#endif
-
-    /** 
      * Device Management
      * ----------------
      * List physical devices, query their properties, select a physical
@@ -1090,6 +1042,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
      * 
      */
 
+#ifdef WINDOW_SYSTEM
     type = (PiType) {.sort = TType};
     typep = mk_opaque_type(pia, "Swapchain", module, mk_prim_type(pia, Address));
     name = string_to_name(mv_string("Swapchain"));
@@ -1105,7 +1058,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def_internal(name, module);
     render_view_ty = e->value;
 
-    typep = mk_proc_type(pia, 2, logical_device_ty, surface_ty, mk_type_app(pia, get_result_type(), swapchain_ty, error_code_ty));
+    typep = mk_proc_type(pia, 2, logical_device_ty, get_window_ty(), mk_type_app(pia, get_result_type(), swapchain_ty, error_code_ty));
     build_create_swapchain_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-swapchain"));
     fn_segments.code = get_instructions(ass);
@@ -1146,6 +1099,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+#endif
 
     /**
      *   Memory Allocation: 

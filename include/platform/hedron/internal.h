@@ -122,6 +122,7 @@ void remove_texture_initialization(HdTextureInitialization* initialization);
 
 struct HdLogicalDevice {
     VkDevice device;
+    HdInstance* instance;
     Allocator* gpa; // Allocator is accessed often, so keep it high up.
 
     PtrArray swapchains;
@@ -182,8 +183,9 @@ struct HdRenderView {
 struct HdSwapchain {
     // Context 
     VkSwapchainKHR swapchain;
+    VkSurfaceKHR surface;
+    PlWindow* window;
     HdLogicalDevice* device;
-    HdSurface* surface;
     HdExtent extent;
 
     // Current State - will change as program executes

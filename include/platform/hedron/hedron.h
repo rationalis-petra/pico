@@ -76,9 +76,9 @@ HdPtrResult create_hedron_instance(Allocator* a);
 void teardown_hedron_instance(HdInstance* instance);
 
 // Window System Interaction Surfaces
-typedef struct HdSurface HdSurface;
-HdPtrResult create_window_surface(struct PlWindow* window, HdInstance* instance);
-void destroy_window_surface(HdSurface* surface);
+//typedef struct HdSurface HdSurface;
+//HdPtrResult create_window_surface(struct PlWindow* window, HdInstance* instance);
+//void destroy_window_surface(HdSurface* surface);
 
 // Physical & Logical Devices
 typedef struct HdPhysicalDevice HdPhysicalDevice;
@@ -123,7 +123,7 @@ uint32_t get_texture_heap_alignment(HdLogicalDevice* device);
 // whether we want it elsewhere? (window api?)
 typedef struct HdSwapchain HdSwapchain;
 typedef struct HdFrame HdFrame;
-HdPtrResult create_swapchain(HdLogicalDevice* device, HdSurface* surfaceimages);
+HdPtrResult create_swapchain(HdLogicalDevice* device, struct PlWindow* window);
 void destroy_swapchain(HdSwapchain* swapchain);
 
 typedef struct HdRenderView HdRenderView;

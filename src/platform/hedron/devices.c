@@ -485,6 +485,7 @@ HdPtrResult create_logical_device(HdPhysicalDevice* device, HdInstance* instance
     HdLogicalDevice* ldevice = mem_alloc(sizeof(HdLogicalDevice), instance->gpa);
     *ldevice = (HdLogicalDevice) {
         .device = vk_ldevice,
+        .instance = instance,
         .physical_device = device,
         .gpa = instance->gpa,
 
