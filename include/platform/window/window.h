@@ -77,6 +77,13 @@ typedef struct {
     uint32_t stride;
 } FrameBuffer;
 
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t width;
+    uint32_t height;
+} DamageRect;
+
 OPTION_TYPE(FrameBuffer, FrameBuffer)
 
 /**

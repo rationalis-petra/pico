@@ -258,6 +258,7 @@ static struct wl_registry_listener wl_listener = (struct wl_registry_listener) {
 struct wl_display *get_wl_display() {
     return wl_display;
 }
+
 static void win_buffer_release(void* data, struct wl_buffer* wl_buffer) {
     WinBuffer* buf = (WinBuffer*)data;
     buf->busy = false;
@@ -420,25 +421,23 @@ WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
 }
 
 FrameBufferOption acquire_framebuffer(PlWindow* window) {
-    if (!window || window->width == 0 || window->height == 0 || window->render.claimed_by_hedron || !window->configured) {
+    if (!window || window->width == 0 || window->height == 0 ||
+        window->render.claimed_by_hedron || window->render.claimed_by_cpu ||
+        !window->configured) {
         return (FrameBufferOption){.type = None};
     }
-    // TODO: thread safety here?
-    window->render.claimed_by_cpu = true;
 
     uint32_t w = window->width;
     uint32_t h = window->height;
 
-    /* Flush pending display events to check if compositor released buffers */
     wl_display_dispatch_pending(wl_display);
 
-    /* Ping-pong to the next backbuffer */
-    int idx = (window->render.current_buffer + 1) % 2;
+    /* Ping-pong to the next backbuffer. */
+    uint32_t idx = (window->render.current_buffer + 1) % 2;
     WinBuffer* buf = &window->render.buffers[idx];
 
-    /* If the buffer is still in use by compositor, dispatch and wait briefly */
     while (buf->busy) {
-        if (wl_display_dispatch(wl_display) == -1) {
+        if (wl_display_dispatch(wl_display) < 0) {
             return (FrameBufferOption){.type = None};
         }
     }
@@ -480,9 +479,9 @@ FrameBufferOption acquire_framebuffer(PlWindow* window) {
         }
     }
 
-    window->render.current_buffer = idx;
-
     /* Populate user view */
+    window->render.current_buffer = idx;
+    window->render.claimed_by_cpu = true;
     return (FrameBufferOption) {
         .type = Some,
         .val = {
@@ -499,7 +498,6 @@ void present_framebuffer(FrameBuffer frame, PlWindow* window) {
         return;
     }
 
-    // TODO: if try and acquire twice, this may be the wrong buffer index!
     WinBuffer* buf = &window->render.buffers[window->render.current_buffer];
 
     /* Mark buffer busy until compositor sends release event */
@@ -517,6 +515,7 @@ void present_framebuffer(FrameBuffer frame, PlWindow* window) {
 
     /* Flush out queued protocol requests to the Wayland socket */
     wl_display_flush(wl_display);
+    window->render.claimed_by_cpu = false;
 }
 
 KeyboardState* create_keyboard_state(KeyMap* map) {

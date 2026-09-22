@@ -231,6 +231,13 @@ VkResult rebuild_swapchain(HdSwapchain* swapchain) {
 HdPtrResult create_swapchain(HdLogicalDevice* device, struct PlWindow* window) {
     // TODO: check for present support on graphics queue
 
+    if (window->render.claimed_by_cpu) {
+        return (HdPtrResult) {
+            .type = Err,
+            .error = HD_NOT_READY,
+        };
+    }
+
     VkSurfaceKHR surface;
     VkResult result = create_window_surface(window, device->instance, &surface);
     if (result != VK_SUCCESS) {
@@ -250,6 +257,7 @@ HdPtrResult create_swapchain(HdLogicalDevice* device, struct PlWindow* window) {
     result = rebuild_swapchain(swapchain);
     if (result == VK_SUCCESS) {
         push_ptr(swapchain, &device->swapchains);
+        window->render.claimed_by_hedron = true;
         return (HdPtrResult) {
             .type = Ok,
             .val = swapchain,

@@ -115,8 +115,8 @@ void build_present_framebuffer_fn(PiType* type, Assembler* ass, PiAllocator* pia
                                "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                "stride", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
     CType fn_ctype = mk_fn_ctype(pia, 2,
-                                 "window", mk_voidptr_ctype(pia),
                                  "framebuffer", fb,
+                                 "window", mk_voidptr_ctype(pia),
                                  (CType){.sort = CSVoid});
 
     convert_c_fn(present_framebuffer, &fn_ctype, type, ass, a, point);
@@ -396,7 +396,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2,  copy_pi_type_p(window_ty, pia), framebuffer_ty, mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, framebuffer_ty, window_ty, mk_prim_type(pia, Unit));
     build_present_framebuffer_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("present-framebuffer"));
     fn_segments.code = get_instructions(ass);

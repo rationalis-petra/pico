@@ -49,7 +49,6 @@ typedef struct {
 
 struct PlWindow {
     struct wl_surface* surface; // Window surface (from compositor)
-    struct wl_buffer* buffer; // control/access to shared memory buffer
     struct xdg_toplevel* toplevel; // This represents the window, and allows us
                                    // to do things like interact with header
                                    // bars (if they exist) etc.
