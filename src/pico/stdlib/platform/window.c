@@ -15,6 +15,8 @@
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
+static PiType* pixel_ty;
+static PiType* framebuffer_ty;
 static PiType* keystate_ty;
 static PiType* keymap_ty;
 static PiType* raw_key_ty;
@@ -65,6 +67,59 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, PiAllocator* pia
                                  mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
     convert_c_fn(pl_window_should_close, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+WinMessageSlice relic_poll_events(PlWindow* window) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return pl_poll_events(window, &a);
+}
+
+void build_poll_events_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
+
+    convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_acquire_framebuffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType px_slice = mk_struct_ctype(pia, 2,
+                                     "data", mk_voidptr_ctype(pia),
+                                     "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fb = mk_struct_ctype(pia, 4,
+                               "pixels", px_slice,
+                               "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "stride", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fbo = mk_struct_ctype(pia, 2,
+                               "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                               "framebuffer", fb);
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia),
+                                 fbo);
+
+    convert_c_fn(acquire_framebuffer, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_present_framebuffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType px_slice = mk_struct_ctype(pia, 2,
+                                     "data", mk_voidptr_ctype(pia),
+                                     "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+    CType fb = mk_struct_ctype(pia, 4,
+                               "pixels", px_slice,
+                               "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "stride", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "window", mk_voidptr_ctype(pia),
+                                 "framebuffer", fb,
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(present_framebuffer, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, pia);
 }
@@ -121,21 +176,6 @@ void build_get_key_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator*
                                mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
 
     convert_c_fn(get_key, &fn_ctype, type, ass, a, point);
-
-    delete_c_type(fn_ctype, pia);
-}
-
-
-WinMessageSlice relic_poll_events(PlWindow* window) {
-    PiAllocator pia = get_std_current_allocator();
-    Allocator a = convert_to_callocator(&pia);
-    return pl_poll_events(window, &a);
-}
-
-void build_poll_events_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_slice_ctype(pia));
-
-    convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, pia);
 }
@@ -259,15 +299,15 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     key_ty = e->value;
 
 
-    typep = mk_enum_type(pia, 4,
-                         "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                         "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
-                         "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                         "keymap", 1, keymap_ty);
-
+    typep = mk_named_type(pia, "WindowMessage",
+        mk_enum_type(pia, 4,
+                     "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                     "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
+                     "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                     "keymap", 1, keymap_ty));
 
     type = (PiType) {.sort = TType};
-    name = string_to_name(mv_string("Message"));
+    name = string_to_name(mv_string("WindowMessage"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
@@ -316,6 +356,49 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_type_app(pia, get_slice_type(), window_message_ty));
     build_poll_events_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("poll-events"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_named_type(pia, "Pixel",
+        mk_struct_type(pia, 4,
+                     "b", mk_prim_type(pia, UInt_8), 
+                     "g", mk_prim_type(pia, UInt_8),
+                     "r", mk_prim_type(pia, UInt_8),
+                     "a", mk_prim_type(pia, UInt_8)));
+
+    type = (PiType) {.sort = TType};
+    name = string_to_name(mv_string("Pixel"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    pixel_ty = e->value;
+
+    typep = mk_named_type(pia, "FrameBuffer",
+        mk_struct_type(pia, 4,
+                     "pixels", mk_type_app(pia, get_slice_type(), pixel_ty), 
+                     "width", mk_prim_type(pia, UInt_32),
+                     "height", mk_prim_type(pia, UInt_32),
+                     "stride", mk_prim_type(pia, UInt_32)));
+
+    name = string_to_name(mv_string("FrameBuffer"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    framebuffer_ty = e->value;
+
+    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_type_app(pia, get_maybe_type(), framebuffer_ty));
+    build_acquire_framebuffer_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("acquire-framebuffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2,  copy_pi_type_p(window_ty, pia), framebuffer_ty, mk_prim_type(pia, Unit));
+    build_present_framebuffer_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("present-framebuffer"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

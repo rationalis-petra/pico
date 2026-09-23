@@ -12,7 +12,7 @@
 #include "atlas/analysis/abstraction.h"
 #include "atlas/eval/instance.h"
 
-static const char* version = "0.0.1";
+static const char* version = "0.0.2";
 
 bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
@@ -185,7 +185,26 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
             display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
             if (!fail) {
-                atlas_build(instance, command.build.target, region, &point);
+                bool has_target = false;
+                String target = {};
+                if (command.build.target.type == Some) {
+                    target = command.build.target.val;
+                    has_target = true;
+                } else {
+                    AtlasDefaultTargets defaults = atlas_default_targets(instance);
+                    if (defaults.run.type == Some) {
+                        target = view_name_string(defaults.build.val);
+                        has_target = true;
+                    }
+                }
+
+                if (has_target) {
+                    atlas_build(instance, target, region, &point);
+                } else {
+                    write_fstring(mv_string("Tried to run 'atlas build' without a target or default target.\n"), out);
+                    write_fstring(mv_string("Please either run as 'altas build <target>' or add (default :build <targetname>) to\n"), out);
+                    write_fstring(mv_string("the package in the atlas-project file.\n"), out);
+                }
             }
         }
         delete_region_allocator(region);
@@ -208,7 +227,26 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
             display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
             if (!fail) {
-                atlas_run(instance, command.run.target, region, &point);
+                bool has_target = false;
+                String target = {};
+                if (command.run.target.type == Some) {
+                    target = command.run.target.val;
+                    has_target = true;
+                } else {
+                    AtlasDefaultTargets defaults = atlas_default_targets(instance);
+                    if (defaults.run.type == Some) {
+                        target = view_name_string(defaults.run.val);
+                        has_target = true;
+                    }
+                }
+
+                if (has_target) {
+                    atlas_run(instance, target, region, &point);
+                } else {
+                    write_fstring(mv_string("Tried to run 'atlas run' without a target or default target.\n"), out);
+                    write_fstring(mv_string("Please either run as 'altas run <target>' or add (default :run <targetname>) to\n"), out);
+                    write_fstring(mv_string("the package in the atlas-project file.\n"), out);
+                }
             }
         }
         delete_region_allocator(region);

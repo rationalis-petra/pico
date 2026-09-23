@@ -85,7 +85,7 @@ bool pl_window_should_close(PlWindow *window) {
 }
 
 #include <stdio.h>
-WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
+WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = mk_wm_array(8, a);
     XEvent event;
     if (!initialized) {
@@ -187,7 +187,11 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
         }
         }
     }
-    return out;
+    WinMessageSlice return_val = {
+        .data = out.data,
+        .len = out.len,
+    };
+    return return_val;
 }
 
 // Key handling: 

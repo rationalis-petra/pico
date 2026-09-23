@@ -299,6 +299,15 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FVariant:
         out = mk_str_doc(mv_string("::variant"), a);
         break;
+    case FFlags:
+        out = mk_str_doc(mv_string("::flags"), a);
+        break;
+    case FFlagsIntersect:
+        out = mk_str_doc(mv_string("::flags-intersect"), a);
+        break;
+    case FFlagsEmpty:
+        out = mk_str_doc(mv_string("::flags-empty?"), a);
+        break;
     case FMatch:
         out = mk_str_doc(mv_string("::match"), a);
         break;
@@ -403,7 +412,10 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::Struct"), a);
         break;
     case FEnumType:
-        out = mk_str_doc(mv_string("::enum"), a);
+        out = mk_str_doc(mv_string("::Enum"), a);
+        break;
+    case FFlagsType:
+        out = mk_str_doc(mv_string("::Flags"), a);
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::Proc"), a);
