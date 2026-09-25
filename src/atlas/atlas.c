@@ -3,12 +3,12 @@
 #include "platform/memory/region.h"
 #include "platform/filesystem/filesystem.h"
 
-#include "atlas/atlas.h"
+#include "pico/parse/parse.h"
 
+#include "atlas/atlas.h"
 #include "atlas/data/error.h"
 #include "atlas/app/command_line_opts.h"
 #include "atlas/app/help_string.h"
-#include "atlas/parse.h"
 #include "atlas/analysis/abstraction.h"
 #include "atlas/eval/instance.h"
 
@@ -22,7 +22,8 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
 
     bool running = true;
     while (running) {
-        AtParseResult parse_res = parse_atlas_defs(in, region);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        ParseResult parse_res = parse_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {
@@ -33,15 +34,9 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
             display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), filename, &ra);
             goto on_error_generic;
         } else {
-            Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
-            switch (stanza.type) {
-            case StExecutable:
-                add_executable(stanza.executable, path, instance);
-                break;
-            case StLibrary:
-                add_library(stanza.library, path, instance);
-                break;
-            }
+            ExprPool* pool = get_expr_pool(instance);
+            Def def = abstract_atlas_def(parse_res.result, pool, region, &pi_point);
+            atlas_add_def(instance, def);
         }
     }
 
@@ -64,7 +59,8 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
 
     bool running = true;
     while (running) {
-        AtParseResult parse_res = parse_atlas_defs(in, region);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        ParseResult parse_res = parse_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {

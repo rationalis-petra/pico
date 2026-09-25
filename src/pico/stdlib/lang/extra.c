@@ -14,6 +14,7 @@
 #include "pico/stdlib/meta/meta.h"
 #include "pico/syntax/concrete.h"
 #include "pico/abstraction/abstraction.h"
+#include "pico/abstraction/helpers.h"
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
 
@@ -325,13 +326,14 @@ MacroResult loop_macro(RawTreePiList nodes) {
                 }
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("while")))) {
                 if (stage == 1) stage++;
-                RawTree *raw_term = (branch.branch.nodes.len == 2)
-                    ? &branch.branch.nodes.data[1]
-                    : raw_slice(&branch, 1, pia);
+                RawTree* term_ptr = call_alloc(sizeof(RawTree), pia);
+                *term_ptr = (branch.branch.nodes.len == 2)
+                    ? branch.branch.nodes.data[1]
+                    : raw_slice(&branch, 1);
                 if (stage == 0) {
-                    push_addr(raw_term, &loop_whiles);
+                    push_addr(term_ptr, &loop_whiles);
                 } else {
-                    push_addr(raw_term, &loop_end_whiles);
+                    push_addr(term_ptr, &loop_end_whiles);
                 }
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                 // let! gets an exception because loop bodies contain an

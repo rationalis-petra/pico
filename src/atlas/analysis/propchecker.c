@@ -2,16 +2,17 @@
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
 
+#include "pico/abstraction/helpers.h"
 #include "atlas/analysis/propchecker.h"
 
 typedef enum {
+    PExpr,
+    PExprOption,
+    PExprArray,
+
     PName,
     PNameOption,
     PNameArray,
-
-    PString,
-    PStringOption,
-    PStringArray,
 
     PCallback,
 } PropType;
@@ -53,29 +54,29 @@ void delete_prop_set(PropSet *set) {
     mem_free(set, set->gpa);
 }
 
-void add_string_prop(String propname, String* location, PropSet* props) {
+void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PString,
+        .type = PExpr,
     };
     push_prop(prop, &props->props);
 }
 
-void add_string_option_prop(String propname, StringOption* location, PropSet* props) {
+void add_expr_option_prop(String propname, ExprOption* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PStringOption,
+        .type = PExprOption,
     };
     push_prop(prop, &props->props);
 }
 
-void add_string_array_prop(String propname, StringArray* location, PropSet* props) {
+void add_expr_array_prop(String propname, ExprArray* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PStringArray,
+        .type = PExprArray,
     };
     push_prop(prop, &props->props);
 
@@ -117,9 +118,11 @@ void add_callback_prop(String propname, PropCb callback, void* in, void* out, Pr
     push_prop(prop, &props->props);
 }
 
-void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* point, Allocator* a) {
+void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData host_data, ExprPool* pool, PiErrorPoint* point, RegionAllocator* region) {
+    Allocator alc = ra_to_gpa(region);
+    Allocator* a = &alc;
     // Step 1: confirm is branch
-    if (term.type != AtlBranch) {
+    if (term.type != RawBranch) {
         PicoError err = {
             .range = term.range,
             .message = mk_str_doc(mv_string("expected compound term but got atom."), a),
@@ -127,7 +130,7 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
         throw_pi_error(point, err);
     }
 
-    if (term.branch.len == 0) {
+    if (term.branch.nodes.len == 0) {
         PicoError err = {
             .range = term.range,
             .message = mk_str_doc(mv_string("unexpected empty compound term."), a),
@@ -135,8 +138,8 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
         throw_pi_error(point, err);
     }
 
-    RawAtlas head = term.branch.data[0];
-    if (head.type != AtlAtom || head.atom.type != AtSymbol) {
+    RawTree head = term.branch.nodes.data[0];
+    if (head.type != RawAtom || head.atom.type != ASymbol) {
         PicoError err = {
             .range = head.range,
             .message = mk_str_doc(mv_string("Expected a property name here."), a),
@@ -156,7 +159,7 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
             checks[i] = true;
             switch (prop.type) {
             case PName:
-                if (term.branch.len != 2) {
+                if (term.branch.nodes.len != 2) {
                     PicoError err = {
                         .range = term.range,
                         .message = mk_str_doc(mv_string("This property expects a single symbol, but got multiple values."), a),
@@ -164,8 +167,8 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
                     throw_pi_error(point, err);
                 }
 
-                RawAtlas rstr = term.branch.data[1];
-                if (rstr.type != AtlAtom || rstr.atom.type != AtSymbol) {
+                RawTree rstr = term.branch.nodes.data[1];
+                if (rstr.type != RawAtom || rstr.atom.type != ASymbol) {
                     PicoError err = {
                         .range = term.range,
                         .message = mk_str_doc(mv_string("This property expects a single symbol, but got a different type of value."), a),
@@ -181,11 +184,11 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
                 panic(mv_string("not parsing symbol option yet!"));
                 break;
             case PNameArray: {
-                NameArray arr = mk_name_array(term.branch.len - 1, a);
+                NameArray arr = mk_name_array(term.branch.nodes.len - 1, a);
 
-                for (size_t i = 1; i < term.branch.len; i++) {
-                    RawAtlas rstr = term.branch.data[i];
-                    if (rstr.type != AtlAtom || rstr.atom.type != AtSymbol) {
+                for (size_t i = 1; i < term.branch.nodes.len; i++) {
+                    RawTree rstr = term.branch.nodes.data[i];
+                    if (rstr.type != RawAtom || rstr.atom.type != ASymbol) {
                         PicoError err = {
                             .range = rstr.range,
                             .message = mk_str_doc(mv_string("This property expects an array of symbols, but got a different type of value."), a),
@@ -200,74 +203,44 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
                 *dest = arr;
                 break;
             }
-            case PString: {
-                if (term.branch.len != 2) {
-                    PicoError err = {
-                        .range = term.range,
-                        .message = mk_str_doc(mv_string("This property expects a single string, but got multiple values."), a),
-                    };
-                    throw_pi_error(point, err);
-                }
+            case PExpr: {
+                RawTree expr = (term.branch.nodes.len == 2)
+                    ? term.branch.nodes.data[1]
+                    : raw_slice(&term, 1);
 
-                RawAtlas rstr = term.branch.data[1];
-                if (rstr.type != AtlAtom || rstr.atom.type != AtString) {
-                    PicoError err = {
-                        .range = term.range,
-                        .message = mk_str_doc(mv_string("This property expects a single string, but got a different type of value."), a),
-                    };
-                    throw_pi_error(point, err);
-                }
-
-                String* dest = prop.location;
-                String src = rstr.atom.string;
-                *dest = src;
+                ExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
+                ExprRef* dest = prop.location;
+                *dest = ref;
                 break;
             }
-            case PStringOption: {
-                if (term.branch.len != 2) {
-                    PicoError err = {
-                        .range = term.range,
-                        .message = mk_str_doc(mv_string("This property expects an (optional) string, but got multiple values."), a),
-                    };
-                    throw_pi_error(point, err);
-                }
-                RawAtlas rstr = term.branch.data[1];
+            case PExprOption: {
+                RawTree expr = (term.branch.nodes.len == 2)
+                    ? term.branch.nodes.data[1]
+                    : raw_slice(&term, 1);
 
-                if (rstr.type == AtlAtom && rstr.atom.type == AtKeyword
-                    && string_cmp(view_symbol_string(rstr.atom.keyword), mv_string("none")) == 0) {
-                    StringOption* opt = prop.location;
-                    *opt = (StringOption) {.type = None};
+                ExprOption* dest = prop.location;
+                // TODO: Remove this; instead make it an option type in the language
+                if (is_key_symbol(expr, string_to_symbol(mv_string("none")))) {
+                    *dest = (ExprOption) {
+                        .type = None,
+                    };
                 } else {
-                    if (rstr.type != AtlAtom || rstr.atom.type != AtString) {
-                        PicoError err = {
-                            .range = rstr.range,
-                            .message = mk_str_doc(mv_string("This property expects an (optional) single string, but got a different type of value."), a),
-                        };
-                        throw_pi_error(point, err);
-                    }
-
-                    StringOption* dest = prop.location;
-                    String src = rstr.atom.string;
-                    *dest = (StringOption) {.type = Some, .val = src};
+                    ExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
+                    *dest = (ExprOption) {
+                        .type = Some,
+                        .val = ref,
+                    };
                 }
                 break;
             }
-            case PStringArray: {
-                StringArray arr = mk_string_array(term.branch.len - 1, a);
-
-                for (size_t i = 1; i < term.branch.len; i++) {
-                    RawAtlas rstr = term.branch.data[i];
-                    if (rstr.type != AtlAtom || rstr.atom.type != AtString) {
-                        PicoError err = {
-                            .range = rstr.range,
-                            .message = mk_str_doc(mv_string("This property expects an array of single strings, but got a different type of value."), a),
-                        };
-                        throw_pi_error(point, err);
-                    }
-                    push_string(rstr.atom.string, &arr);
+            case PExprArray: {
+                ExprArray arr = mk_expr_array(term.branch.nodes.len - 1, a);
+                for (size_t i = 1; i < term.branch.nodes.len; i++) {
+                    ExprRef ref = abstract_rune_expr(term.branch.nodes.data[i], host_data, pool, region, point);
+                    push_expr(ref, &arr);
                 }
 
-                StringArray* dest = prop.location;
+                ExprArray* dest = prop.location;
                 *dest = arr;
                 break;
             }
@@ -292,14 +265,16 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
 bool is_mandatory(PropType type) {
     switch (type) {
     case PName:
-    case PString:
+    case PExpr:
         return true;
     default:
         return false;
     }
 }
 
-void check_props(PropSet* props, bool checks[], Range range, PiErrorPoint* point, Allocator* a) {
+void check_props(PropSet* props, bool checks[], Range range, PiErrorPoint* point, RegionAllocator* region) {
+    Allocator alc = ra_to_gpa(region);
+    Allocator* a = &alc;
     for (size_t i = 0; i < props->props.len; i++) {
         Prop prop = props->props.data[i];
 

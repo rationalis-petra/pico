@@ -1,12 +1,12 @@
-#ifndef __ATLAS_INSTANCE_H
-#define __ATLAS_INSTANCE_H
+#ifndef __ATLAS_EVAL_INSTANCE_H
+#define __ATLAS_EVAL_INSTANCE_H
 
 #include "platform/memory/region.h"
 
 #include "pico/values/modular.h"
+#include "rune/syntax/expression.h"
 
 #include "atlas/data/error.h"
-#include "atlas/syntax/stanza.h"
 #include "atlas/syntax/project.h"
 
 // ----------------------------------------------------------------------------
@@ -32,6 +32,7 @@ typedef struct {
     NameOption test;
 } AtlasDefaultTargets;
 AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance);
+ExprPool* get_expr_pool(AtlasInstance* instance);
 
 /**
  * Given that a project has been loaded, lookup the 'target' in the atlas
@@ -54,10 +55,9 @@ void atlas_build(AtlasInstance* instance, String target, RegionAllocator* region
  */
 void register_package(AtlasInstance* instance, Package* package);
 
-
 void set_instance_package(AtlasInstance* instance, Package* package);
 void set_instance_project(AtlasInstance* instance, Project project);
-void add_library(Library library, String path, AtlasInstance* instance);
-void add_executable(Executable executable, String path, AtlasInstance* instance);
+void atlas_add_def(AtlasInstance* instance, Def def);
+
 
 #endif

@@ -110,13 +110,14 @@ void inc_index(U64Array index, U64Array dims) {
     }
 }
 
-
-// Helper functions for dynamic variables
-// Need to maintain a set of current/valid vars + default values
-// so new threads know what to copy!
-// 
-// Implementation of dynamic variables
-// Each thread has an array, sized for # of dynamic vars
+/*
+ * Helper functions for dynamic variables
+ * Need to maintain a set of current/valid vars + default values
+ * so new threads know what to copy!
+ * 
+ * Implementation of dynamic variables
+ * Each thread has an array, sized for # of dynamic vars
+ */
 _Thread_local PtrArray thread_dynamic_vars;
 static Allocator* dynamic_var_allocator;
 static PtrArray dynamic_var_metadata;

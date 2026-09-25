@@ -12,6 +12,7 @@
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
 #include "pico/abstraction/abstraction.h"
+#include "pico/abstraction/helpers.h"
 #include "pico/abstraction/abstraction_errors.h"
 
 // Internal types
@@ -40,7 +41,6 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
 SymbolArray* try_get_path(SynRef syn, AbstractionICtx ctx);
 DevFlag check_dev_flags(RawTree curr, AbstractionICtx ctx);
 bool is_special(RawTree curr);
-bool is_key_symbol(RawTree raw, Symbol symbol);
 
 // Array-specific helpers
 void deduce_dimension(U64Array* dims, RawTree nodes, AbstractionICtx ctx);
@@ -56,9 +56,9 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
 
 PathSegmentArray get_path(RawTree raw, PiErrorPoint* point, Allocator* a);
 
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Interface Implementation
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 SynRef abstract_expr(RawTree raw, AbstractionCtx ctx) {
     ShadowEnv* s_env = mk_shadow_env(ctx.a, ctx.env);
@@ -265,62 +265,6 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
 // Internal Implementation
 //------------------------------------------------------------------------------
 
-bool eq_symbol(RawTree* raw, Symbol s) {
-  return (raw->type == RawAtom &&
-          raw->atom.type == ASymbol &&
-          raw->atom.symbol.name == s.name && 
-          raw->atom.symbol.did == s.did);
-}
-
-bool is_symbol(RawTree raw) {
-    return (raw.type == RawAtom && raw.atom.type == ASymbol);
-}
-
-RawTree* raw_slice(RawTree* raw, size_t drop, PiAllocator* pia) {
-#ifdef DEBUG
-  if (drop > raw->branch.nodes.len) {
-      panic(mv_string("Dropping more nodes than there are!"));
-  }
-#endif
-    RawTree* out = call_alloc(sizeof(RawTree), pia);
-    *out = (RawTree) {
-        .type = RawBranch,
-        .range.start = raw->branch.nodes.data[drop].range.start,
-        .range.end = raw->branch.nodes.data[raw->branch.nodes.len - 1].range.end,
-        .branch.hint = raw->branch.hint,
-        .branch.nodes.len = raw->branch.nodes.len - drop,
-        .branch.nodes.size = raw->branch.nodes.size - drop,
-        .branch.nodes.data = raw->branch.nodes.data + drop,
-        .branch.nodes.gpa = raw->branch.nodes.gpa,
-    };
-    return out;
-}
-                                                            
-
-//  Helper function for various struct-related, helpers, when handling 
-//  [. fieldname] clauses
-typedef enum {
-    FDot      = 0x1,
-    FColon    = 0x2,
-} FieldSpec;
-
-bool get_fieldname(RawTree* raw, FieldSpec spec, Symbol* fieldname) {
-    if (raw->type != RawBranch || raw->branch.nodes.len != 2) return false;
-    if (raw->branch.hint != HExpression) return false;
-
-
-    RawTree head = raw->branch.nodes.data[0];
-    if (!is_symbol(head)) return false;
-    if ((spec & FDot) && !symbol_eq(string_to_symbol(mv_string(".")), head.atom.symbol)) return false;
-    if ((spec & FColon) && !symbol_eq(string_to_symbol(mv_string(":")), head.atom.symbol)) return false;
-
-    RawTree field = raw->branch.nodes.data[1];
-    if (!is_symbol(field)) return false;
-
-    *fieldname = field.atom.symbol;
-    return true;
-}
-
 // Helper function for labels, when we are expecting [label expr] clauses
 // returns true on success, false on failure
 bool get_label(RawTree* raw, Symbol* fieldname) {
@@ -338,35 +282,6 @@ bool get_label(RawTree* raw, Symbol* fieldname) {
     }
 }
 
-/**
- * Helper function for retrieving a symbol list
- * returns true on success, false on failure
- */
-bool get_symbol_list(SymbolArray* arr, RawTree nodes, Allocator* a) {
-    if (nodes.type != RawBranch) { return false; }
-    *arr = mk_symbol_array(nodes.branch.nodes.len, a);
-
-    for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
-        RawTree node = nodes.branch.nodes.data[i];
-        if (node.type != RawAtom || node.atom.type != ASymbol) { return false; }
-        push_symbol(node.atom.symbol, arr);
-    }
-    return true;
-}
-
-bool get_name_list(NameArray* arr, RawTree nodes, Allocator* a) {
-    if (nodes.type != RawBranch) { return false; }
-    *arr = mk_name_array(nodes.branch.nodes.len, a);
-
-    for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
-        RawTree node = nodes.branch.nodes.data[i];
-        if (node.type != RawAtom || node.atom.type != ASymbol) { return false; }
-        if (node.atom.symbol.did != 0) { return false; }
-        push_name(node.atom.symbol.name, arr);
-    }
-    return true;
-}
-
 Result get_annotated_symbol_list(SymPtrAMap* args, RawTree list, AbstractionICtx ctx) {
     Result error_result = {.type = Err, .error_message = mv_string("Malformed proc argument list.")};
     if (list.type != RawBranch) { return error_result; }
@@ -381,14 +296,11 @@ Result get_annotated_symbol_list(SymPtrAMap* args, RawTree list, AbstractionICtx
             // TODO (bug): check for duplicaes
             RawTree arg = annotation.branch.nodes.data[0];
             if (arg.type != RawAtom || arg.atom.type != ASymbol) { return error_result; }
-            RawTree* raw_type;
-            if (annotation.branch.nodes.len == 2) {
-              raw_type = &annotation.branch.nodes.data[1];
-            } else {
-              raw_type = raw_slice(&annotation, 1, ctx.pia);
-            }
+            RawTree raw_type = (annotation.branch.nodes.len == 2)
+                ? annotation.branch.nodes.data[1]
+                : raw_slice(&annotation, 1);
             SynRef* ref = mem_alloc(sizeof(SynRef), ctx.gpa);
-            *ref = abstract_expr_i(*raw_type, ctx); 
+            *ref = abstract_expr_i(raw_type, ctx); 
 
             sym_ptr_insert(arg.atom.symbol, ref, args);
         } else {
@@ -534,13 +446,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
         shadow_vars(to_shadow, ctx.env);
 
-        RawTree* raw_term;
-        if (raw.branch.nodes.len == args_index + 1) {
-            raw_term = &raw.branch.nodes.data[args_index];
-        } else {
-            raw_term = raw_slice(&raw, args_index, ctx.pia);
-        }
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == args_index + 1) 
+            ? raw.branch.nodes.data[args_index]
+            : raw_slice(&raw, args_index);
+        SynRef body = abstract_expr_i(raw_term, ctx);
         shadow_pop(arguments.len, ctx.env);
 
         Syntax syn = {
@@ -574,10 +483,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             shadow_var(arguments.data[i].key, ctx.env);
         }
 
-        RawTree* raw_term = (raw.branch.nodes.len == 3)
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SAll,
@@ -595,8 +504,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.message = mv_cstr_doc("Malformed macro expression: expects at least 1 arg.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        SynRef transformer = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1);
+        SynRef transformer = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SMacro,
@@ -650,10 +559,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
-            ? &raw.branch.nodes.data[body_idx]
-            : raw_slice(&raw, body_idx, ctx.pia);
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SSeal,
@@ -719,10 +628,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
-            ? &raw.branch.nodes.data[body_idx]
-            : raw_slice(&raw, body_idx, ctx.pia);
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SUnseal,
@@ -868,8 +777,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         if (raw.branch.nodes.len < idx + 1) {
             tile_elt_incorrect_numterms(raw, ctx);
         }
-        RawTree* body_desc = raw.branch.nodes.len == (idx + 1) ? &raw.branch.nodes.data[idx] : raw_slice(&raw, idx, ctx.pia); 
-        SynRef body = abstract_expr_i(*body_desc, ctx);
+        RawTree body_desc = raw.branch.nodes.len == (idx + 1) ? raw.branch.nodes.data[idx] : raw_slice(&raw, idx); 
+        SynRef body = abstract_expr_i(body_desc, ctx);
 
         Syntax syn = {
             .type = SWithLoop,
@@ -918,8 +827,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
               struct_bad_fdesc_fieldname(fdesc, ctx);
             }
 
-            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            SynRef syn = abstract_expr_i(*val_desc, ctx);
+            RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1); 
+            SynRef syn = abstract_expr_i(val_desc, ctx);
 
             // Check that there are no duplicates, then insert
             size_t found_idx;
@@ -1084,11 +993,11 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         SynRef res = new_syntax(ctx.tape);
 
-        RawTree *raw_term = (raw.branch.nodes.len == 2)
-            ? &raw.branch.nodes.data[1]
-            : raw_slice(&raw, 1, ctx.pia);
+        RawTree raw_term = (raw.branch.nodes.len == 2)
+            ? raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1);
 
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
         Syntax syn = {
             .type = SFlagsEmpty,
             .flags_empty.val = body,
@@ -1186,10 +1095,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             }
 
             // Get the term
-            RawTree *raw_term = (raw_clause.branch.nodes.len == 2)
-                ? &raw_clause.branch.nodes.data[1]
-                : raw_slice(&raw_clause, 1, ctx.pia);
-            SynRef clause_body = abstract_expr_i(*raw_term, ctx);
+            RawTree raw_term = (raw_clause.branch.nodes.len == 2)
+                ? raw_clause.branch.nodes.data[1]
+                : raw_slice(&raw_clause, 1);
+            SynRef clause_body = abstract_expr_i(raw_term, ctx);
 
             SynClause* clause = mem_alloc(sizeof(SynClause), a);
             *clause = (SynClause) {
@@ -1286,8 +1195,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            SynRef syn = abstract_expr_i(*val_desc, ctx);
+            RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1); 
+            SynRef syn = abstract_expr_i(val_desc, ctx);
 
             currently_implicit &= fdesc.branch.hint == HImplicit; 
             if (currently_implicit) {
@@ -1316,8 +1225,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.message = mv_cstr_doc("Malformed dynamic expression: expects at least 1 arg.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        SynRef dynamic = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1);
+        SynRef dynamic = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SDynamic,
@@ -1352,7 +1261,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         SynRef dynamic = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        SynRef val = abstract_expr_i(*(raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia)), ctx);
+        SynRef val = abstract_expr_i(raw.branch.nodes.len == 3 ? raw.branch.nodes.data[2] : raw_slice(&raw, 2), ctx);
 
         Syntax syn = {
             .type = SDynamicSet,
@@ -1396,11 +1305,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree* raw_body = (raw.branch.nodes.len == index + 1)
-            ? &raw.branch.nodes.data[index]
-            : raw_slice(&raw, index, ctx.pia);
-
-        SynRef body = abstract_expr_i(*raw_body, ctx);
+        RawTree raw_body = (raw.branch.nodes.len == index + 1)
+            ? raw.branch.nodes.data[index]
+            : raw_slice(&raw, index);
+        SynRef body = abstract_expr_i(raw_body, ctx);
 
         Syntax syn = {
             .type = SDynamicLet,
@@ -1440,7 +1348,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 shadow_var(sym, ctx.env);
                 SynRef bind_body = bind.branch.nodes.len == 2
                     ? abstract_expr_i(bind.branch.nodes.data[1], ctx)
-                    : abstract_expr_i(*raw_slice(&bind, 1, ctx.pia), ctx);
+                    : abstract_expr_i(raw_slice(&bind, 1), ctx);
 
                 sym_syn_insert(sym, bind_body, &bindings);
             }
@@ -1452,11 +1360,11 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree* raw_body = (raw.branch.nodes.len == index + 1)
-            ? &raw.branch.nodes.data[index]
-            : raw_slice(&raw, index, ctx.pia);
+        RawTree raw_body = (raw.branch.nodes.len == index + 1)
+            ? raw.branch.nodes.data[index]
+            : raw_slice(&raw, index);
+        SynRef body = abstract_expr_i(raw_body, ctx);
 
-        SynRef body = abstract_expr_i(*raw_body, ctx);
         shadow_pop(bindings.len, ctx.env);
 
         Syntax syn = {
@@ -1520,10 +1428,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             
             SynRef condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
             
-            RawTree* branch_term = (raw_clause.branch.nodes.len == 2)
-                ? &raw_clause.branch.nodes.data[1]
-                : raw_slice(&raw_clause, 1, ctx.pia);
-            SynRef branch = abstract_expr_i(*branch_term, ctx);
+            RawTree branch_term = (raw_clause.branch.nodes.len == 2)
+                ? raw_clause.branch.nodes.data[1]
+                : raw_slice(&raw_clause, 1);
+            SynRef branch = abstract_expr_i(branch_term, ctx);
 
             CondClause* clause = mem_alloc(sizeof(CondClause), a);
             *clause = (CondClause) {.condition = condition, .branch = branch};
@@ -1556,10 +1464,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            RawTree* branch_term = (else_clause.branch.nodes.len == 2)
-                ? &else_clause.branch.nodes.data[1]
-                : raw_slice(&else_clause, 1, ctx.pia);
-            otherwise = abstract_expr_i(*branch_term, ctx);
+            RawTree branch_term = (else_clause.branch.nodes.len == 2)
+                ? else_clause.branch.nodes.data[1]
+                : raw_slice(&else_clause, 1);
+            otherwise = abstract_expr_i(branch_term, ctx);
         }
 
         Syntax syn = {
@@ -1614,10 +1522,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            RawTree* raw_term = (label_expr->branch.nodes.len == index + 1)
-                ? &label_expr->branch.nodes.data[index]
-                : raw_slice(label_expr, index, ctx.pia);
-            SynRef res = abstract_expr_i(*raw_term, ctx);
+            RawTree raw_term = (label_expr->branch.nodes.len == index + 1)
+                ? label_expr->branch.nodes.data[index]
+                : raw_slice(label_expr, index);
+            SynRef res = abstract_expr_i(raw_term, ctx);
             SynLabelBranch* branch = mem_alloc(sizeof(SynLabelBranch), a);
             *branch = (SynLabelBranch) {
                 .args = arguments,
@@ -1757,12 +1665,12 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                     throw_pi_error(ctx.point, err);
                 }
 
-                RawTree* body = tree.branch.nodes.len > 3 ? raw_slice(&tree, 2, ctx.pia) : &tree.branch.nodes.data[2];
+                RawTree body = tree.branch.nodes.len > 3 ? raw_slice(&tree, 2) : tree.branch.nodes.data[2];
                 SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
                 *elt = (SeqElt) {
                     .is_binding = true,
                     .symbol = rsym.atom.symbol,
-                    .expr = abstract_expr_i(*body, ctx),
+                    .expr = abstract_expr_i(body, ctx),
                 };
                 push_ptr(elt, &elements);
 
@@ -1800,10 +1708,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
 
         SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        RawTree* raw_term = raw.branch.nodes.len == 3
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-        SynRef term = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef term = abstract_expr_i(raw_term, ctx);
         
         Syntax syn = {
             .type = SIs,
@@ -1891,8 +1799,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             name = raw.branch.nodes.data[1].atom.symbol;
         }
 
-        RawTree* raw_body = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
-        SynRef body = abstract_expr_i(*raw_body, ctx);
+        RawTree raw_body = (raw.branch.nodes.len == 3) ? raw.branch.nodes.data[2] : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_body, ctx);
         
         Syntax syn = {
             .type = SName,
@@ -1929,10 +1837,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
 
         SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        RawTree *raw_term = raw.branch.nodes.len == 3
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-        SynRef term = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef term = abstract_expr_i(raw_term, ctx);
         
         Syntax syn = {
             .type = SWiden,
@@ -1951,10 +1859,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
 
         SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        RawTree *raw_term = raw.branch.nodes.len == 3
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-        SynRef term = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef term = abstract_expr_i(raw_term, ctx);
         
         Syntax syn = {
             .type = SNarrow,
@@ -2090,10 +1998,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             proc_tyformer_incorrect_numterms(raw, ret_ty_index == 3, ctx);
         }
 
-        RawTree *raw_ret = (raw.branch.nodes.len == ret_ty_index + 1)
-            ? &raw.branch.nodes.data[ret_ty_index]
-            : raw_slice(&raw, ret_ty_index, ctx.pia);
-        SynRef return_type = abstract_expr_i(*raw_ret, ctx);
+        RawTree raw_ret = (raw.branch.nodes.len == ret_ty_index + 1)
+            ? raw.branch.nodes.data[ret_ty_index]
+            : raw_slice(&raw, ret_ty_index);
+        SynRef return_type = abstract_expr_i(raw_ret, ctx);
 
         Syntax syn = {
             .type = SProcType,
@@ -2189,8 +2097,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             };
 
-            RawTree* raw_ty = (fdesc.branch.nodes.len == 2) ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia);
-            SynRef field_ty = abstract_expr_i(*raw_ty, ctx);
+            RawTree raw_ty = (fdesc.branch.nodes.len == 2)
+                ? fdesc.branch.nodes.data[1]
+                : raw_slice(&fdesc, 1);
+            SynRef field_ty = abstract_expr_i(raw_ty, ctx);
 
             sym_syn_insert(field, field_ty, &field_types);
         }
@@ -2388,8 +2298,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.message = mv_cstr_doc("Malformed Dynamic Type expression: expects at least 1 arg.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        SynRef dyn_ty = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 2
+            ? raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1);
+        SynRef dyn_ty = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SDynamicType,
@@ -2415,8 +2327,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
         Symbol name = rname->atom.symbol;
 
-        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
-        SynRef rec_body = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef rec_body = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SNamedType,
@@ -2443,8 +2357,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         Symbol name = rname->atom.symbol;
-        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
-        SynRef distinct = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef distinct = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SDistinctType,
@@ -2470,8 +2386,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         Symbol name = rname->atom.symbol;
-        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
-        SynRef opaque = abstract_expr_i(*body, ctx);
+        RawTree body = raw.branch.nodes.len == 3
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef opaque = abstract_expr_i(body, ctx);
 
         Syntax syn = {
             .type = SOpaqueType,
@@ -2537,8 +2455,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             if (fdesc.branch.nodes.len == 2) {
                 syn = abstract_expr_i(fdesc.branch.nodes.data[1], ctx);
             } else {
-                RawTree* raw_term = raw_slice(&fdesc, 1, ctx.pia);
-                syn = abstract_expr_i(*raw_term, ctx);
+                RawTree raw_term = raw_slice(&fdesc, 1);
+                syn = abstract_expr_i(raw_term, ctx);
             }
 
             currently_implicit &= fdesc.branch.hint == HImplicit;
@@ -2579,13 +2497,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             shadow_var(vars.data[i].key, ctx.env);
         }
 
-        RawTree* raw_term;
-        if (raw.branch.nodes.len == 3) {
-            raw_term = &raw.branch.nodes.data[2];
-        } else {
-            raw_term = raw_slice(&raw, 2, ctx.pia);
-        }
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
         Syntax syn = {
@@ -2626,13 +2541,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             }
         }
 
-        RawTree* raw_term;
-        if (raw.branch.nodes.len == body_idx + 1) {
-            raw_term = &raw.branch.nodes.data[body_idx];
-        } else {
-            raw_term = raw_slice(&raw, body_idx, ctx.pia);
-        }
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == body_idx + 1) 
+            ? raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
         Syntax syn = {
@@ -2665,11 +2577,11 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             shadow_var(vars.data[i].key, ctx.env);
         }
 
-        RawTree* raw_term = (raw.branch.nodes.len == 3)
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
         
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
         Syntax syn = {
@@ -2701,11 +2613,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
           push_syn(arg_ty, &params);
         }
 
-        RawTree* raw_term = (raw.branch.nodes.len == 3)
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-        
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SKind,
@@ -2718,10 +2629,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FLiftCType: {
-        RawTree* raw_term = (raw.branch.nodes.len == 2)
-            ? &raw.branch.nodes.data[1]
-            : raw_slice(&raw, 1, ctx.pia);
-        SynRef c_type = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 2)
+            ? raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1);
+        SynRef c_type = abstract_expr_i(raw_term, ctx);
         Syntax syn = {
             .type = SLiftCType,
             .c_type = c_type,
@@ -2741,11 +2652,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
-        RawTree* raw_term = (raw.branch.nodes.len == 3)
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SReinterpret,
@@ -2768,11 +2678,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
-        RawTree* raw_term = (raw.branch.nodes.len == 3)
-            ? &raw.branch.nodes.data[2]
-            : raw_slice(&raw, 2, ctx.pia);
-
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = SConvert,
@@ -2791,11 +2700,11 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.message = mk_cstr_doc("type-of term former requires 1 argument!", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* raw_term = (raw.branch.nodes.len == 2)
-            ? &raw.branch.nodes.data[1]
-            : raw_slice(&raw, 1, ctx.pia);
+        RawTree raw_term = (raw.branch.nodes.len == 2)
+            ? raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1);
 
-        SynRef body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(raw_term, ctx);
 
         Syntax syn = {
             .type = STypeOf,
@@ -3204,11 +3113,13 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         // TODO: check did == 0
         Name bind = raw.branch.nodes.data[1].atom.symbol.name;
-        
-        RawTree* raw_term = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
+
+        RawTree raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2);
 
         shadow_var((Symbol){.name = bind, .did = 0}, ctx.env);
-        SynRef out = abstract_expr_i(*raw_term, ctx);
+        SynRef out = abstract_expr_i(raw_term, ctx);
         shadow_pop(1, ctx.env);
 
         res = (TopLevel) {
@@ -3263,8 +3174,10 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            SynRef syn = abstract_expr_i(*val_desc, ctx);
+            RawTree val_desc = fdesc.branch.nodes.len == 2
+                ? fdesc.branch.nodes.data[1]
+                : raw_slice(&fdesc, 1); 
+            SynRef syn = abstract_expr_i(val_desc, ctx);
 
             sym_syn_insert(field, syn, &properties);
         }
@@ -3924,27 +3837,5 @@ RawTreePiList next_node_arr(U64Array *index, U64Array dims, RawTree nodes, Abstr
             layer++;
         }
         return nodes.branch.nodes;
-    }
-}
-
-/**
- * Return true if the provided rawtree matches the provided symbol, e.g.
- * i.e. is_key_symbol(raw, symbol("all"));
- */
-bool is_key_symbol(RawTree raw, Symbol symbol) {
-    if (raw.type == RawBranch && raw.branch.nodes.len == 2) {
-        RawTree head = raw.branch.nodes.data[0];
-        if (!is_symbol(head) || !symbol_eq(string_to_symbol(mv_string(":")), head.atom.symbol)) {
-            return false;
-        }
-
-        raw = raw.branch.nodes.data[1];
-        if (is_symbol(raw)) {
-            return symbol_eq(symbol, raw.atom.symbol);
-        } else {
-            return false;
-        }
-    } else {
-        return false;
     }
 }

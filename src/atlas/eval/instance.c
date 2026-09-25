@@ -9,8 +9,9 @@
 #include "data/stream.h"
 
 #include "pico/data/name_ptr_amap.h"
+#include "pico/data/name_u32_amap.h"
+#include "pico/data/string_array.h"
 #include "pico/values/modular.h"
-
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
 #include "pico/abstraction/abstraction.h"
@@ -21,6 +22,9 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 
+#include "rune/eval/values.h"
+
+#include "atlas/syntax/target_expr.h"
 #include "atlas/eval/instance.h"
 
 struct AtlasInstance {
@@ -30,6 +34,12 @@ struct AtlasInstance {
     NamePtrAMap targets;
     bool project_set;
     Project project;
+
+    ExprPool* pool;
+    NameU32AMap expr_map;
+
+    ValueHeap* values;
+    NameU32AMap val_map;
 
     Allocator* gpa;
 };
@@ -50,6 +60,10 @@ AtlasInstance* make_atlas_instance(Allocator* a) {
         .packages = mk_ptr_array(4, a),
         .targets = mk_name_ptr_amap(32, a),
         .project_set = false,
+        .pool = mk_expr_pool(sizeof(TargetExpr), a),
+        .expr_map = mk_name_u32_amap(64, a),
+        .values = mk_value_heap(a),
+        .val_map = mk_name_u32_amap(64, a),
         .gpa = a,
     };
     return instance;
@@ -85,6 +99,10 @@ AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance) {
         .run = instance->project.package.default_run,
         .test = instance->project.package.default_test,
     };
+}
+
+ExprPool* get_expr_pool(AtlasInstance* instance) {
+    return instance->pool;
 }
 
 static Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point);
@@ -671,6 +689,10 @@ void set_instance_project(AtlasInstance* instance, Project project) {
     instance->project = project;
 }
 
+void atlas_add_def(AtlasInstance* instance, Def def) {
+}
+
+/*
 void add_library(Library library, String path, AtlasInstance* instance) {
     AtlasTarget* target = mem_alloc(sizeof(AtlasTarget), instance->gpa);
 
@@ -726,4 +748,5 @@ void add_executable(Executable executable, String path, AtlasInstance* instance)
     };
     name_ptr_insert(executable.name, target, &instance->targets);
 }
+*/
 
