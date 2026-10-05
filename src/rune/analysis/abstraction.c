@@ -95,12 +95,11 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
             break;
         }
         case AIntegral: {
-            PicoError err = {
-                .range = raw.range,
-                .message = mv_cstr_doc("Intergral literals are not (yet) supported by rune.", a),
+            *out = (Expr) {
+                .type = EInt,
+                .num = raw.atom.int_64,
             };
-            throw_pi_error(point, err);
-            break;
+            return;
         }
         case AFloating: {
             PicoError err = {
@@ -213,7 +212,7 @@ static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool,
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
         Expr out;
         abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
-        set_expr_elt(args, i, out, pool);
+        set_expr_elt(args, i - 1, out, pool);
     }
     *out = (Expr) {
         .type = EApp,
@@ -227,7 +226,7 @@ static void mk_list_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
         Expr out;
         abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
-        set_expr_elt(args, i, out, pool);
+        set_expr_elt(args, i - 1, out, pool);
     }
     *out = (Expr) {
         .type = EList,

@@ -141,6 +141,56 @@ NameExprCell get_expr_map_elt(NameExprMap map, size_t idx, ExprPool* pool) {
     return pool->named_expressions.data[idx + map.start];
 }
 
+void free_vars_internal(ExprRef ref, ExprPool* pool, NameArray* locals, NameArray* out) {
+    Expr expr = get_expr(ref, pool);
+    switch (expr.type) {
+    case EVar:
+        if (find_name(expr.var, *locals) == locals->len) {
+            if (find_name(expr.var, *out) == out->len) {
+                // push name only if
+                // 1. Name not in locals 
+                // 2. Name is not in output already
+                push_name(expr.var, out);
+            }
+        }
+        break;
+    case EFn: {
+        for (size_t i = 0; i < expr.fn.args.len; i++) {
+            push_name(expr.fn.args.data[i], locals);
+        }
+        free_vars_internal(expr.fn.body, pool, locals, out);
+        locals->len -= expr.fn.args.len;
+        break;
+    }
+    case EApp: {
+        free_vars_internal(expr.app.fn, pool, locals, out);
+        for (size_t i = 0; i < expr.app.args.len; i++) {
+            ExprRef args = get_expr_elt(expr.app.args, i);
+            free_vars_internal(args, pool, locals, out);
+        }
+        break;
+    }
+
+    case EInt:
+    case EString:
+        break;
+    case EList:
+        for (size_t i = 0; i < expr.list.len; i++) {
+            ExprRef elt = get_expr_elt(expr.list, i);
+            free_vars_internal(elt, pool, locals, out);
+        }
+        break;
+    }
+}
+
+NameArray free_vars(ExprRef ref, ExprPool* pool, Allocator* a) {
+    NameArray out = mk_name_array(8, a);
+    NameArray locals = mk_name_array(8, a);
+    free_vars_internal(ref, pool, &locals, &out);
+    sdelete_name_array(locals);
+    return out;
+}
+
 Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a) {
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
     DocStyle ty_former_style = scolour(colour(209, 118, 219), dstyle);

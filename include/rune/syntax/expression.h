@@ -20,6 +20,7 @@ typedef enum {
     // Embedded Values
     EVal,
 
+    EInt,
     EString,
     EList,
 } ExprType;
@@ -90,6 +91,7 @@ typedef struct {
         ValRef value;
 
         // Literals 
+        int64_t num;
         ExprSlice list;
         String string;
     };
@@ -121,6 +123,9 @@ typedef struct {
     ExprRef expr;
 } Def;
 
+NameArray free_vars(ExprRef ref, ExprPool* pool, Allocator* a);
+
 Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a);
+
 
 #endif

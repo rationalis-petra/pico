@@ -16,6 +16,7 @@ SLICE_TYPE(Name, Name)
 #define push_name(name, arr) push_u64(name, arr)
 #define scopy_name_array(arr, alloc) scopy_u64_array(arr, alloc)
 #define sdelete_name_array(arr) sdelete_u64_array(arr)
+#define find_name(name, arr) find_u64(name, arr)
 
 typedef struct {
     Name name;

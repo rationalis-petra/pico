@@ -67,42 +67,18 @@ void delete_value_heap(ValueHeap* heap) {
     ValueInfo* info = heap->begin;
     while (info) {
         switch (info->sort) {
-            // User-defined data
-        case ValClosure:
+        case ValString: {
+            StringRepr* string = (void*)info;
+            mem_free(string->string.bytes, heap->gpa);
             break;
-        case ValData:
-            break;
-        case ValCoData:
-            break;
-        case ValRecord:
-            break;
-        case ValCoRecord:
-            break;
-
-            // User-Defined Types
-        case ValFnType:
-            break;
-        case ValDataType:
-            break;
-        case ValCoDataType:
-            break;
-        case ValRecordType:
-            break;
-        case ValCoRecordType:
-            break;
-
-            // Builtin Values
-        case ValInt:
-            break;
-        case ValString:
-            break;
+        }
         case ValList: {
             ListRepr* list = (void*)info;
             mem_free(list->list.data, heap->gpa);
             break;
         }
-
-            // Builtin Types
+        default:
+            break;
         }
         ValueInfo* next = info->next;
         mem_free(info, heap->gpa);
@@ -134,13 +110,11 @@ static void* create_obj(size_t size, ValueSort sort, ValueHeap* heap) {
 }
 
 // Builtin Values
-ValRef mk_rune_int(int64_t val); 
-
 ValRef mk_rune_list(size_t num_elements, ValueHeap* heap) {
     ListRepr* repr = create_obj(sizeof(ListRepr), ValList, heap);
     repr->list = (RuneList) { 
         .len = num_elements,
-        .data = mem_alloc(sizeof(ValRef), heap->gpa),
+        .data = mem_alloc(sizeof(ValRef) * num_elements, heap->gpa),
     };
     return (ValRef){(uintptr_t)repr};
 }
@@ -164,7 +138,7 @@ void set_elt(RuneList list, uint32_t idx, ValRef val, ValueHeap* heap) {
 }
 
 ValRef mk_rune_string(size_t memsize, ValueHeap* heap) {
-    StringRepr* repr = create_obj(sizeof(StringRepr), ValList, heap);
+    StringRepr* repr = create_obj(sizeof(StringRepr), ValString, heap);
     repr->string = (String) { 
         .memsize = memsize,
         .bytes = mem_alloc(memsize, heap->gpa),
@@ -172,7 +146,7 @@ ValRef mk_rune_string(size_t memsize, ValueHeap* heap) {
     return (ValRef){(uintptr_t)repr};
 }
 
-String get_string(ValRef ref) {
+String get_rune_string(ValRef ref) {
     StringRepr* repr = (void*)ref.ref;
     return repr->string;
 }
@@ -182,6 +156,18 @@ ValRef mk_rune_closure(RuneClosureEnv environment, ExprRef ref, ValueHeap* heap)
     ClosureRepr* repr = create_obj(sizeof(ClosureRepr), ValClosure, heap);
     repr->closure = (RuneClosure) { 
         .expr = ref,
+        .env = environment,
+    };
+    return (ValRef){(uintptr_t)repr};
+}
+
+ValRef mk_rune_curried_closure(RuneClosureEnv environment, ExprRef ref, size_t num_args, ValueHeap* heap) {
+    ClosureRepr* repr = create_obj(sizeof(ClosureRepr), ValClosure, heap);
+    repr->closure = (RuneClosure) { 
+        .expr = ref,
+        .env = environment,
+        .num_curried = num_args,
+        .curried = mem_alloc(sizeof(ValRef) * num_args, heap->gpa),
     };
     return (ValRef){(uintptr_t)repr};
 }
@@ -215,6 +201,12 @@ RuneData* get_rune_data(ValRef ref) {
     }
 #endif
     return &repr->data;
+}
+
+ValRef mk_rune_int(int64_t val, ValueHeap* heap) {
+    IntRepr* repr = create_obj(sizeof(IntRepr), ValInt, heap);
+    repr->num = val;
+    return (ValRef){(uintptr_t)repr};
 }
 
 int64_t get_int(ValRef ref) {
@@ -259,8 +251,8 @@ bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* 
         return get_int(actual) == get_int(expected);
     case ValString: {
 
-        String actual_string = get_string(actual);
-        String expected_string = get_string(expected);
+        String actual_string = get_rune_string(actual);
+        String expected_string = get_rune_string(expected);
         return string_eq(actual_string, expected_string);
     }
     case ValList: {

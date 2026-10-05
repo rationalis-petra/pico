@@ -38,29 +38,31 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
     Allocator ra = ra_to_gpa(subregion);
     PiAllocator pia = convert_to_pallocator(&ra);
     IStream* sin = mk_string_istream(mv_string(string), &ra);
+    IStream* volatile cin = mk_capturing_istream(sin, &ra);
 
     PiErrorPoint point;
     if (catch_error(point)) {
         test_log_error(context.log, mv_string("Rune error while evaluating test."));
+        display_error(point.multi, *get_captured_buffer(cin), get_fstream(context.log), mv_string("test-suite"), &ra);
         test_fail(context.log);
-        delete_istream(sin, &ra);
+        delete_istream(cin, &ra);
         release_subregion(subregion);
         return;
     }
 
-    ParseResult parse_res = parse_rune_rawtree(sin, &pia, &ra);
+    ParseResult parse_res = parse_rune_rawtree(cin, &pia, &ra);
     if (parse_res.type == ParseNone) {
         test_log_error(context.log, mv_string("Rune parse returned none."));
         test_fail(context.log);
-        delete_istream(sin, &ra);
+        delete_istream(cin, &ra);
         release_subregion(subregion);
         return;
     }
     if (parse_res.type == ParseFail) {
         MultiError multi = (MultiError) { .has_many = false, .error = parse_res.error };
-        display_error(multi, *get_captured_buffer(sin), get_fstream(context.log), mv_string("rune-test"), &ra);
+        display_error(multi, *get_captured_buffer(cin), get_fstream(context.log), mv_string("rune-test"), &ra);
         test_fail(context.log);
-        delete_istream(sin, &ra);
+        delete_istream(cin, &ra);
         release_subregion(subregion);
         return;
     }
@@ -73,7 +75,7 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
 
     if (result.type == AError) {
         log_rune_eval_error(context.log, result.error_message, &ra);
-        delete_istream(sin, &ra);
+        delete_istream(cin, &ra);
         delete_rune_env(env);
         release_subregion(subregion);
         return;
@@ -81,14 +83,14 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
 
     if (!rune_value_eql(result.value, expected, pools.value, &ra)) {
         report_rune_mismatch(context.log, result.value, expected, env, &ra);
-        delete_istream(sin, &ra);
+        delete_istream(cin, &ra);
         delete_rune_env(env);
         release_subregion(subregion);
         return;
     }
 
     test_pass(context.log);
-    delete_istream(sin, &ra);
+    delete_istream(cin, &ra);
     delete_rune_env(env);
     release_subregion(subregion);
 }

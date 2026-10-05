@@ -1,7 +1,8 @@
 #include "data/meta/array_impl.h"
 #include "platform/signals.h"
 
-#include "pico/data/name_u32_amap.h"
+#include "components/pretty/standard_types.h"
+#include "pico/data/name_ptr_amap.h"
 
 #include "rune/eval/eval.h"
 
@@ -36,7 +37,7 @@ typedef struct {
 } RuneEvalCtx;
 
 struct RuneEnv {
-    NameU32AMap values;
+    NamePtrAMap values;
     ExprPool* exprs;
     ValueHeap* vals;
     Allocator* gpa;
@@ -47,7 +48,7 @@ static RuneEvalResult get_value_internal(Name name, RuneEnv* env, size_t depth, 
 RuneEnv* mk_rune_env(Allocator* a) {
     RuneEnv* env = mem_alloc(sizeof(RuneEnv), a);
     *env = (RuneEnv) {
-        .values = mk_name_u32_amap(64, a),
+        .values = mk_name_ptr_amap(64, a),
         .exprs = mk_expr_pool(a),
         .vals = mk_value_heap(a),
         .gpa = a,
@@ -56,7 +57,7 @@ RuneEnv* mk_rune_env(Allocator* a) {
 }
 
 void delete_rune_env(RuneEnv* env) {
-    sdelete_name_u32_amap(env->values);
+    sdelete_name_ptr_amap(env->values);
     delete_expr_pool(env->exprs);
     delete_value_heap(env->vals);
     mem_free(env, env->gpa);
@@ -73,7 +74,7 @@ void rune_add_def(Name name, ExprRef expr, RuneEnv* env) {
     RuneClosureEnv ce = {};
     ValRef ref = mk_rune_closure(ce, expr, env->vals); 
     // TODO: detect duplicate definitions and produce error.
-    name_u32_insert(name, ref.ref, &env->values);
+    name_ptr_insert(name, (void*)ref.ref, &env->values);
 }
 
 RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
@@ -94,9 +95,31 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
         RuneEvalResult result = get_value_internal(expr.var, ctx.env, ctx.depth, ctx.region);
         return result;
     }
-    case EFn:
-        panic(mv_string("Not implemented eval fn"));
+    case EFn: {
+        // TODO: capture variables!
+        NameArray captures = free_vars(expression, pools.expr, &a);
+        for (size_t i = 0; i < captures.len; i++) {
+            if (!name_val_alookup(captures.data[i], *ctx.locals)) {
+                // Not a local variabe: delete from free vars.
+                captures.len--;
+                captures.data[i] = captures.data[captures.len];
+                i--;
+            }
+        }
+        RuneClosureEnv env = {
+            .local_vars = mk_name_val_assoc(captures.len, &a),
+        };
+        for (size_t i = 0; i < captures.len; i++) {
+            ValRef* val = name_val_alookup(captures.data[i], *ctx.locals);
+            name_val_bind(captures.data[i], *val, &env.local_vars);
+        }
+        ValRef closure = mk_rune_closure(env, expression, pools.value);
+        return (RuneEvalResult) {
+            .type = AValue,
+            .value = closure,
+        };
         break;
+    }
     case EApp: {
         RuneEvalResult result = eval_rune_internal(expr.app.fn, ctx);
         if (result.type == AError) return result;
@@ -113,7 +136,7 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
                     };
                 }
                 Expr fn_expr = get_expr(func.expr, pools.expr);
-                const size_t req_args = fn_expr.fn.args.len;
+                const size_t req_args = fn_expr.fn.args.len - func.num_curried;
                 const size_t avail_args = expr.app.args.len - args_consumed;
                 const size_t actual_args = req_args <= avail_args ? req_args : avail_args;
                 U64Array done_args = mk_u64_array(actual_args, &a);
@@ -124,29 +147,59 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
                 }
                 args_consumed += actual_args;
                 if (actual_args < req_args) {
-                    // Forma a new function
+                    // Form a a new function (curried)
+                    ValRef new = mk_rune_curried_closure(func.env, func.expr, func.num_curried + actual_args, pools.value);
+                    RuneClosure newc = get_rune_closure(new);
+                    for (size_t i = 0; i < func.num_curried; i++) {
+                        newc.curried[i] = func.curried[i];
+                    }
+                    for (size_t i = 0; i < actual_args; i++) {
+                        newc.curried[func.num_curried + i] = (ValRef){done_args.data[i]};
+                    }
+                    return (RuneEvalResult) {
+                        .type = AValue,
+                        .value = new,
+                    };
                 } else {
                     // Evaluate the function
                     NameValAssoc* new_locals = region_alloc(sizeof(NameValAssoc), ctx.region);
-                    *new_locals = mk_name_val_assoc(actual_args, &a);
+                    *new_locals = mk_name_val_assoc(actual_args + func.env.local_vars.len, &a);
                     RuneEvalCtx new_ctx = ctx;
                     new_ctx.locals = new_locals;
-                    for (size_t i = 0; i < actual_args; i++) {
-                        // NameArray args;
-                        name_val_bind(fn_expr.fn.args.data[i], (ValRef){done_args.data[i]}, new_locals);
+                    for (size_t i = 0; i < func.num_curried; i++) {
+                        name_val_bind(fn_expr.fn.args.data[i], func.curried[i], new_locals);
                     }
-
+                    for (size_t i = 0; i < actual_args; i++) {
+                        name_val_bind(fn_expr.fn.args.data[i + func.num_curried], (ValRef){done_args.data[i]}, new_locals);
+                    }
+                    for (size_t i = 0; i < func.env.local_vars.len; i++) {
+                        NameValACell cell = func.env.local_vars.data[i];
+                        name_val_bind(cell.key, cell.val, new_locals);
+                    }
                     result = eval_rune_internal(fn_expr.fn.body, new_ctx);
                     if (result.type == AError) return result;
                 }
             } else if (sort == ValData) {
                 const size_t avail_args = expr.app.args.len - args_consumed;
-                U32Array done_args = mk_u32_array(avail_args, &a);
+                U64Array done_args = mk_u64_array(avail_args, &a);
                 for (size_t i = 0; i < avail_args; i++) {
                     ExprRef arg = get_expr_elt(expr.app.args, i + args_consumed);
                     RuneEvalResult result = eval_rune_internal(arg, ctx);
-                    push_u32(result.value.ref, &done_args);
+                    push_u64(result.value.ref, &done_args);
                 }
+                RuneData* old = get_rune_data(fn);
+                ValRef out = mk_rune_data(old->name, old->type, old->len + avail_args, pools.value);
+                RuneData* new = get_rune_data(out);
+                for (size_t i = 0; i < old->len; i++) {
+                    new->values[i] = old->values[i];
+                }
+                for (size_t i = 0; i < avail_args; i++) {
+                    new->values[i + old->len] = (ValRef){done_args.data[i]};
+                }
+                return (RuneEvalResult) {
+                    .type = AValue,
+                    .value = out,
+                };
             } else {
                 return (RuneEvalResult) {
                     .type = AError,
@@ -169,9 +222,16 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
             .value = out,
         };
     };
+    case EInt: {
+        ValRef int_ref = mk_rune_int(expr.num, pools.value);
+        return (RuneEvalResult) {
+            .type = AValue,
+            .value = int_ref,
+        };
+    }
     case EString: {
         ValRef string_ref = mk_rune_string(expr.string.memsize, pools.value);
-        String string = get_string(string_ref);
+        String string = get_rune_string(string_ref);
         memcpy(string.bytes, expr.string.bytes, expr.string.memsize);
         return (RuneEvalResult) {
             .type = AValue,
@@ -215,7 +275,7 @@ RuneEvalResult eval_rune(ExprRef expression, RuneEnv* env, RegionAllocator* regi
 
 static RuneEvalResult get_value_internal(Name name, RuneEnv* env, size_t depth, RegionAllocator* region) {
     Allocator a = ra_to_gpa(region);
-    uint32_t* idx = name_u32_lookup(name, env->values);
+    ValRef* idx = (ValRef*)name_ptr_lookup(name, env->values);
     if (!idx) {
         PtrArray nodes = mk_ptr_array(2, &a);
         push_ptr(mv_cstr_doc("Definition not found:", &a), &nodes);
@@ -225,7 +285,7 @@ static RuneEvalResult get_value_internal(Name name, RuneEnv* env, size_t depth, 
             .error_message = mv_sep_doc(nodes, &a),
         };
     }
-    ValRef ref = {*idx};
+    ValRef ref = *idx;
     ValueSort sort = get_sort(ref);
     if (sort == ValClosure) {
         // Check for thunk - if expression type is function, then is closure,
@@ -283,13 +343,19 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
         return mv_sep_doc(nodes, a);
     }
     case ValInt:
-        panic(mv_string("TODO: pretty rune int"));
+        return pretty_i64(get_int(ref), a);
       break;
-    case ValList:
-        panic(mv_string("TODO: pretty rune list"));
-      break;
+    case ValList: {
+        RuneList list = get_rune_list(ref);
+        PtrArray nodes = mk_ptr_array(list.len + 1, a);
+        push_ptr(mv_cstr_doc("list", a), &nodes);
+        for (size_t i = 0; i < list.len; i++) {
+            push_ptr(pretty_rune_value(list.data[i], env, a), &nodes);
+        }
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
+    }
     case ValString:
-        panic(mv_string("TODO: pretty rune string"));
+        return mk_paren_doc("\"", "\"", mv_str_doc(get_rune_string(ref), a), a);
         break;
     };
     panic(mv_string("Trying to produce document for invalid pretty value"));

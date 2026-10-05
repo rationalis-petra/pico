@@ -16,42 +16,6 @@ OPTION_TYPE(ValRef, ValRef)
  * when it is no longer needed.
  */
 
-/* TODO: templates for wrapping primitive values 
-typedef struct Template Template;
-SLICE_TYPE(Template, Template);
-
-typedef enum : uint32_t {
-    TplList,
-    TplData,
-    TplRecord,
-} TemplateType;
-
-typedef struct {
-    Name name;
-    Template* template;
-} TemplateRecordEntry;
-SLICE_TYPE(TemplateRecordEntry, TemplateRecordEntry)
-
-typedef struct {
-    Name tag;
-    TemplateSlice members;
-} TemplateDataEntry;
-SLICE_TYPE(TemplateDataEntry, TemplateDataEntry)
-
-struct TemplateData {
-    size_t tagsize;
-    TemplateDataEntrySlice entries;
-};
-
-struct Template {
-    TemplateType type; 
-    union {
-        Template* list_tpl;
-        TemplateRecordEntry record;
-    };
-};
-*/
-
 ASSOC_HEADER(Name, ValRef, name_val, NameVal);
 
 /**
@@ -69,8 +33,10 @@ typedef struct {
 } RuneClosureEnv;
 
 typedef struct {
-  RuneClosureEnv env;
-  ExprRef expr;
+    RuneClosureEnv env;
+    ExprRef expr;
+    size_t num_curried;
+    ValRef* curried;
 } RuneClosure;
 
 // Note: for all user data-types, 
@@ -171,6 +137,7 @@ ValueSort get_sort(ValRef ref);
 
 // Function (& Thunk)
 ValRef mk_rune_closure(RuneClosureEnv environment, ExprRef ref, ValueHeap* heap);
+ValRef mk_rune_curried_closure(RuneClosureEnv environment, ExprRef ref, size_t num_args, ValueHeap* heap);
 RuneClosure get_rune_closure(ValRef val);
 
 // QIIT (Data) 
@@ -178,7 +145,6 @@ ValRef mk_rune_data(Name tag, ValRefOption src_type, size_t capacity, ValueHeap*
 RuneData* get_rune_data(ValRef ref);
 
 // Builtin Values
-ValRef mk_rune_int(int64_t val); 
 
 // Get/set elements of a list. (set should only be used during construction)
 ValRef mk_rune_list(size_t num_elements, ValueHeap* heap); 
@@ -186,9 +152,10 @@ RuneList get_rune_list(ValRef ref);
 
 // Create strings (& set string memory)
 ValRef mk_rune_string(size_t memsize, ValueHeap* heap);
-String get_string(ValRef ref);
+String get_rune_string(ValRef ref);
 
 // Create Integers
+ValRef mk_rune_int(int64_t val, ValueHeap* heap); 
 int64_t get_int(ValRef ref);
 
 /* 
