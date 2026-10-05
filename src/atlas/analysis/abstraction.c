@@ -1,6 +1,7 @@
 #include "platform/signals.h"
 
 #include "pico/abstraction/helpers.h"
+
 #include "atlas/analysis/abstraction.h"
 #include "atlas/analysis/propchecker.h"
 
@@ -17,9 +18,11 @@ typedef enum {
     EDependencies,
 } ExecutableChecks;
 
-HostRef (*host_abstract)(RawTree raw, HostCallbackData host_data, RegionAllocator* region, PiErrorPoint* point);   
-HostRef abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+// Will give us a type error if the callback signature changes
+HostCallback abstract_atlas;
+void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, void* cb_data, Expr* out) {
     Allocator ra = ra_to_gpa(region);
+    AtAbsCallbackData types = *(AtAbsCallbackData*)cb_data;
 
     switch (raw.type) {
     case RawBranch: {
@@ -33,20 +36,63 @@ HostRef abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, 
         RawTree rawhead = raw.branch.nodes.data[0];
         Symbol head = get_symbol_err(rawhead, point, &ra);
         if (string_cmp(mv_string("library"), symbol_to_string(head, &ra)) == 0) {
-            HostRef host = new_host(pool);
-            TargetExpr texpr = {.type = Library};
+            // Extract from the target expression into a syntax tree!
+            ExprRef ctor_ref = new_expr(pool);
+            ExprRef ttype_ref = new_expr(pool);
+            ExprSlice members = new_expr_slice(1, pool);
+            *out = (Expr) {
+                .type = EApp,
+                .app = {
+                    .fn = ctor_ref,
+                    .args = members,
+                }
+            };
 
+            Expr ctor = {
+                .type = ECtor,
+                .ctor = {
+                    .name = string_to_name(mv_string("library")),
+                    .type = {.type = Some, .val = ttype_ref},
+                },
+            };
+            set_expr(ctor_ref, ctor, pool);
+
+            Expr ttype = {
+                .type = EVal,
+                .value = types.target_type,
+            };
+            set_expr(ttype_ref, ttype, pool);
+
+            NameExprMap fields = new_expr_map(3, pool);
+            Expr lib_record = {
+                .type = ERecord,
+                .record.fields = fields,
+            };
+            set_expr_elt(members, 0, lib_record, pool);
+            NameExprCell dependencies = {
+                .name = string_to_name(mv_string("depends-on")), 
+            };
+            NameExprCell filename = {
+                .name = string_to_name(mv_string("file")), 
+            };
+            NameExprCell submodules = {
+                .name = string_to_name(mv_string("submodules")), 
+            };
+
+            /**
+             * Begin parsing: defer to propchecker.
+             */
             bool library_checks[] = {false, false, false};
 
             //property(, );
             // Library stanza components:
-            //   name :: symbol
             //   file :: string option
             //   submodules :: string list
+            //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_option_prop(mv_string("file"), &texpr.library.filename, props);
-            add_expr_array_prop(mv_string("submodules"), &texpr.library.submodules, props);
-            add_expr_array_prop(mv_string("depends-on"), &texpr.dependencies, props);
+            add_expr_array_prop(mv_string("depends-on"), &dependencies.val, props);
+            add_expr_option_prop(mv_string("file"), &filename.val, props);
+            add_expr_array_prop(mv_string("submodules"), &submodules.val, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, library_checks, host_data, pool, point, region);
@@ -54,22 +100,64 @@ HostRef abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, 
 
             check_props(props, library_checks, raw.range, point, region);
 
-            set_host(host, &texpr, pool);
-            return host;
+            /**
+             * End parsing, set expressions
+             */
+            set_expr_map_elt(fields, 0, dependencies, pool);
+            set_expr_map_elt(fields, 1, filename, pool);
+            set_expr_map_elt(fields, 2, submodules, pool);
         } else if (string_cmp(mv_string("executable"), symbol_to_string(head, &ra)) == 0) {
-            HostRef host = new_host(pool);
-            TargetExpr texpr = {.type = Executable};
             bool executable_checks[] = {false, false, false};
 
+            ExprRef ctor_ref = new_expr(pool);
+            ExprRef ttype_ref = new_expr(pool);
+            ExprSlice members = new_expr_slice(1, pool);
+            *out = (Expr) {
+                .type = EApp,
+                .app = {
+                    .fn = ctor_ref,
+                    .args = members,
+                }
+            };
+            Expr ctor = {
+                .type = ECtor,
+                .ctor = {
+                    .name = string_to_name(mv_string("library")),
+                    .type = {.type = Some, .val = ttype_ref},
+                },
+            };
+            set_expr(ctor_ref, ctor, pool);
+
+            Expr ttype = {
+                .type = EVal,
+                .value = types.target_type,
+            };
+            set_expr(ttype_ref, ttype, pool);
+
+            NameExprMap fields = new_expr_map(3, pool);
+            Expr lib_record = {
+                .type = ERecord,
+                .record.fields = fields,
+            };
+            set_expr_elt(members, 0, lib_record, pool);
+            NameExprCell dependencies = {
+                .name = string_to_name(mv_string("depends-on")), 
+            };
+            NameExprCell filename = {
+                .name = string_to_name(mv_string("file")), 
+            };
+            NameExprCell entry_point = {
+                .name = string_to_name(mv_string("entry-point")), 
+            };
+
             // Executable 
-            //   name :: symbol
             //   file :: string 
             //   entry-point :: symbol
-            //   dependencies :: symbol list
+            //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("file"), &texpr.executable.filename, props);
-            add_expr_prop(mv_string("entry-point"), &texpr.executable.entry_point, props);
-            add_expr_array_prop(mv_string("dependencies"), &texpr.dependencies, props);
+            add_expr_prop(mv_string("file"), &filename.val, props);
+            add_expr_prop(mv_string("entry-point"), &entry_point.val, props);
+            add_expr_array_prop(mv_string("depends-on"), &dependencies.val, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, executable_checks, host_data, pool, point, region);
@@ -77,8 +165,77 @@ HostRef abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, 
 
             check_props(props, executable_checks, raw.range, point, region);
 
-            set_host(host, &texpr, pool);
-            return host;
+            /**
+             * End parsing, set expressions
+             */
+            set_expr_map_elt(fields, 0, dependencies, pool);
+            set_expr_map_elt(fields, 1, filename, pool);
+            set_expr_map_elt(fields, 2, entry_point, pool);
+        } else if (string_cmp(mv_string("target"), symbol_to_string(head, &ra)) == 0) {
+            bool executable_checks[] = {false, false, false};
+            ExprRef ctor_ref = new_expr(pool);
+            ExprRef ttype_ref = new_expr(pool);
+            ExprSlice members = new_expr_slice(1, pool);
+
+            *out = (Expr) {
+                .type = EApp,
+                .app = {
+                    .fn = ctor_ref,
+                    .args = members,
+                }
+            };
+
+            Expr ctor = {
+                .type = ECtor,
+                .ctor = {
+                    .type = {.type = Some, .val = ttype_ref},
+                    .name = string_to_name(mv_string("general")),
+                },
+            };
+            set_expr(ctor_ref, ctor, pool);
+
+            Expr ttype = {
+                .type = EVal,
+                .value = types.target_type,
+            };
+            set_expr(ttype_ref, ttype, pool);
+
+            NameExprMap fields = new_expr_map(3, pool);
+            Expr lib_record = {
+                .type = ERecord,
+                .record.fields = fields,
+            };
+            set_expr_elt(members, 0, lib_record, pool);
+            NameExprCell dependencies = {
+                .name = string_to_name(mv_string("depends-on")), 
+            };
+            NameExprCell provides = {
+                .name = string_to_name(mv_string("provides")), 
+            };
+            NameExprCell run = {
+                .name = string_to_name(mv_string("run")), 
+            };
+            // provides :: string list 
+            // entry-point :: symbol
+            // dependencies :: symbol list
+
+            PropSet* props = make_prop_set(3, &ra);
+            add_expr_array_prop(mv_string("depends-on"), &provides.val, props);
+            add_expr_array_prop(mv_string("provides"), &dependencies.val, props);
+            add_expr_prop(mv_string("run"), &run.val, props);
+
+            for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+                parse_prop(raw.branch.nodes.data[i], props, executable_checks, host_data, pool, point, region);
+            }
+
+            check_props(props, executable_checks, raw.range, point, region);
+
+            /**
+             * End parsing, set expressions
+             */
+            set_expr_map_elt(fields, 0, dependencies, pool);
+            set_expr_map_elt(fields, 1, provides, pool);
+            set_expr_map_elt(fields, 2, run, pool);
         } else {
             PicoError err = {
                 .range = raw.range,

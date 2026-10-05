@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "data/meta/slice_header.h"
 #include "data/array.h"
 #include "data/string.h"
 #include "data/option.h"
@@ -10,6 +11,7 @@
 
 typedef uint64_t Name;
 typedef U64Array NameArray;
+SLICE_TYPE(Name, Name)
 #define mk_name_array(sz, alloc) mk_u64_array(sz, alloc)
 #define push_name(name, arr) push_u64(name, arr)
 #define scopy_name_array(arr, alloc) scopy_u64_array(arr, alloc)

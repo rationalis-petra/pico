@@ -1,23 +1,55 @@
 #ifndef __RUNE_EVAL_EVAL_H
 #define __RUNE_EVAL_EVAL_H
 
+#include "platform/memory/region.h"
+
 #include "rune/syntax/expression.h"
 #include "rune/eval/values.h"
 
+/**
+ * Possible 
+ */
+typedef enum {
+    AValue,
+    AError,
+} ReResultType;
+
 typedef struct {
-    ValRef value;
-    uint64_t action_tag;
-    ValRef continuation;
-} EvalResult;
+    ReResultType type;
+    union {
+        ValRef value;
+        Document* error_message;
+    };
+} RuneEvalResult;
 
-typedef struct GlobalEnv GlobalEnv;
+typedef struct {
+    ExprPool* expr;
+    ValueHeap* value;
+} Pools;
 
-typedef struct EvalCtx EvalCtx;
+typedef struct RuneEnv RuneEnv;
 
-EvalCtx* create_eval_ctx(Name name, Expr expr, EvalCtx* ctx);
+RuneEnv* mk_rune_env(Allocator* a);
+void delete_rune_env(RuneEnv* env);
 
-void add_rune_def(Name name, ExprRef expr, EvalCtx* ctx);
-void eval_ctx(EvalCtx* ctx);
-EvalResult eval(ExprRef expression, EvalCtx ctx);
+Pools get_pools(RuneEnv* env);
+
+void rune_add_def(Name name, ExprRef expr, RuneEnv* env);
+
+/**
+ * Evaluate the given expression in the environment.
+ */
+RuneEvalResult eval_rune(ExprRef expression, RuneEnv* env, RegionAllocator* region);
+
+/**
+ * Get the value of a definition that was previously added to the environment.
+ * Note that definitions are not evaluated until 
+ */
+RuneEvalResult get_value(Name name, RuneEnv* env, RegionAllocator* region);
+
+/**
+ * Construct a document of the pretty values.
+ */
+Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a);
 
 #endif

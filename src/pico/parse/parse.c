@@ -589,13 +589,17 @@ ParseResult parse_number(uint8_t base, IStream* is, ParseContext ctx) {
 
 ParseResult parse_string(IStream* is, ParseContext ctx) {
     Allocator* a = ctx.a;
+    PiAllocator* pia = ctx.pia;
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
     size_t start = bytecount(is);
     next(is, &codepoint); // consume token (")
 
+    RawTreePiList nodes = {};
+
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
+        // Case 1: Escape characters
         if (codepoint == '\\') {
             next(is, &codepoint);
             size_t escape_start = bytecount(is);
@@ -623,6 +627,44 @@ ParseResult parse_string(IStream* is, ParseContext ctx) {
                 };
             }
         }
+        // Case 2: Embedded expressions (Rune only)
+        //   for example: "2 + 2 is ~(2 + 2)" 
+        if (codepoint == '~' && ctx.target == Rune) {
+          size_t str_end = bytecount(is);
+          next(is, &codepoint);
+          if ((result = peek(is, &codepoint)) != StreamSuccess)
+            break;
+          if (codepoint == '(') {
+            if (nodes.len == 0) {
+              nodes = mk_rawtree_list(8, pia);
+              RawTree str = {
+                .type = RawAtom,
+                .range.start = start,
+                .range.end = str_end,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(mv_string("join")),
+              };
+              push_rawtree(str, &nodes);
+            }
+            ParseResult res = parse_list(is, ')', HExpression, ctx);
+            if (res.type != ParseSuccess) return res;
+            RawTree str = {
+              .type = RawAtom,
+              .range.start = start,
+              .range.end = str_end,
+              .atom.type = AString,
+              .atom.string = string_from_UTF_32(arr, a),
+            };
+            arr.len = 0;
+            start = bytecount(is);
+            push_rawtree(str, &nodes);
+            push_rawtree(res.result, &nodes);
+            continue;
+          }
+          push_u32('~', &arr);
+          continue;
+        }
+
         push_u32(codepoint, &arr);
         next(is, &codepoint);
     }
@@ -636,15 +678,36 @@ ParseResult parse_string(IStream* is, ParseContext ctx) {
         };
     }
 
-    next(is, &codepoint); // consume token (")
-    return (ParseResult) {
+    next(is, &codepoint); // consume token "
+    if (nodes.len == 0) {
+      return (ParseResult) {
         .type = ParseSuccess,
         .result.type = RawAtom,
         .result.range.start = start,
         .result.range.end = bytecount(is),
         .result.atom.type = AString,
         .result.atom.string = string_from_UTF_32(arr, a),
-    };
+      };
+    } else {
+      if (arr.len != 0) {
+        RawTree string_end = {
+          .type = RawAtom,
+          .range.start = start,
+          .range.end = bytecount(is),
+          .atom.type = AString,
+          .atom.string = string_from_UTF_32(arr, a),
+        };
+        push_rawtree(string_end, &nodes);
+      }
+      return (ParseResult) {
+        .type = ParseSuccess,
+        .result.type = RawBranch,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
+        .result.branch.hint = HExpression,
+        .result.branch.nodes = nodes,
+      };
+    }
 }
 
 ParseResult parse_rawstring(IStream* is, ParseContext ctx) {

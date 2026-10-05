@@ -23,7 +23,7 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
     bool running = true;
     while (running) {
         PiAllocator pia = convert_to_pallocator(&ra);
-        ParseResult parse_res = parse_rawtree(in, &pia, &ra);
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {
@@ -60,7 +60,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     bool running = true;
     while (running) {
         PiAllocator pia = convert_to_pallocator(&ra);
-        ParseResult parse_res = parse_rawtree(in, &pia, &ra);
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {

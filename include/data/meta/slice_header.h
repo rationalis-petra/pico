@@ -10,4 +10,14 @@
         size_t len;                                 \
     } tprefix##Slice;                               \
 
+#define SLICE_MAP_TYPE(type1, type2, tprefix)   \
+    typedef struct {                            \
+        type1 key;                              \
+        type2 val;                              \
+    } tprefix##SCell;                           \
+    typedef struct {                            \
+        tprefix##SCell* data;                   \
+        size_t len;                             \
+    } tprefix##Slice;
+
 #endif

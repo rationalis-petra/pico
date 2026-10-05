@@ -55,6 +55,9 @@ void atlas_build(AtlasInstance* instance, String target, RegionAllocator* region
  */
 void register_package(AtlasInstance* instance, Package* package);
 
+/**
+ * Add or set pieces of internal state
+ */
 void set_instance_package(AtlasInstance* instance, Package* package);
 void set_instance_project(AtlasInstance* instance, Project project);
 void atlas_add_def(AtlasInstance* instance, Def def);

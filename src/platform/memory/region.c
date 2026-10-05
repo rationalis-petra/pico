@@ -59,7 +59,7 @@ static size_t align_padding(size_t size, size_t align) {
     return pad;
 }
 
-void* region_alloc(RegionAllocator* region, size_t memsize) {
+void* region_alloc(size_t memsize, RegionAllocator* region) {
     // Allocation happens 
 
     size_t alloc_size = memsize + sizeof(size_t);
@@ -117,14 +117,14 @@ void* region_alloc(RegionAllocator* region, size_t memsize) {
 }
 
 void* region_malloc_adapter(size_t memsize, void* arena) {
-    return region_alloc((RegionAllocator*)arena, memsize);
+    return region_alloc(memsize, (RegionAllocator*)arena);
 }
 
 void* region_realloc(void* ptr, size_t memsize, void* ctx) {
     // Regions are like arenas and don't reallocate; just get a new block and discard the old one
     size_t old_size = *(size_t*) (ptr - sizeof(size_t));
     if (memsize > old_size) {
-        void* new_data = region_alloc(ctx, memsize);
+        void* new_data = region_alloc(memsize, ctx);
         memcpy(new_data, ptr, old_size);
         return new_data;
     } else {

@@ -54,7 +54,7 @@ void delete_prop_set(PropSet *set) {
     mem_free(set, set->gpa);
 }
 
-void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
+void add_expr_prop(String propname, Expr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -63,7 +63,7 @@ void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
     push_prop(prop, &props->props);
 }
 
-void add_expr_option_prop(String propname, ExprOption* location, PropSet* props) {
+void add_expr_option_prop(String propname, Expr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -72,14 +72,13 @@ void add_expr_option_prop(String propname, ExprOption* location, PropSet* props)
     push_prop(prop, &props->props);
 }
 
-void add_expr_array_prop(String propname, ExprArray* location, PropSet* props) {
+void add_expr_array_prop(String propname, Expr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
         .type = PExprArray,
     };
     push_prop(prop, &props->props);
-
 }
 
 void add_name_prop(String propname, Name* location, PropSet* props) {
@@ -208,9 +207,8 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     ? term.branch.nodes.data[1]
                     : raw_slice(&term, 1);
 
-                ExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
-                ExprRef* dest = prop.location;
-                *dest = ref;
+                Expr* dest = prop.location;
+                abstract_rune_to(expr, host_data, pool, region, point, dest);
                 break;
             }
             case PExprOption: {
@@ -218,30 +216,45 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     ? term.branch.nodes.data[1]
                     : raw_slice(&term, 1);
 
-                ExprOption* dest = prop.location;
-                // TODO: Remove this; instead make it an option type in the language
+
+                Expr* dest = prop.location;
                 if (is_key_symbol(expr, string_to_symbol(mv_string("none")))) {
-                    *dest = (ExprOption) {
-                        .type = None,
+                    *dest = (Expr) {
+                        .type = ECtor,
+                        .ctor.name = string_to_name(mv_string("none")),
                     };
                 } else {
-                    ExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
-                    *dest = (ExprOption) {
-                        .type = Some,
-                        .val = ref,
+                    ExprRef ctor_ref = new_expr(pool);
+                    Expr ctor = {
+                        .type = ECtor,
+                        .ctor.name = string_to_name(mv_string("some")),
+                    };
+                    set_expr(ctor_ref, ctor, pool);
+                    ExprSlice members = new_expr_slice(1, pool);
+                    Expr val;
+                    abstract_rune_to(expr, host_data, pool, region, point, &val);
+                    set_expr_elt(members, 0, val, pool);
+                    *dest = (Expr) {
+                        .type = EApp,
+                        .app.fn = ctor_ref,
+                        .app.args = members,
                     };
                 }
                 break;
             }
             case PExprArray: {
-                ExprArray arr = mk_expr_array(term.branch.nodes.len - 1, a);
+                ExprSlice slice = new_expr_slice(term.branch.nodes.len - 1, pool);
                 for (size_t i = 1; i < term.branch.nodes.len; i++) {
-                    ExprRef ref = abstract_rune_expr(term.branch.nodes.data[i], host_data, pool, region, point);
-                    push_expr(ref, &arr);
+                    Expr expr;
+                    abstract_rune_to(term.branch.nodes.data[i], host_data, pool, region, point, &expr);
+                    set_expr_elt(slice, i, expr, pool);
                 }
 
-                ExprArray* dest = prop.location;
-                *dest = arr;
+                Expr* dest = prop.location;
+                *dest = (Expr) {
+                    .type = EList,
+                    .list = slice
+                };
                 break;
             }
             case PCallback: {

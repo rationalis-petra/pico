@@ -3,8 +3,13 @@
 #include "pico/abstraction/helpers.h"
 #include "rune/analysis/abstraction.h"
 
-static ExprRef mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
-static ExprRef mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
+// Functional Core
+static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+
+// Literals
+static void mk_list_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
 
 Def abstract_rune_def(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
@@ -46,7 +51,7 @@ Def abstract_rune_def(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
     };
 }
 
-ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     switch (raw.type) {
@@ -60,25 +65,23 @@ ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* po
         }
         RawTree head = raw.branch.nodes.data[0];
         if (eq_symbol(&head, string_to_symbol(mv_string("fn")))) {
-            return mk_fn_expr(raw, host_data, pool, region, point);
+            mk_fn_expr(raw, host_data, pool, region, point, out);
+        } else if (eq_symbol(&head, string_to_symbol(mv_string(":")))) {
+            mk_ctor_expr(raw, host_data, pool, region, point, out);
+        } else if (eq_symbol(&head, string_to_symbol(mv_string("list")))) {
+            mk_list_expr(raw, host_data, pool, region, point, out);
         } else {
             if (is_symbol(head)) {
                 for (size_t i = 0; i < host_data.names.len; i++) {
                     if (host_data.names.data[i] == head.atom.symbol.name) {
-                        ExprRef eref = new_expr(pool);
-                        HostRef ref = host_data.abstract(raw, host_data, pool, region, point);
-                        Expr expr = {
-                            .type = EHost,
-                            .host = ref,
-                        };
-                        set_expr(eref, expr, pool);
-                        return eref;
+                        host_data.abstract(raw, host_data, pool, region, point, host_data.closure_data, out);
                     }
                 }
             }
             // No matches locally; must be an application
-            return mk_app_expr(raw, host_data, pool, region, point);
+            mk_app_expr(raw, host_data, pool, region, point, out);
         }
+        return;
         break;
     }
     case RawAtom: {
@@ -108,18 +111,19 @@ ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* po
             break;
         }
         case ASymbol: {
-            Expr sym = {
+            *out = (Expr) {
                 .type = EVar,
                 .var = raw.atom.symbol.name,
             };
-            ExprRef ref = new_expr(pool);
-            set_expr(ref, sym, pool);
-            return ref;
-            break;
+            return;
         }
-        case AString:
-            panic(mv_string("TODO: string interpolation"));
-            break;
+        case AString: {
+            *out = (Expr) {
+                .type = EString,
+                .string = raw.atom.string,
+            };
+            return;
+        }
         case ACapture:
             panic(mv_string("It should not be possible for captures to mainfest in rune."));
             break;
@@ -130,8 +134,16 @@ ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* po
     panic(mv_string("Invalid raw syntax provided to rune."));
 }
 
+ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+    ExprRef ref = new_expr(pool);
+    Expr expr;
+    abstract_rune_to(raw, host_data, pool, region, point, &expr);
+    set_expr(ref, expr, pool);
+    return ref;
+}
 
-static ExprRef mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+
+static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     if (raw.branch.nodes.len < 3) {
@@ -145,7 +157,6 @@ static ExprRef mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* poo
     RawTree raw_body = raw.branch.nodes.len == 3
         ? raw.branch.nodes.data[2]
         : raw_slice(&raw, 2);
-    ExprRef fn = new_expr(pool);
     NameArray arr; 
     if (!get_name_list(&arr, raw_args, a)) {
         PicoError err = {
@@ -155,33 +166,71 @@ static ExprRef mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* poo
         throw_pi_error(point, err);
     }
     ExprRef body = abstract_rune_expr(raw_body, host_data, pool, region, point);
-    Expr fne = {
+    *out = (Expr) {
         .type = EFn,
         .fn.args = arr,
         .fn.body = body,
     };
-    set_expr(fn, fne, pool);
-    return fn;
 }
 
-static ExprRef mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
+    if (raw.branch.nodes.len > 3 || raw.branch.nodes.len < 2) {
+        PicoError err = {
+            .range = raw.range,
+            .message = mv_cstr_doc("Constructor terms should look like :constructor or Type:constructor.", a),
+        };
+        throw_pi_error(point, err);
+    }
+    Symbol name;
+    if (!get_symbol(raw.branch.nodes.data[1], &name)) {
+        PicoError err = {
+            .range = raw.range,
+            .message = mv_cstr_doc("Constructor terms should look like :constructor or Type:constructor.", a),
+        };
+        throw_pi_error(point, err);
+    }
+    ExprOption body = {.type = None};
+    if (raw.branch.nodes.len == 3) {
+      body = (ExprOption) {
+          .type = Some,
+          .val = abstract_rune_expr(raw.branch.nodes.data[2], host_data, pool, region, point),
+      };
+    }
+    *out = (Expr) {
+        .type = ECtor,
+        .ctor.name = name.name,
+        .ctor.type = body,
+    };
+}
 
+static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
     RawTree head = raw.branch.nodes.data[0];
-    ExprRef app = new_expr(pool);
     ExprRef fn = abstract_rune_expr(head, host_data, pool, region, point);
 
-    ExprArray args = mk_expr_array(raw.branch.nodes.len - 1, a);
+    ExprSlice args = new_expr_slice(raw.branch.nodes.len - 1, pool);
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-        push_expr(abstract_rune_expr(raw.branch.nodes.data[i], host_data, pool, region, point), &args);
+        Expr out;
+        abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
+        set_expr_elt(args, i, out, pool);
     }
-    Expr appe = {
+    *out = (Expr) {
         .type = EApp,
         .app.fn = fn,
         .app.args = args,
     };
-    set_expr(app, appe, pool);
-    return app;
 }
 
+static void mk_list_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+    ExprSlice args = new_expr_slice(raw.branch.nodes.len - 1, pool);
+    for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        Expr out;
+        abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
+        set_expr_elt(args, i, out, pool);
+    }
+    *out = (Expr) {
+        .type = EList,
+        .list = args,
+    };
+}
