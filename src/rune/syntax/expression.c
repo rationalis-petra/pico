@@ -118,7 +118,7 @@ ExprRef get_expr_elt(ExprSlice slice, uint32_t idx) {
 }
 
 NameExprMap new_expr_map(uint32_t len, ExprPool* pool) {
-    NameExprMap out = {.start = pool->expressions.len, .len = len};
+    NameExprMap out = {.start = pool->named_expressions.len, .len = len};
     GenericSlice slice = {
         .data = pool->named_expressions.data,
         .len = pool->named_expressions.len,

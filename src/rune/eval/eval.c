@@ -1,4 +1,4 @@
-#include "data/meta/array_impl.h"
+#include <string.h>
 #include "platform/signals.h"
 
 #include "components/pretty/standard_types.h"
@@ -77,6 +77,11 @@ void rune_add_def(Name name, ExprRef expr, RuneEnv* env) {
     name_ptr_insert(name, (void*)ref.ref, &env->values);
 }
 
+void rune_add_val_def(Name name, ValRef ref, RuneEnv* env) {
+    // TODO: detect duplicate definitions and produce error.
+    name_ptr_insert(name, (void*)ref.ref, &env->values);
+}
+
 RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
     ctx.depth++;
     Allocator a = ra_to_gpa(ctx.region);
@@ -143,6 +148,7 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
                 for (size_t i = 0; i < actual_args; i++) {
                     ExprRef arg = get_expr_elt(expr.app.args, i + args_consumed);
                     RuneEvalResult result = eval_rune_internal(arg, ctx);
+                    if (result.type != AValue) return result;
                     push_u64(result.value.ref, &done_args);
                 }
                 args_consumed += actual_args;
@@ -185,6 +191,7 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
                 for (size_t i = 0; i < avail_args; i++) {
                     ExprRef arg = get_expr_elt(expr.app.args, i + args_consumed);
                     RuneEvalResult result = eval_rune_internal(arg, ctx);
+                    if (result.type != AValue) return result;
                     push_u64(result.value.ref, &done_args);
                 }
                 RuneData* old = get_rune_data(fn);
@@ -200,6 +207,33 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
                     .type = AValue,
                     .value = out,
                 };
+            } else if (sort == ValHost) {
+                Bridge bridge = get_host_bridge(fn);
+                if (bridge.type != BFn) {
+                    return (RuneEvalResult) {
+                        .type = AError,
+                        .error_message = mv_cstr_doc("Non-function used as a function.", &a),
+                    };
+                }
+
+                RuneEvalResult (*callee)(ValSlice values, RuneEnv* env, RegionAllocator* region);
+                get_host_val(fn, &callee);
+                if (bridge.fn.variadic) {
+                    U64Array done_args = mk_u64_array(expr.app.args.len, &a);
+                    for (size_t i = 0; i < expr.app.args.len; i++) {
+                        ExprRef arg = get_expr_elt(expr.app.args, i + args_consumed);
+                        RuneEvalResult result = eval_rune_internal(arg, ctx);
+                        if (result.type != AValue) return result;
+                        push_u64(result.value.ref, &done_args);
+                    }
+                    ValSlice args = {
+                        .len = done_args.len,
+                        .data = (void*)done_args.data,
+                    };
+                    return callee(args, ctx.env, ctx.region);
+                } else {
+                    panic(mv_string("TODO: implement currying for non-variadic builtins."));
+                }
             } else {
                 return (RuneEvalResult) {
                     .type = AError,
@@ -217,6 +251,29 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
             type = (ValRefOption) {.type = Some, .val = result.value};
         }
         ValRef out = mk_rune_data(expr.ctor.name, type, 0, pools.value); 
+        return (RuneEvalResult) {
+            .type = AValue,
+            .value = out,
+        };
+    };
+    case ERecord: {
+        ValRefOption type = {.type = None};
+        if (expr.record.type.type == Some) {
+            RuneEvalResult result = eval_rune_internal(expr.record.type.val, ctx);
+            if (result.type != AValue) return result;
+            type = (ValRefOption) {.type = Some, .val = result.value};
+        }
+        ValRef out = mk_rune_record(type, expr.record.fields.len,  pools.value); 
+        RuneRecord* record = get_rune_record(out);
+        for (size_t i = 0; i < record->len; i++) {
+            NameExprCell cell = get_expr_map_elt(expr.record.fields, i, pools.expr);
+            RuneEvalResult result = eval_rune_internal(cell.val, ctx);
+            if (result.type != AValue) return result;
+            record->values[i] = (NameValPr) {
+                .name = cell.name,
+                .val = result.value,
+            };
+        };
         return (RuneEvalResult) {
             .type = AValue,
             .value = out,
@@ -339,6 +396,21 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
         push_ptr(mv_cat_doc(head, a), &nodes);
         for (size_t i = 0; i < data->len; i++) {
             push_ptr(pretty_rune_value(data->values[i], env, a), &nodes);
+        }
+        return mv_sep_doc(nodes, a);
+    }
+    case ValRecord: {
+        RuneRecord* record = get_rune_record(ref);
+        PtrArray nodes = mk_ptr_array(1 + record->len, a);
+        push_ptr(mv_cstr_doc("record", a), &nodes);
+        for (size_t i = 0; i < record->len; i++) {
+            PtrArray fnodes = mk_ptr_array(2, a);
+            PtrArray head =  mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(".", a), &head);
+            push_ptr(mk_str_doc(view_name_string(record->values[i].name), a), &head);
+            push_ptr(mv_cat_doc(head, a), &fnodes);
+            push_ptr(pretty_rune_value(record->values[i].val, env, a), &fnodes);
+            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), &nodes);
         }
         return mv_sep_doc(nodes, a);
     }

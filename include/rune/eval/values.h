@@ -7,7 +7,13 @@
 
 #include "rune/syntax/expression.h"
 
-OPTION_TYPE(ValRef, ValRef)
+OPTION_TYPE(ValRef, ValRef);
+SLICE_TYPE(ValRef, Val);
+
+typedef struct {
+    Name name;
+    ValRef val;
+} NameValPr;
 
 /**
  * Rune values are all garbage-collected. To C, we expose only an opaque
@@ -39,9 +45,11 @@ typedef struct {
     ValRef* curried;
 } RuneClosure;
 
-// Note: for all user data-types, 
-// • The type-tag is present to denote 
-// • If the value is from a nominal type, and, if so, what type.
+/**
+ * Note: for all user data-types, 
+ * • The type-tag is present to denote 
+ * • If the value is from a nominal type, and, if so, what type.
+ */
 typedef struct {
     Option_t type;
     ValRef ref;
@@ -79,12 +87,16 @@ typedef struct {
 } RuneCoData;
 
 typedef struct {
-    // TODO: support QIITs
+    Name name; 
+    ValRefOption type;
+    uint64_t len;
+    ValRef values[];
 } RuneRecordType;
 
 typedef struct {
-    Name tag;
-    ValRef* values;
+    ValRefOption type;
+    uint64_t len;
+    NameValPr values[];
 } RuneRecord;
 
 // Express as composite data?
@@ -120,6 +132,9 @@ typedef enum {
   ValRecordType,
   ValCoRecordType,
 
+  // Host values (C FFI).
+  ValHost,
+
   // Builtin Values
   ValInt,
   ValString,
@@ -144,7 +159,8 @@ RuneClosure get_rune_closure(ValRef val);
 ValRef mk_rune_data(Name tag, ValRefOption src_type, size_t capacity, ValueHeap* heap);
 RuneData* get_rune_data(ValRef ref);
 
-// Builtin Values
+ValRef mk_rune_record(ValRefOption src_type, size_t capacity, ValueHeap* heap);
+RuneRecord* get_rune_record(ValRef ref);
 
 // Get/set elements of a list. (set should only be used during construction)
 ValRef mk_rune_list(size_t num_elements, ValueHeap* heap); 
@@ -157,6 +173,39 @@ String get_rune_string(ValRef ref);
 // Create Integers
 ValRef mk_rune_int(int64_t val, ValueHeap* heap); 
 int64_t get_int(ValRef ref);
+
+/**
+ * Host values
+ * A *bridge* describes an expected subset of both C and Rune data-structures
+ * where there is an obvious translation between them. 
+ */
+
+typedef enum {
+    BFn,
+} BridgeType;
+
+/**
+ * C functions for Relic will always take:
+ * • The current evaluation enironment, RuneEnv
+ * • A slice of arguments (ValRef) 
+ * and return a ValRef
+ */
+typedef struct {
+    bool variadic;
+    size_t num_args;
+} BridgeFn;
+
+typedef struct {
+    BridgeType type;
+    union {
+        BridgeFn fn;
+    };
+} Bridge;
+
+ValRef mk_host_val(Bridge bridge, void* data, ValueHeap* heap);
+Bridge get_host_bridge(ValRef ref);
+void get_host_val(ValRef ref, void* data);
+bool get_as_host_val(ValRef ref, Bridge template, void* data);
 
 /* 
  * Value Helper Functions

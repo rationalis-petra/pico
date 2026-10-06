@@ -2,10 +2,12 @@
 
 #include "pico/abstraction/helpers.h"
 #include "rune/analysis/abstraction.h"
+#include "rune/analysis/abstraction_errors.h"
 
 // Functional Core
 static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
 static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+static void mk_record_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
 static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
 
 // Literals
@@ -29,7 +31,6 @@ Def abstract_rune_def(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
         };
         throw_pi_error(point, err);
     }
-
 
     RawTree name = raw.branch.nodes.data[1];
     if (!is_symbol(name)) {
@@ -68,6 +69,8 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
             mk_fn_expr(raw, host_data, pool, region, point, out);
         } else if (eq_symbol(&head, string_to_symbol(mv_string(":")))) {
             mk_ctor_expr(raw, host_data, pool, region, point, out);
+        } else if (eq_symbol(&head, string_to_symbol(mv_string("record")))) {
+            mk_record_expr(raw, host_data, pool, region, point, out);
         } else if (eq_symbol(&head, string_to_symbol(mv_string("list")))) {
             mk_list_expr(raw, host_data, pool, region, point, out);
         } else {
@@ -201,6 +204,51 @@ static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool
         .type = ECtor,
         .ctor.name = name.name,
         .ctor.type = body,
+    };
+}
+
+static void mk_record_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+    ExprOption body = {.type = None};
+    size_t pad = 1;
+    if (raw.branch.nodes.len > 1) {
+        RawTree maybe_type = raw.branch.nodes.data[1];
+        if (maybe_type.type != RawBranch || maybe_type.branch.hint == HExpression) {
+            pad++;
+            body = (ExprOption) {
+                .type = Some,
+                .val = abstract_rune_expr(maybe_type, host_data, pool, region, point),
+            };
+        }
+    }
+
+    NameExprMap fields = new_expr_map(raw.branch.nodes.len - pad, pool);
+    for (size_t i = 0; i < fields.len; i++) {
+        RawTree fdesc = raw.branch.nodes.data[i + pad];
+        if (fdesc.type != RawBranch) {
+            record_bad_fdesc_type(fdesc, point, region);
+        }
+
+        if (fdesc.branch.nodes.len < 2) {
+            record_bad_fdesc_len(fdesc, point, region);
+        }
+
+        Symbol field;
+        if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
+            record_bad_fdesc_fieldname(fdesc, point, region);
+        }
+
+        RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1); 
+        ExprRef fexpr = abstract_rune_expr(val_desc, host_data, pool, region, point);
+        NameExprCell cell = {
+            .name = field.name,
+            .val = fexpr,
+        };
+        set_expr_map_elt(fields, i, cell, pool);
+    }
+    *out = (Expr) {
+        .type = ERecord,
+        .record.type = body,
+        .record.fields = fields,
     };
 }
 

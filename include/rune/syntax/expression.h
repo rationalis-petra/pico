@@ -112,7 +112,7 @@ ExprRef get_expr_elt(ExprSlice slice, uint32_t idx);
 
 typedef struct {
     Name name;
-    Expr val;
+    ExprRef val;
 } NameExprCell;
 NameExprMap new_expr_map(uint32_t len, ExprPool* pool);
 void set_expr_map_elt(NameExprMap map, size_t idx, NameExprCell cell, ExprPool* pool);

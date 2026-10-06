@@ -67,7 +67,7 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
         return;
     }
 
-    RuneEnv* env = mk_rune_env(&ra);
+    RuneEnv* env = context.env ? context.env : mk_rune_env(&ra);
     Pools pools = get_pools(env);
     HostCallbackData host_data = {0};
     ExprRef expr = abstract_rune_expr(parse_res.result, host_data, pools.expr, subregion, &point);
@@ -76,7 +76,9 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
     if (result.type == AError) {
         log_rune_eval_error(context.log, result.error_message, &ra);
         delete_istream(cin, &ra);
-        delete_rune_env(env);
+        if (context.env == NULL) {
+            delete_rune_env(env);
+        }
         release_subregion(subregion);
         return;
     }
@@ -84,14 +86,18 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
     if (!rune_value_eql(result.value, expected, pools.value, &ra)) {
         report_rune_mismatch(context.log, result.value, expected, env, &ra);
         delete_istream(cin, &ra);
-        delete_rune_env(env);
+        if (context.env == NULL) {
+            delete_rune_env(env);
+        }
         release_subregion(subregion);
         return;
     }
 
     test_pass(context.log);
     delete_istream(cin, &ra);
-    delete_rune_env(env);
+    if (context.env == NULL) {
+        delete_rune_env(env);
+    }
     release_subregion(subregion);
 }
 

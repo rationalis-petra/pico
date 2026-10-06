@@ -13,14 +13,16 @@ typedef struct PropSet PropSet;
 PropSet* make_prop_set(size_t numprops, Allocator* a);
 void delete_prop_set(PropSet* set);
 
+void add_string_prop(String propname, String* location, PropSet* props);
+
 void add_name_prop(String propname, Name* location, PropSet* props);
 void add_name_option_prop(String propname, NameOption* location, PropSet* props);
 void add_name_array_prop(String propname, NameArray* location, PropSet* props);
 
 // Expressions
-void add_expr_prop(String propname, Expr* location, PropSet* props);
-void add_expr_option_prop(String propname, Expr* location, PropSet* props);
-void add_expr_array_prop(String propname, Expr* location, PropSet* props);
+void add_expr_prop(String propname, ExprRef* location, PropSet* props);
+void add_expr_option_prop(String propname, ExprRef* location, PropSet* props);
+void add_expr_array_prop(String propname, ExprRef* location, PropSet* props);
 
 typedef void (*PropCb)(RawTree raw, PiErrorPoint *point, void* in, void* out);
 void add_callback_prop(String propname, PropCb callback, void* in, void* out, PropSet* props);

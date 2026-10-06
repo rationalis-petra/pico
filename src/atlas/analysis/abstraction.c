@@ -22,7 +22,7 @@ typedef enum {
 HostCallback abstract_atlas;
 void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, void* cb_data, Expr* out) {
     Allocator ra = ra_to_gpa(region);
-    AtAbsCallbackData types = *(AtAbsCallbackData*)cb_data;
+    AtAbsCallbackData types = {}; //*(AtAbsCallbackData*)cb_data;
 
     switch (raw.type) {
     case RawBranch: {
@@ -122,7 +122,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             Expr ctor = {
                 .type = ECtor,
                 .ctor = {
-                    .name = string_to_name(mv_string("library")),
+                    .name = string_to_name(mv_string("executable")),
                     .type = {.type = Some, .val = ttype_ref},
                 },
             };
@@ -243,7 +243,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             };
             throw_pi_error(point, err);
         }
-        break;
+        return;
     }
     case RawAtom: {
         PicoError err = {
@@ -348,14 +348,15 @@ void abstract_atlas_project(Project *project, ProjectRecord *record, RawTree raw
         if (string_cmp(mv_string("lang"), symbol_to_string(head, &ra)) == 0) {
             return;
         } else if (string_cmp(mv_string("package"), symbol_to_string(head, &ra)) == 0) {
-            bool package_checks[] = {false, false , false};
+            bool package_checks[] = {false, false , false, false};
 
             // Package 
             // - package-name :: symbol
             // - package-dependencies :: symbol list
             PropSet* props = make_prop_set(4, &ra);
             add_name_prop(mv_string("name"), &project->package.name, props);
-            add_name_array_prop(mv_string("dependencies"), &project->package.dependencies, props);
+            add_string_prop(mv_string("build-file"), &project->package.build_file, props);
+            add_name_array_prop(mv_string("depends-on"), &project->package.dependencies, props);
             add_callback_prop(mv_string("default"), (PropCb)parse_default, &ra, &project->package, props);
 
             HostCallbackData hdata = {};

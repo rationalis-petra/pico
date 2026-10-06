@@ -33,6 +33,11 @@ typedef struct {
 
 typedef struct {
     ValueInfo info;
+    RuneRecord record;
+} RecordRepr;
+
+typedef struct {
+    ValueInfo info;
     RuneList list;
 } ListRepr;
 
@@ -45,6 +50,12 @@ typedef struct {
     ValueInfo info;
     int64_t num;
 } IntRepr;
+
+typedef struct {
+    ValueInfo info;
+    Bridge bridge;
+    void* data;
+} HostRepr;
 
 struct ValueHeap {
     ValueInfo* begin;
@@ -75,6 +86,11 @@ void delete_value_heap(ValueHeap* heap) {
         case ValList: {
             ListRepr* list = (void*)info;
             mem_free(list->list.data, heap->gpa);
+            break;
+        }
+        case ValHost: {
+            HostRepr* host = (void*)info;
+            mem_free(host->data, heap->gpa);
             break;
         }
         default:
@@ -203,6 +219,25 @@ RuneData* get_rune_data(ValRef ref) {
     return &repr->data;
 }
 
+ValRef mk_rune_record(ValRefOption src_type, size_t capacity, ValueHeap* heap) {
+    RecordRepr* repr = create_obj(sizeof(RecordRepr) + sizeof(NameValPr) * capacity, ValRecord, heap);
+    repr->record = (RuneRecord) { 
+        .type = src_type,
+        .len = capacity,
+    };
+    return (ValRef){(uintptr_t)repr};
+}
+
+RuneRecord* get_rune_record(ValRef ref) {
+    RecordRepr* repr = (void*)ref.ref;
+#ifdef DEBUG_ASSERT
+    if (repr->info.sort != ValRecord) {
+        panic(mv_string("getting rune record from non-record object!"));
+    }
+#endif
+    return &repr->record;
+}
+
 ValRef mk_rune_int(int64_t val, ValueHeap* heap) {
     IntRepr* repr = create_obj(sizeof(IntRepr), ValInt, heap);
     repr->num = val;
@@ -218,6 +253,36 @@ int64_t get_int(ValRef ref) {
 #endif
     return repr->num;
 }
+
+ValRef mk_host_val(Bridge bridge, void* data, ValueHeap* heap) {
+    HostRepr* repr = create_obj(sizeof(HostRepr), ValHost, heap);
+    // TODO: add copying for more complex (non-function) objects.
+    repr->data = mem_alloc(sizeof(void*), heap->gpa);
+    memcpy(repr->data, data, sizeof(void*));
+    repr->bridge = bridge;
+    return (ValRef){(uintptr_t)repr};
+}
+
+Bridge get_host_bridge(ValRef ref) {
+    HostRepr* repr = (void*)ref.ref;
+#ifdef DEBUG_ASSERT
+    if (repr->info.sort != ValHost) {
+        panic(mv_string("getting rune host from non-host object!"));
+    }
+#endif
+    return repr->bridge;
+}
+void get_host_val(ValRef ref, void* data) {
+    HostRepr* repr = (void*)ref.ref;
+#ifdef DEBUG_ASSERT
+    if (repr->info.sort != ValHost) {
+        panic(mv_string("getting rune host from non-host object!"));
+    }
+#endif
+    // TODO: account for non-functions using bridge-size!
+    memcpy(data, repr->data, sizeof(void*));
+}
+bool get_as_host_val(ValRef ref, Bridge template, void* data);
 
 bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* a) {
     ValueSort actual_sort = get_sort(actual);
@@ -242,6 +307,26 @@ bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* 
         }
         for (size_t i = 0; i < actual_data->len; i++) {
             if (!rune_value_eql(actual_data->values[i], expected_data->values[i], heap, a)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case ValRecord: {
+        RuneRecord* actual_record = get_rune_record(actual);
+        RuneRecord* expected_record = get_rune_record(expected);
+        if (actual_record->len != expected_record->len) return false;
+        if (actual_record->type.type != expected_record->type.type) return false;
+        if (actual_record->type.type == Some) {
+            if (!rune_value_eql(actual_record->type.val, expected_record->type.val, heap, a)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < actual_record->len; i++) {
+            if (actual_record->values[i].name != expected_record->values[i].name) {
+                return false;
+            }
+            if (!rune_value_eql(actual_record->values[i].val, expected_record->values[i].val, heap, a)) {
                 return false;
             }
         }

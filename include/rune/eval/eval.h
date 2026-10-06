@@ -30,11 +30,13 @@ typedef struct {
 typedef struct RuneEnv RuneEnv;
 
 RuneEnv* mk_rune_env(Allocator* a);
+void populate_std_builtins(RuneEnv* env);
 void delete_rune_env(RuneEnv* env);
 
 Pools get_pools(RuneEnv* env);
 
 void rune_add_def(Name name, ExprRef expr, RuneEnv* env);
+void rune_add_val_def(Name name, ValRef ref, RuneEnv* env);
 
 /**
  * Evaluate the given expression in the environment.

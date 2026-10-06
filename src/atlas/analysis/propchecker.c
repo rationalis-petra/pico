@@ -10,6 +10,8 @@ typedef enum {
     PExprOption,
     PExprArray,
 
+    PString,
+
     PName,
     PNameOption,
     PNameArray,
@@ -54,7 +56,7 @@ void delete_prop_set(PropSet *set) {
     mem_free(set, set->gpa);
 }
 
-void add_expr_prop(String propname, Expr* location, PropSet* props) {
+void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -63,7 +65,7 @@ void add_expr_prop(String propname, Expr* location, PropSet* props) {
     push_prop(prop, &props->props);
 }
 
-void add_expr_option_prop(String propname, Expr* location, PropSet* props) {
+void add_expr_option_prop(String propname, ExprRef* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -72,11 +74,20 @@ void add_expr_option_prop(String propname, Expr* location, PropSet* props) {
     push_prop(prop, &props->props);
 }
 
-void add_expr_array_prop(String propname, Expr* location, PropSet* props) {
+void add_expr_array_prop(String propname, ExprRef* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
         .type = PExprArray,
+    };
+    push_prop(prop, &props->props);
+}
+
+void add_string_prop(String propname, String* location, PropSet* props) {
+    Prop prop = {
+        .name = propname,
+        .location = location,
+        .type = PString,
     };
     push_prop(prop, &props->props);
 }
@@ -157,7 +168,29 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
             Prop prop = props->props.data[i];
             checks[i] = true;
             switch (prop.type) {
-            case PName:
+            case PString: {
+                if (term.branch.nodes.len != 2) {
+                    PicoError err = {
+                        .range = term.range,
+                        .message = mk_str_doc(mv_string("This property expects a single string, but got multiple values."), a),
+                    };
+                    throw_pi_error(point, err);
+                }
+
+                RawTree rstr = term.branch.nodes.data[1];
+                if (rstr.type != RawAtom || rstr.atom.type != AString) {
+                    PicoError err = {
+                        .range = term.range,
+                        .message = mk_str_doc(mv_string("This property expects a single string, but got a different type of value."), a),
+                    };
+                    throw_pi_error(point, err);
+                }
+
+                String* dest = prop.location;
+                *dest = rstr.atom.string;
+                break;
+            }
+            case PName: {
                 if (term.branch.nodes.len != 2) {
                     PicoError err = {
                         .range = term.range,
@@ -178,8 +211,8 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                 Symbol* dest = prop.location;
                 *dest = rstr.atom.symbol;
                 break;
+            }
             case PNameOption:
-                
                 panic(mv_string("not parsing symbol option yet!"));
                 break;
             case PNameArray: {
@@ -207,8 +240,8 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     ? term.branch.nodes.data[1]
                     : raw_slice(&term, 1);
 
-                Expr* dest = prop.location;
-                abstract_rune_to(expr, host_data, pool, region, point, dest);
+                ExprRef* dest = prop.location;
+                *dest = abstract_rune_expr(expr, host_data, pool, region, point);
                 break;
             }
             case PExprOption: {
@@ -217,12 +250,15 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     : raw_slice(&term, 1);
 
 
-                Expr* dest = prop.location;
+                ExprRef* dest = prop.location;
                 if (is_key_symbol(expr, string_to_symbol(mv_string("none")))) {
-                    *dest = (Expr) {
-                        .type = ECtor,
-                        .ctor.name = string_to_name(mv_string("none")),
-                    };
+                    *dest = new_expr(pool);
+                    set_expr(*dest,
+                             (Expr) {
+                                 .type = ECtor,
+                                 .ctor.name = string_to_name(mv_string("none")),
+                             },
+                             pool);
                 } else {
                     ExprRef ctor_ref = new_expr(pool);
                     Expr ctor = {
@@ -234,11 +270,15 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     Expr val;
                     abstract_rune_to(expr, host_data, pool, region, point, &val);
                     set_expr_elt(members, 0, val, pool);
-                    *dest = (Expr) {
-                        .type = EApp,
-                        .app.fn = ctor_ref,
-                        .app.args = members,
-                    };
+
+                    *dest = new_expr(pool);
+                    set_expr(*dest,
+                             (Expr){
+                                 .type = EApp,
+                                 .app.fn = ctor_ref,
+                                 .app.args = members,
+                             },
+                             pool);
                 }
                 break;
             }
@@ -250,11 +290,11 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     set_expr_elt(slice, i, expr, pool);
                 }
 
-                Expr* dest = prop.location;
-                *dest = (Expr) {
-                    .type = EList,
-                    .list = slice
-                };
+                ExprRef* dest = prop.location;
+                    *dest = new_expr(pool);
+                    set_expr(*dest,
+                             (Expr){.type = EList, .list = slice},
+                             pool);
                 break;
             }
             case PCallback: {
