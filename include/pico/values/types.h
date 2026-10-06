@@ -50,6 +50,7 @@ typedef enum {
   TTile,
   TStruct,
   TEnum,
+  TFlags,
   TReset,
   TResumeMark,
   TDynamic,
@@ -117,6 +118,11 @@ typedef struct {
     SymAddrPiAMap variants;
     uint8_t tag_size;
 } EnumType;
+
+typedef struct {
+    SymbolPiList flag_values;
+    uint8_t flag_size;
+} FlagsType;
 
 typedef struct {
     PiType* in;
@@ -190,6 +196,7 @@ struct PiType {
         ProcType proc;
         StructType structure;
         EnumType enumeration;
+        FlagsType flags;
         ResetType reset;
         PiType* dynamic;
 
@@ -330,6 +337,9 @@ PiType* mk_trait_type(PiAllocator* pia, size_t nfields, ...);
 //   "None", 0)
 PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...);
 PiType* mk_sz_enum_type(PiAllocator* pia, uint8_t tagsize, size_t nfields, ...);
+
+PiType* mk_flags_type(PiAllocator* pia, size_t nfields, ...);
+PiType* mk_sz_flags_type(PiAllocator* pia, uint8_t tagsize, size_t nflags, ...);
 
 // Sample usage: mk_distinct_type(a, "List", ...)
 PiType* mk_named_type(PiAllocator* pia, const char* name, PiType* inner);

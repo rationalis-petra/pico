@@ -310,7 +310,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     name = string_to_name(mv_string("perm-allocator"));
     add_def(module, name, *typep, &std_perm_allocator, null_segments, NULL);
 
-    std_current_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator); 
+    std_current_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator);
     name = string_to_name(mv_string("current-allocator"));
     add_def(module, name, *typep, &std_current_allocator, null_segments, NULL);
 

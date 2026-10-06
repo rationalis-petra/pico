@@ -91,6 +91,16 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  out)" ;
     compile_toplevel(slice_copy_fn, module, target, &point, &pi_point, region);
 
+    const char *slice_copy_to_fn =
+        "(def copy-to all [A] proc [(dest (Slice A)) (src (Slice A))] seq\n"
+        "  [let! copy-len (min dest.len src.len)]"
+        "  (loop [for i from 0 below copy-len]\n"
+        "    [let! val (elt i src)]\n"
+        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num dest.addr)))]\n"
+        "    (address.store dest-address val))\n"
+        "  Unit)" ;
+    compile_toplevel(slice_copy_to_fn, module, target, &point, &pi_point, region);
+
     const char *slice_join_fn =
         "(def join all [A] proc [(x (Slice A)) (y (Slice A))] seq\n"
         "  [let! out (new {A} (u64.+ x.len y.len))]"

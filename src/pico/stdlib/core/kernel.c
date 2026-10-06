@@ -171,6 +171,18 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
     name = string_to_name(mv_string(":"));
     add_def(module, name, type, &former, null_segments, NULL);
 
+    former = FFlags;
+    name = string_to_name(mv_string("flags"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
+    former = FFlagsIntersect;
+    name = string_to_name(mv_string("flags-intersect"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
+    former = FFlagsEmpty;
+    name = string_to_name(mv_string("flags-empty?"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
     former = FMatch;
     name = string_to_name(mv_string("match"));
     add_def(module, name, type, &former, null_segments, NULL);
@@ -265,6 +277,10 @@ void add_kernel_module(Module* core, RegionAllocator* region) {
 
     former = FEnumType;
     name = string_to_name(mv_string("Enum"));
+    add_def(module, name, type, &former, null_segments, NULL);
+
+    former = FFlagsType;
+    name = string_to_name(mv_string("Flags"));
     add_def(module, name, type, &former, null_segments, NULL);
 
     former = FResetType;

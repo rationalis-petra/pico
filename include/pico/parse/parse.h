@@ -19,6 +19,18 @@ typedef struct ParseResult {
     };
 } ParseResult;
 
+/**
+ * Pase the raw syntax for Relic 
+ */
 ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a);
+
+/**
+ * Pase the raw syntax for Rune. Rune has a very similar syntax tree to relic
+ * (they share a representation). However, because memory management is
+ * automatic, it has some extra features. These are: 
+ * • String interpolation. Strings of the form "begin ~{expr} end" becomes the
+ *   expression (join (join "begin" <expr>) "end")
+ */
+ParseResult parse_rune_rawtree(IStream* is, PiAllocator* pia, Allocator* a);
 
 #endif

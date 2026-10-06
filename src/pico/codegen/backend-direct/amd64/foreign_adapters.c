@@ -57,7 +57,7 @@ SysVArgClass merge_sysv_classes(SysVArgClass c1, SysVArgClass c2) {
     return SysVSSE;
 }
 
-void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a) {
+void populate_sysv_words(U8Array* out, size_t offset, bool in_composite, CType* type, Allocator* a) {
     // We probably want to recurse and merge arrays from subclasses
     switch (type->sort) {
     case CSVoid:
@@ -101,16 +101,31 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
             offset = c_size_align(offset, field_al);
             
             // We need now to figure out get the eightbytes
-            populate_sysv_words(out, offset, &field_ty, a);
+            populate_sysv_words(out, offset, true, &field_ty, a);
 
             offset += field_sz; 
+        }
+        break;
+    }
+    case CSStaticArray: {
+            CType elt_ty = *type->array.element;
+            size_t field_sz = c_size_of(elt_ty);
+            size_t field_al = c_align_of(elt_ty);
+            for (size_t i = 0; i < type->array.len; i++) {
+                offset = c_size_align(offset, field_al);
+                populate_sysv_words(out, offset, true, &elt_ty, a);
+                offset += field_sz;
+            }
+        if (in_composite) {
+        } else {
+            out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         }
         break;
     }
     case CSUnion:
         for (size_t i = 0; i < type->cunion.fields.len; i++) {
             CType* field_ty = type->cunion.fields.data[i].val;
-            populate_sysv_words(out, offset, field_ty, a);
+            populate_sysv_words(out, offset, true, field_ty, a);
         }
         break;
     case CSCEnum:
@@ -132,7 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
         for (size_t i = 0; i < num_words; i++) {
             push_u8(SysVNoClass, &out);
         }
-        populate_sysv_words(&out, 0, type, a);
+        populate_sysv_words(&out, 0, false, type, a);
     } 
 
     // Post merger cleanup:
@@ -146,7 +161,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
     // c) If the size of the aggregate exceeds two eightbytes and the first eightbyte isn’t
     //    SSE or any other eightbyte isn’t SSEUP, the whole argument is passed in memory
     if (type_size > 16) {
-        if (out.data[0] != SysVSSE) use_memory = true;
+        if (out.len == 0 || out.data[0] != SysVSSE) use_memory = true;
         for (size_t i = 1; i < out.len; i++) {
             if (out.data[i] != SysVSSEUp) use_memory = true;
         }
@@ -191,6 +206,7 @@ Win64ArgClass win_64_arg_class(CType* type) {
         return Win64Floating;
     case CSPtr:
     case CSProc:
+    case CSStaticArray:
         return Win64Integer;
     case CSIncomplete:
         panic(mv_string("Incomplete type does not have arg class"));
@@ -215,10 +231,16 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     // This function is for converting a c function (assumed platform default
     // ABI) into a pico function. This means that it assumes that all arguments
     // are pushed on the stack in forward order (last at top).
-    if (ctype->sort != CSProc || ptype->sort != TProc) {
+    if (ctype->sort != CSProc || (ptype->sort != TProc && ptype->sort != TAll)) {
         panic(mv_string("convert_c_fun requires types to be functions."));
     }
-    if (ctype->proc.args.len != ptype->proc.args.len) {
+
+    SymAddrPiAMap syms = ptype->sort == TAll ? ptype->binder.vars : (SymAddrPiAMap){};
+    AddrPiList args = ptype->sort == TProc ? ptype->proc.args :
+        ptype->binder.body->sort == TProc ? ptype->binder.body->proc.args : (AddrPiList){};
+    PiType* ret_ty = ptype->sort == TProc ? ptype->proc.ret :
+        ptype->binder.body->sort == TProc ? ptype->binder.body->proc.ret : ptype->binder.body;
+    if (ctype->proc.args.len != syms.len + args.len) {
         String message = string_ncat(a, 4,
                                      mv_string("convert_c_fun requires functions to have same number of args. \n     C Type had : "),
                                      string_u64(ctype->proc.args.len, a),
@@ -227,13 +249,13 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         panic(message);
     }
 
-    if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+    if (!bd_can_reinterpret(ctype->proc.ret, ret_ty)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function return types -", a), &nodes);
         push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
         push_ptr(mv_cstr_doc("and", a), &nodes);
-        push_ptr(pretty_type(ptype->proc.ret, default_ptp, a), &nodes);
+        push_ptr(pretty_type(ret_ty, default_ptp, a), &nodes);
         push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
         panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
     }
@@ -245,18 +267,66 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     U64Array arg_offsets = mk_u64_array(ctype->proc.args.len + 1, a);
     arg_offsets.len = arg_offsets.size;
     uint64_t offset = ADDRESS_SIZE; // To account for return address
-    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+    for (size_t i = 0; i < args.len; i++) {
         size_t idx = arg_offsets.len - (i + 1);
+        size_t p_idx = idx - syms.len - 1;
+        size_t c_idx = idx - 1;
         arg_offsets.data[idx] = offset;
-        offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
+        size_t size;
+        bool is_poly = false;
+        if (pi_maybe_size_of(*(PiType*)args.data[p_idx], &size) != Ok) {
+            offset += ADDRESS_SIZE;
+            is_poly = true;
+        } else  {
+            offset += pi_stack_align(size);
+        }
 
-        if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+        if (!is_poly) {
+            if (!bd_can_reinterpret(&ctype->proc.args.data[c_idx].val, args.data[p_idx])) {
+                // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
+                push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
+                push_ptr(mv_cstr_doc("and", a), &nodes);
+                push_ptr(pretty_type(args.data[p_idx], default_ptp, a), &nodes);
+                push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
+                panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
+            }
+        } else {
+            PiType type_data = (PiType) {
+                .sort = TPrim,
+                .prim = Address,
+            };
+            if (!bd_can_reinterpret(&ctype->proc.args.data[c_idx].val, &type_data)) {
+                // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Attempted to do invalid conversion of c function argument types to polymorphic argument", a), &nodes);
+                push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
+                push_ptr(mv_cstr_doc("is not compatible with:", a), &nodes);
+                push_ptr(pretty_type(args.data[p_idx], default_ptp, a), &nodes);
+                push_ptr(mv_cstr_doc(". Note that any argument in a polymorphic function whose size is dependent on the type is passed as a pointer to c.", a), &nodes);
+                panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
+            }
+        }
+    }
+    for (size_t i = 0; i < syms.len; i++) {
+        size_t idx = arg_offsets.len - (i + 1 + args.len);
+        size_t p_idx = idx - 1;
+        size_t c_idx = idx - 1;
+        arg_offsets.data[idx] = offset;
+        offset += REGISTER_SIZE;
+
+        PiType type_data = (PiType) {
+            .sort = TPrim,
+            .prim = UInt_64,
+        };
+        if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, &type_data)) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
             PtrArray nodes = mk_ptr_array(4, a);
-            push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
-            push_ptr(pretty_ctype(&ctype->proc.args.data[i].val, a), &nodes);
+            push_ptr(mv_cstr_doc("Attempted to do invalid conversion of c function argument types to all type argument -", a), &nodes);
+            push_ptr(pretty_ctype(&ctype->proc.args.data[c_idx].val, a), &nodes);
             push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(pretty_type(ptype->proc.args.data[i], default_ptp, a), &nodes);
+            push_ptr(pretty_type(syms.data[p_idx].val, default_ptp, a), &nodes);
             push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
             panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
         }
@@ -291,7 +361,12 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     bool pass_return_in_memory =
         (return_classes.len == 1 && return_classes.data[0] == SysVMemory)
         || (return_classes.len > 2);
-    if (pass_return_in_memory) {
+    // We reserve memory for the output only if:
+    // - The Calling convention dictates that the return value is passed in
+    //   memory; and
+    // - The Relic function is not polymorphic; as polymorphic functions have 
+    //   already pre-reseved space for the return value.
+    if (pass_return_in_memory && ptype->sort != TAll) {
         input_area_size += return_arg_size;
         current_integer_register++;
     }
@@ -406,9 +481,16 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R11, sz_64), ass, a, point);
 
     if (pass_return_in_memory) {
-        // pass in memory - reserve space on stack:
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
-        build_binary_op(Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), ass, a, point);
+        if (ptype->sort == TProc) {
+            // pass in memory - reserve space on stack:
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
+            build_binary_op(Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), ass, a, point);
+        } else {
+            // We are given a return destination by the caller - forward that on
+            // to the C function.
+            size_t offset = arg_offsets.data[0] + 0x10;
+            build_binary_op(Mov, reg(integer_registers[0], sz_64), rrefa(RBX, offset, sz_64), ass, a, point);
+        }
     }
 
     for (size_t i = 0; i < in_memory_args.len; i++) {
@@ -494,9 +576,15 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
 
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-
         // The -0x8 accounts for the fact that we just popped the return address! 
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
+
+        if (ptype->sort == TAll) {
+            // Polymorphic function: we also need to pop the desired Vstack Head
+            // and the return destination
+            build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+        }
 
         // Now, push registers onto stack
         size_t current_int_return_register = return_classes.len - 1;
@@ -539,6 +627,14 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                 break;
             } 
         }
+        if (ptype->sort == TAll) {
+            size_t offset = 0;
+            for (size_t ctr = 0; ctr < return_classes.len; ctr++) {
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, rref8(RSI, offset, sz_64), reg(RAX, sz_64), ass, a, point);
+                offset += REGISTER_SIZE;
+            }
+        }
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     }
     build_nullary_op(Ret, ass, a, point);
@@ -558,7 +654,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     size_t input_area_size = 0;
 
     // Calculate input area size:
-    if (pass_in_memory) {
+    if (pass_in_memory && ptype->sort != TAll) {
         input_area_size += pi_stack_align(return_arg_size);
     }
 
@@ -596,9 +692,14 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
 
     // Check for return arg/space
     if (pass_in_memory) {
-        Regname next_reg = integer_registers[current_register++];
-        build_binary_op(Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), ass, a, point);
-        build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
+         Regname next_reg = integer_registers[current_register++];
+        if (ptype->sort == TProc) {
+            build_binary_op(Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), ass, a, point);
+            build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
+        } else {
+            size_t offset = arg_offsets.data[0] + 0x10;
+            build_binary_op(Mov, reg(next_reg, sz_64), rrefa(RBX, offset, sz_64), ass, a, point);
+        }
     }
 
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
@@ -758,6 +859,11 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
 
         // The offsets account for the return address (which we just popped!), therefore subtract 0x8
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
+
+        if (ptype->sort == TAll) {
+            build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+        }
 
         // Now, push result onto stack
         if (return_arg_size > 0)
@@ -928,7 +1034,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
     panic(mv_string("Invalid prim provided to can_reinterpret_type"));
 }
 
-bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
+bool bd_can_reinterpret_internal(CType* ctype, PiType* ptype, bool in_composite) {
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
     //                   we are in the source module
@@ -960,10 +1066,10 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
-            if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+            if (!bd_can_reinterpret_internal(&ctype->proc.args.data[i].val, ptype->proc.args.data[i], false))
                 return false;
         }
-        return bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret);
+        return bd_can_reinterpret_internal(ctype->proc.ret, ptype->proc.ret, false);
     }
     case TStruct: {
         if (ptype->structure.fields.len != ctype->structure.fields.len) {
@@ -975,12 +1081,31 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         }
 
         for (size_t i = 0; i < ptype->structure.fields.len; i++) {
-          if (!bd_can_reinterpret(&ctype->structure.fields.data[i].val,
-                               ptype->structure.fields.data[i].val)) {
+            if (!bd_can_reinterpret_internal(&ctype->structure.fields.data[i].val,
+                                             ptype->structure.fields.data[i].val,
+                                             true)) {
               return false;
           }
         }
         return true;
+    }
+    case TTile: {
+        if (!in_composite && ctype->sort != CSStruct)
+            return false;
+        if (ctype->sort != CSStaticArray && ctype->sort != CSStruct)
+            return false;
+        if (ctype->sort == CSStaticArray)  {
+            if (ptype->tile.dimensions.len != 1)
+                return false;
+            if (ctype->array.len != ptype->tile.dimensions.data[0].val)
+                return false;
+            return bd_can_reinterpret_internal(ctype->array.element,
+                                               ptype->tile.element,
+                                               false);
+        } else {
+            if (ctype->structure.fields.len != 1) return false;
+            return bd_can_reinterpret_internal(&ctype->structure.fields.data[0].val, ptype, true);
+        }
     }
     case TEnum: {
         PiType tag_type;
@@ -1016,7 +1141,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         else if (ctype->structure.fields.len != 2) return false;
 
         // check that the 0th struct field is reinterpretable as the tag type
-        if (!bd_can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
+        if (!bd_can_reinterpret_internal(&ctype->structure.fields.data[0].val, &tag_type, true)) return false;
         
         CType* cunion = &ctype->structure.fields.data[1].val;
 
@@ -1041,7 +1166,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
             
             PtrArray* variant = ptype->enumeration.variants.data[selected_index].val;
             if (variant->len != 1) return false;
-            return bd_can_reinterpret(cunion, variant->data[0]);
+            return bd_can_reinterpret_internal(cunion, variant->data[0], true);
         }
 
         // TODO (FEATURE): Add ability for C type to not need union/struct if
@@ -1050,7 +1175,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {
             PtrArray* variant = ptype->enumeration.variants.data[i].val;
             if (variant->len == 1) {
-                if (!bd_can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
+                if (!bd_can_reinterpret_internal(cunion->cunion.fields.data[i].val, variant->data[0], true))
                     return false;
             } else {
                 CType* var_struct = cunion->cunion.fields.data[i].val;
@@ -1058,13 +1183,33 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
                     return false;
 
                 for (size_t j = 0; j < variant->len; j++) {
-                    if (!bd_can_reinterpret(&var_struct->structure.fields.data[j].val, variant->data[j]))
+                    if (!bd_can_reinterpret_internal(&var_struct->structure.fields.data[j].val, variant->data[j], true))
                         return false;
                 }
             }
 
         }
         return true;
+    }
+    case TFlags: {
+        PiType tag_type;
+        switch (ptype->enumeration.tag_size) {
+        case 8:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_8 };
+            break;
+        case 16:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_16 };
+            break;
+        case 32:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_32 };
+            break;
+        case 64:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
+            break;
+        default:
+            panic(mv_string("bad flagsize"));
+        }
+        return bd_can_reinterpret_internal(ctype, &tag_type, false);
     }
     case TSealed:
         return true;
@@ -1088,4 +1233,8 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     default:
         panic(mv_string("invalid types provided to bd_can_reinterpret"));
     }
+}
+
+bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
+    return bd_can_reinterpret_internal(ctype, ptype, false);
 }

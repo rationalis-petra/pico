@@ -110,13 +110,14 @@ void inc_index(U64Array index, U64Array dims) {
     }
 }
 
-
-// Helper functions for dynamic variables
-// Need to maintain a set of current/valid vars + default values
-// so new threads know what to copy!
-// 
-// Implementation of dynamic variables
-// Each thread has an array, sized for # of dynamic vars
+/*
+ * Helper functions for dynamic variables
+ * Need to maintain a set of current/valid vars + default values
+ * so new threads know what to copy!
+ * 
+ * Implementation of dynamic variables
+ * Each thread has an array, sized for # of dynamic vars
+ */
 _Thread_local PtrArray thread_dynamic_vars;
 static Allocator* dynamic_var_allocator;
 static PtrArray dynamic_var_metadata;
@@ -299,6 +300,15 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FVariant:
         out = mk_str_doc(mv_string("::variant"), a);
         break;
+    case FFlags:
+        out = mk_str_doc(mv_string("::flags"), a);
+        break;
+    case FFlagsIntersect:
+        out = mk_str_doc(mv_string("::flags-intersect"), a);
+        break;
+    case FFlagsEmpty:
+        out = mk_str_doc(mv_string("::flags-empty?"), a);
+        break;
     case FMatch:
         out = mk_str_doc(mv_string("::match"), a);
         break;
@@ -403,7 +413,10 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::Struct"), a);
         break;
     case FEnumType:
-        out = mk_str_doc(mv_string("::enum"), a);
+        out = mk_str_doc(mv_string("::Enum"), a);
+        break;
+    case FFlagsType:
+        out = mk_str_doc(mv_string("::Flags"), a);
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::Proc"), a);

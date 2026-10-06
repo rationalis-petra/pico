@@ -41,6 +41,9 @@ _Noreturn void struct_bad_fdesc_len(RawTree raw, AbstractionICtx ctx);
 _Noreturn void struct_bad_fdesc_fieldname(RawTree raw, AbstractionICtx ctx);
 _Noreturn void struct_duplicate_fieldname(RawTree raw, Symbol fname, AbstractionICtx ctx);
 
+// Flags
+_Noreturn void flags_empty_requires_val(RawTree raw, AbstractionICtx ctx);
+
 // ------------------------------------------------------------
 //   Type Formers
 // ------------------------------------------------------------

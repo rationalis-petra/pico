@@ -660,7 +660,7 @@ void address_start_labels(SymbolArray labels, AddressEnv* env) {
 void address_end_labels(AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    for (size_t i = env->local_envs.len; i > 0; i--) {
+    for (size_t i = locals->vars.len; i > 0; i--) {
         SAddr local = pop_saddr(&locals->vars);
         if (local.type == SASentinel) {
             break;

@@ -26,7 +26,7 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
     RegionAllocator* subregion = make_subregion(region);
     add_platform_memory_module(ass, module, default_allocator, subregion);
     reset_subregion(subregion);
-    add_time_module(ass, module, subregion);
+    add_chrono_module(ass, module, subregion);
     reset_subregion(subregion);
     add_thread_module(ass, module, subregion);
     reset_subregion(subregion);
