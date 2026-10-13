@@ -1,8 +1,10 @@
+#include <stdalign.h>
 #include <string.h>
 
 #include "platform/signals.h"
 #include "data/meta/assoc_impl.h"
 #include "rune/eval/values.h"
+#include "rune/eval/eval.h"
 
 ASSOC_IMPL(Name, ValRef, name_val, NameVal);
 
@@ -244,7 +246,7 @@ ValRef mk_rune_int(int64_t val, ValueHeap* heap) {
     return (ValRef){(uintptr_t)repr};
 }
 
-int64_t get_int(ValRef ref) {
+int64_t get_rune_int(ValRef ref) {
     IntRepr* repr = (void*)ref.ref;
 #ifdef DEBUG_ASSERT
     if (repr->info.sort != ValInt) {
@@ -252,6 +254,99 @@ int64_t get_int(ValRef ref) {
     }
 #endif
     return repr->num;
+}
+
+size_t bridge_host_align(Bridge bridge) {
+    switch (bridge.type) {
+    case BPassthrough:
+        return sizeof(ValRef);
+    case BPtrWrap:
+        return sizeof(void*);
+    case BFn:
+        return sizeof(void*);
+    case BData: {
+        size_t max_align = alignof(uint64_t);
+        for (size_t i = 0; i < bridge.data.len; i++) {
+            BridgeVariant variant = bridge.data.variants[i];
+            for (size_t j = 0; j < variant.len; j++) {
+                size_t align = bridge_host_align(variant.types[j]);
+                max_align = align > max_align ? align : max_align;
+            }
+        }
+        return max_align;
+    }
+    case BRecord: {
+        size_t max_align = 0;
+        for (size_t i = 0; i < bridge.record.len; i++) {
+            size_t align = bridge_host_align(bridge.record.types[i].val);
+            max_align = align > max_align ? align : max_align;
+        }
+        return max_align;
+    }
+    case BInt:
+        return alignof(int64_t);
+    case BString:
+        return alignof(String);
+    case BList:
+        return alignof(RuneList);
+    case BCustom:
+        return bridge.custom.c_align;
+    }
+    panic(mv_string("Getting align of invalid bridge "));
+}
+
+static size_t align_to(size_t size, size_t align) {
+    size_t rem = size % align;
+    size_t pad = rem == 0 ? 0 : align - rem;
+    return size + pad;
+}
+
+size_t bridge_host_size(Bridge bridge) {
+    switch (bridge.type) {
+    case BPassthrough:
+        return alignof(ValRef);
+    case BPtrWrap:
+        return alignof(void*);
+    case BFn:
+        return sizeof(void*);
+    case BData: {
+        size_t max_size = 0;
+        for (size_t i = 0; i < bridge.data.len; i++) {
+            BridgeVariant variant = bridge.data.variants[i];
+            size_t total = sizeof(uint64_t);
+            for (size_t j = 0; j < variant.len; j++) {
+                size_t size = bridge_host_size(variant.types[j]);
+                size_t align = bridge_host_align(variant.types[j]);
+                total = align_to(total, align);
+                total += size;
+            }
+            max_size = total > max_size ? total : max_size;
+        }
+        return max_size;
+    }
+    case BRecord: {
+        size_t total = 0;
+        for (size_t i = 0; i < bridge.record.len; i++) {
+            size_t size = bridge_host_size(bridge.record.types[i].val);
+            size_t align = bridge_host_align(bridge.record.types[i].val);
+            total = align_to(total, align);
+            total += size;
+        }
+        return total;
+    }
+    case BInt:
+        return sizeof(int64_t);
+    case BString: {
+        return sizeof(String);
+    }
+    case BList: {
+        return sizeof(RuneList);
+    }
+    case BCustom: {
+        return bridge.custom.c_size;
+    }
+    }
+    panic(mv_string("Getting size of invalid bridge "));
 }
 
 ValRef mk_host_val(Bridge bridge, void* data, ValueHeap* heap) {
@@ -282,7 +377,118 @@ void get_host_val(ValRef ref, void* data) {
     // TODO: account for non-functions using bridge-size!
     memcpy(data, repr->data, sizeof(void*));
 }
-bool get_as_host_val(ValRef ref, Bridge template, void* data);
+
+typedef struct {
+    size_t len;
+    void* data;
+} List;
+
+typedef struct {
+    uintptr_t closure_data;
+    size_t nargs;
+    RuneEvalResult (*fn)(uintptr_t closure_data, ...) ;
+} Callback;
+
+bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a) {
+    ValueSort sort = get_sort(ref);
+    switch (template.type) {
+    case BPassthrough:
+        // passthrough
+        *(ValRef*)data = ref;
+        return true;
+    case BPtrWrap: {
+        Bridge wrapped = *template.wrapped;
+        size_t size = bridge_host_size(wrapped);
+        void* new_data = mem_alloc(size, a);
+        bool out = get_as_host_val(ref, wrapped, new_data, a);
+        *(void**)data = new_data;
+        return out;
+    }
+    case BFn:
+        if (sort != ValClosure) return false;
+        // 'Host' Function is actually a callback: 
+        // struct Callback {
+        //   void* closur_data;
+        //   size_t nargs;
+        //   RuneEvalResult fn(void* closure_data, ...) 
+        // }
+        // with the ... being all ValRef's
+        // Get number of arguments
+        return false;
+    case BData:
+        if (sort != ValData) return false;
+        RuneData* rdata = get_rune_data(ref);
+        bool found = false;
+        for (size_t i = 0; i < template.data.len; i++) {
+            BridgeVariant variant = template.data.variants[i];
+            if (rdata->name == variant.name) {
+                if (rdata->len != variant.len) return false;
+                uint64_t* tag = data;
+                *tag = i;
+                size_t offset = sizeof(uint64_t);
+                for (size_t j = 0; j < variant.len; j++) {
+                    offset = align_to(offset, bridge_host_align(variant.types[j]));
+                    if (!get_as_host_val(rdata->values[j] ,variant.types[j], data + offset, a)) return false;
+                    offset += bridge_host_size(variant.types[j]);
+                }
+                found = true;
+                break;
+            }
+        }
+        return found;
+        break;
+    case BRecord: {
+        if (sort != ValRecord) return false;
+        RuneRecord* record = get_rune_record(ref);
+        if (template.record.len != record->len) return false;
+        size_t offset = 0;
+        for (size_t i = 0; i < template.record.len; i++) {
+            Bridge bfield = template.record.types[i].val;
+            size_t align =  bridge_host_align(bfield);
+            offset = align_to(offset, align);
+            if (!get_as_host_val(record->values[i].val, bfield, data + offset, a)) return false;
+            size_t size = bridge_host_size(bfield);
+            offset += size;
+        }
+        return true;
+        break;
+    }
+    case BString: {
+        if (sort != ValString) return false;
+        String string = get_rune_string(ref);
+        *(String*)data = string;
+        return true;
+    }
+    case BInt: {
+        if (sort != ValInt) return false;
+        int64_t val = get_rune_int(ref);
+        *(int64_t*)data = val;
+        return true;
+    }
+    case BList: {
+        if (sort != ValList) return false;
+        RuneList list = get_rune_list(ref);
+        size_t offset = 0;
+        size_t elt_offset = align_to(bridge_host_size(*template.element), bridge_host_align(*template.element));
+        void* dest = mem_alloc(elt_offset * list.len, a);
+        for (size_t i = 0; i < list.len; i++) {
+            if (!get_as_host_val(list.data[i], *template.element, dest + offset, a)) return false;
+            offset += elt_offset;
+        }
+        *(List*)data = (List) {
+            .len = list.len,
+            .data = dest,
+        };
+        
+        return true;
+    }
+    // Callback
+    case BCustom: {
+        return template.custom.fn(ref, template.custom.data, template.custom.c_size, data);
+    }
+    }
+    return false;
+}
 
 bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* a) {
     ValueSort actual_sort = get_sort(actual);
@@ -333,7 +539,7 @@ bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* 
         return true;
     }
     case ValInt:
-        return get_int(actual) == get_int(expected);
+        return get_rune_int(actual) == get_rune_int(expected);
     case ValString: {
 
         String actual_string = get_rune_string(actual);

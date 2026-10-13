@@ -5,6 +5,7 @@
 
 #include "pico/values/modular.h"
 #include "rune/syntax/expression.h"
+#include "rune/eval/eval.h"
 
 #include "atlas/data/error.h"
 #include "atlas/syntax/project.h"
@@ -60,7 +61,10 @@ void register_package(AtlasInstance* instance, Package* package);
  */
 void set_instance_package(AtlasInstance* instance, Package* package);
 void set_instance_project(AtlasInstance* instance, Project project);
-void atlas_add_def(AtlasInstance* instance, Def def);
+Project get_instance_project(AtlasInstance* instance);
+
+// Return true on fail and false on success
+RuneEvalResult atlas_add_def(AtlasInstance* instance, Def def, RegionAllocator* region);
 
 
 #endif

@@ -35,7 +35,7 @@ void delete_rune_env(RuneEnv* env);
 
 Pools get_pools(RuneEnv* env);
 
-void rune_add_def(Name name, ExprRef expr, RuneEnv* env);
+RuneEvalResult rune_add_def(Name name, ExprRef expr, RuneEnv* env, RegionAllocator* region);
 void rune_add_val_def(Name name, ValRef ref, RuneEnv* env);
 
 /**

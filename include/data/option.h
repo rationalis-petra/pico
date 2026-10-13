@@ -23,5 +23,6 @@ OPTION_TYPE(int32_t, I32);
 OPTION_TYPE(int64_t, I64);
 
 OPTION_TYPE(String, String);
+bool string_option_eq(StringOption lhs, StringOption rhs);
 
 #endif

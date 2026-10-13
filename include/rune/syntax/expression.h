@@ -127,5 +127,4 @@ NameArray free_vars(ExprRef ref, ExprPool* pool, Allocator* a);
 
 Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a);
 
-
 #endif

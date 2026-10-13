@@ -9,6 +9,6 @@ void run_rune_tests(TestLog* log, Allocator* a);
 
 void run_rune_eval_tests(TestLog* log, RuneEnv* env, RegionAllocator* a);
 void run_rune_builtin_tests(TestLog* log, RuneEnv* env, RegionAllocator* a);
-
+void run_rune_bridge_tests(TestLog* log, RuneEnv* env, RegionAllocator* a);
 
 #endif

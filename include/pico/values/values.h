@@ -23,7 +23,8 @@ typedef struct {
     uint64_t did;
 } Symbol;
 
-OPTION_TYPE(Name, Name)
+OPTION_TYPE(Name, Name);
+bool name_option_eq(NameOption lhs, NameOption rhs);
 
 // Forward declarations of environment.h (to avoid circular includes!)
 typedef struct env_capture env_capture;

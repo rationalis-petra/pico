@@ -172,7 +172,7 @@ String get_rune_string(ValRef ref);
 
 // Create Integers
 ValRef mk_rune_int(int64_t val, ValueHeap* heap); 
-int64_t get_int(ValRef ref);
+int64_t get_rune_int(ValRef ref);
 
 /**
  * Host values
@@ -181,8 +181,21 @@ int64_t get_int(ValRef ref);
  */
 
 typedef enum {
+    // Directors, not corresponding to specific types.
+    BPassthrough,
+    BPtrWrap,
+
     BFn,
+    BData,
+    BRecord,
+    // Builtin
+    BInt,
+    BString,
+    BList,
+    // Callback
+    BCustom,
 } BridgeType;
+typedef struct Bridge Bridge;
 
 /**
  * C functions for Relic will always take:
@@ -196,16 +209,56 @@ typedef struct {
 } BridgeFn;
 
 typedef struct {
+    Name name;
+    size_t len;
+    Bridge* types;
+} BridgeVariant;
+
+typedef struct {
+    size_t len;
+    BridgeVariant* variants;  
+} BridgeData;
+
+typedef struct BRecCell BRecCell;
+typedef struct {
+    size_t len;
+    BRecCell* types;
+} BridgeRecord;
+
+typedef bool BridgeCallback(ValRef val, void* cb_data, size_t size, void* out);
+typedef struct {
+    size_t c_size;
+    size_t c_align;
+    void* data;
+    BridgeCallback* fn;
+} BridgeCustom;
+
+struct Bridge {
     BridgeType type;
     union {
+        ValRef passthrough;
+        Bridge* wrapped;
+
         BridgeFn fn;
+        BridgeData data;
+        BridgeRecord record;
+        Bridge* element;
+        BridgeCustom custom;
     };
-} Bridge;
+};
+
+struct BRecCell {
+    Name name;
+    Bridge val;
+};
+
+size_t bridge_host_align(Bridge bridge);
+size_t bridge_host_size(Bridge bridge);
 
 ValRef mk_host_val(Bridge bridge, void* data, ValueHeap* heap);
 Bridge get_host_bridge(ValRef ref);
 void get_host_val(ValRef ref, void* data);
-bool get_as_host_val(ValRef ref, Bridge template, void* data);
+bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a);
 
 /* 
  * Value Helper Functions

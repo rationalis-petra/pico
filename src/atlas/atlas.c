@@ -3,6 +3,8 @@
 #include "platform/memory/region.h"
 #include "platform/filesystem/filesystem.h"
 
+#include "components/pretty/stream_printer.h"
+
 #include "pico/parse/parse.h"
 
 #include "atlas/atlas.h"
@@ -14,12 +16,14 @@
 
 static const char* version = "0.0.2";
 
+static bool load_atlas_script(AtlasInstance* instance, String path, FormattedOStream* out, RegionAllocator* region);
 bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
+    bool fail = false;
     bool running = true;
     while (running) {
         PiAllocator pia = convert_to_pallocator(&ra);
@@ -35,17 +39,86 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
             goto on_error_generic;
         } else {
             ExprPool* pool = get_expr_pool(instance);
-            Def def = abstract_atlas_def(parse_res.result, pool, region, &pi_point);
-            atlas_add_def(instance, def);
+            AtAbsCallbackData cb = {
+                .path = path,
+            };
+            Toplevel top = abstract_atlas_toplevel(parse_res.result, cb, pool, region, &pi_point);
+            switch (top.type) {
+            case TLDef: {
+                RuneEvalResult result = atlas_add_def(instance, top.def, region);
+                if (result.type != AValue) {
+                    write_doc_formatted(result.error_message, 120, out);
+                    return true;
+                }
+                break;
+            }
+            case TLRequire: {
+                for (size_t i = 0; i < top.requires.len; i++) {
+                    String new_path = path_cat(path, top.requires.data[i], &ra);
+                    fail = load_atlas_script(instance, new_path, out, region);
+                }
+                // TODO: load 
+                break;
+            }
+            }
+        if (fail) running = false;
         }
     }
 
-    return false;
+    return fail;
 
  on_pi_error:
     display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
  on_error_generic:
     return true;
+}
+
+static bool load_atlas_script(AtlasInstance* instance, String path, FormattedOStream* out, RegionAllocator* region) {
+    Allocator* stda = get_std_allocator();
+    DirectoryResult dir_res = open_directory(path, stda);
+    if (dir_res.type == Err) {
+        write_fstring(mv_string("Failed to open directory '"), out);
+        write_fstring(path, out);
+        write_fstring(mv_string("' while loading atlas files.\n"), out);
+        return true;
+    }
+
+    Directory* dir = dir_res.directory;
+    DirEntArray entries = list_children(dir, stda);
+
+    bool fail = false;
+    bool found_script = false;
+    for (size_t i = 0; i < entries.len; i++) {
+      DirectoryEntry entry = entries.data[i];
+      // Search through for atlas-project
+      if (string_cmp(entry.name, mv_string("atlas")) == 0) {
+          found_script = true;
+          String newpath = path_cat(path, entry.name, stda);
+          IStream* fstream = open_file_istream(newpath, stda);
+          IStream* captured_fstream = mk_capturing_istream(fstream, stda);
+          RegionAllocator* subregion = make_subregion(region);
+
+          //bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
+          fail = process_atlas(instance, captured_fstream, out, path, entry.name, region);
+
+          release_subregion(subregion);
+          delete_istream(captured_fstream, stda);
+          delete_istream(fstream, stda);
+          mem_free(newpath.bytes, stda);
+          break;
+      }
+    }
+    if (!found_script) {
+        write_fstring(mv_string("Failed find file 'atlas'."), out);
+        return true;
+    }
+
+    for (size_t i = 0; i < entries.len; i++) {
+        mem_free(entries.data[i].name.bytes, stda);
+    }
+    sdelete_dirent_array(entries);
+    close_directory(dir);
+    return fail;
 }
 
 bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
@@ -102,32 +175,19 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     DirectoryResult dir_res = open_directory(path, stda);
     if (dir_res.type == Err) {
         write_fstring(mv_string("Failed to open directory while loading atlas files."), out);
+        return true;
     }
 
     Directory* dir = dir_res.directory;
     DirEntArray entries = list_children(dir, stda);
 
     bool fail = false;
+    bool found_project = false;
     for (size_t i = 0; i < entries.len; i++) {
       DirectoryEntry entry = entries.data[i];
-      // If is a non-hidden directory
-      if (entry.is_directory && (entry.name.memsize > 0 && entry.name.bytes[0] != '.')) {
-          String newpath = path_cat(path, entry.name, stda);
-          fail = load_atlas_files(newpath, out, instance, region);
-          mem_free(newpath.bytes, stda);
-      } else if (string_cmp(entry.name, mv_string("atlas")) == 0) {
-          String newpath = path_cat(path, entry.name, stda);
-          IStream* fstream = open_file_istream(newpath, stda);
-          IStream* captured_fstream = mk_capturing_istream(fstream, stda);
-          RegionAllocator* subregion = make_subregion(region);
-
-          fail = process_atlas(instance, captured_fstream, out, path, newpath, region);
-
-          release_subregion(subregion);
-          delete_istream(captured_fstream, stda);
-          delete_istream(fstream, stda);
-          mem_free(newpath.bytes, stda);
-      } else if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
+      // Search through for atlas-project
+      if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
+          found_project = true;
           String newpath = path_cat(path, entry.name, stda);
           IStream* fstream = open_file_istream(newpath, stda);
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
@@ -139,9 +199,12 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
           delete_istream(captured_fstream, stda);
           delete_istream(fstream, stda);
           mem_free(newpath.bytes, stda);
+          break;
       }
-
-      if (fail) break;
+    }
+    if (!found_project) {
+        write_fstring(mv_string("Failed find file 'atlas-project'. Atlas must be run from a directory containing an 'atlas-project' file."), out);
+        return true;
     }
 
     for (size_t i = 0; i < entries.len; i++) {
@@ -149,6 +212,13 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     }
     sdelete_dirent_array(entries);
     close_directory(dir);
+
+    if (fail) return fail;
+
+
+    Project proj = get_instance_project(instance);
+    fail = load_atlas_script(instance, proj.package.build_file, out, region);
+
     return fail;
 }
 

@@ -287,7 +287,7 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                 for (size_t i = 1; i < term.branch.nodes.len; i++) {
                     Expr expr;
                     abstract_rune_to(term.branch.nodes.data[i], host_data, pool, region, point, &expr);
-                    set_expr_elt(slice, i, expr, pool);
+                    set_expr_elt(slice, i - 1, expr, pool);
                 }
 
                 ExprRef* dest = prop.location;

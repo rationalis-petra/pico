@@ -16,6 +16,10 @@ void run_rune_tests(TestLog* log, Allocator* a) {
             run_rune_eval_tests(log, env, region);
             suite_end(log);
         }
+        if (suite_start(log, mv_string("bridge"))) {
+            run_rune_bridge_tests(log, env, region);
+            suite_end(log);
+        }
         if (suite_start(log, mv_string("builtins"))) {
             run_rune_builtin_tests(log, env, region);
             suite_end(log);

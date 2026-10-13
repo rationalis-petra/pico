@@ -4,6 +4,7 @@
 #include "platform/memory/region.h"
 
 #include "pico/data/error.h"
+#include "pico/data/string_array.h"
 #include "pico/syntax/concrete.h"
 #include "atlas/syntax/project.h"
 #include "rune/syntax/expression.h"
@@ -13,6 +14,7 @@ typedef enum : uint64_t {
 } MResult_t;
 
 typedef struct {
+    String path;
     ValRef target_type;
     ValRef lib_type;
     ValRef exec_type;
@@ -21,7 +23,16 @@ typedef struct {
     ValRef dependency_type;
 } AtAbsCallbackData;
 
-Def abstract_atlas_def(RawTree raw, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
+typedef enum {TLDef, TLRequire} ToplevelType;
+typedef struct {
+    ToplevelType type;
+    union {
+        Def def;
+        StringArray requires;
+    };
+} Toplevel;
+
+Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
 
 void abstract_atlas_project(Project* project, ProjectRecord* record, RawTree raw, RegionAllocator* region, PiErrorPoint* point);
 

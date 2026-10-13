@@ -1295,6 +1295,7 @@ size_t pi_stack_size_of(PiType type) {
     return pi_stack_align(pi_size_of(type));
 }
 
+// TODO: replace the size/align of functions with one which returns both!
 Result_t pi_maybe_stack_size_of(PiType type, size_t* out) {
     Result_t res = pi_maybe_size_of(type, out);
     if (res != Ok) return res;

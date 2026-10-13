@@ -227,19 +227,48 @@ Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a) {
         PtrArray nodes = mk_ptr_array(expr.app.args.len + 1, a);
         push_ptr(pretty_rune_expr(expr.app.fn, pool, a), &nodes);
         for (size_t i = 0; i < expr.app.args.len; i++) {
-            push_ptr(pretty_rune_expr(get_expr_elt(expr.app.args, i), pool, a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_expr(get_expr_elt(expr.app.args, i), pool, a), a), &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_group_doc(mv_sep_doc(nodes, a), a), a);
+        out = mv_group_doc(mk_paren_doc("(", ")", mv_group_doc(mv_sep_doc(nodes, a), a), a), a);
         break;
+    }
+    case ECtor: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_cstr_doc(":", a), &nodes);
+        push_ptr(mk_str_doc(view_name_string(expr.ctor.name), a), &nodes);
+        out = mv_style_doc(field_style, mv_cat_doc(nodes, a), a);
+        break;
+    }
+    case ERecord: {
+        PtrArray nodes = mk_ptr_array(1 + expr.record.fields.len, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("record", a), a), &nodes);
+        for (size_t i = 0; i < expr.record.fields.len; i++) {
+            NameExprCell cell = get_expr_map_elt(expr.record.fields, i, pool);
+            PtrArray fnodes = mk_ptr_array(2, a);
+            PtrArray head =  mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(".", a), &head);
+            push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
+            push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_expr(cell.val, pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
+        }
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }
 
     case EString:
         out = mk_paren_doc("\"", "\"", mv_str_doc(expr.string, a), a);
         out = mv_style_doc(const_style, out, a);
         break;
-    case EList:
-        panic(mv_string("Not implemented : pretty list"));
+    case EList: {
+        PtrArray nodes = mk_ptr_array(expr.list.len + 1, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("list", a), a), &nodes);
+        for (size_t i = 0; i < expr.list.len; i++) {
+            ExprRef elt = get_expr_elt(expr.list, i);
+            push_ptr(mv_nest_doc(2, pretty_rune_expr(elt, pool, a), a), &nodes);
+        }
+        out = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
         break;
+    }
     }
     if (out == NULL) {
         panic(mv_string("Invalid expression provided to pretty_rune_expr"));

@@ -1,6 +1,7 @@
 #include <string.h>
 #include "platform/signals.h"
 
+#include "components/pretty/stream_printer.h"
 #include "components/pretty/standard_types.h"
 #include "pico/data/name_ptr_amap.h"
 
@@ -70,11 +71,19 @@ Pools get_pools(RuneEnv* env) {
     };
 }
 
-void rune_add_def(Name name, ExprRef expr, RuneEnv* env) {
-    RuneClosureEnv ce = {};
-    ValRef ref = mk_rune_closure(ce, expr, env->vals); 
+RuneEvalResult rune_add_def(Name name, ExprRef expr, RuneEnv* env, RegionAllocator* region) {
+    RuneEvalResult result = eval_rune(expr, env, region);
+    if (result.type != AValue) return result;
+    // Debug print
+    Allocator a = ra_to_gpa(region);
+    FormattedOStream* fout = get_formatted_stdout();
+    Document* doc = pretty_rune_value(result.value, env, &a);
+    write_doc_formatted(doc, 120, fout);
+    write_fstring(mv_string("\n\n"), fout);
+    
     // TODO: detect duplicate definitions and produce error.
-    name_ptr_insert(name, (void*)ref.ref, &env->values);
+    name_ptr_insert(name, (void*)result.value.ref, &env->values);
+    return result;
 }
 
 void rune_add_val_def(Name name, ValRef ref, RuneEnv* env) {
@@ -279,6 +288,13 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
             .value = out,
         };
     };
+
+    case EVal: {
+        return (RuneEvalResult) {
+            .type = AValue,
+            .value = expr.value,
+        };
+    }
     case EInt: {
         ValRef int_ref = mk_rune_int(expr.num, pools.value);
         return (RuneEvalResult) {
@@ -343,29 +359,6 @@ static RuneEvalResult get_value_internal(Name name, RuneEnv* env, size_t depth, 
         };
     }
     ValRef ref = *idx;
-    ValueSort sort = get_sort(ref);
-    if (sort == ValClosure) {
-        // Check for thunk - if expression type is function, then is closure,
-        // otherwise is thunk that needs evaluation.
-
-        Pools pools = get_pools(env);
-        RuneClosure func = get_rune_closure(ref);
-        Expr expr = get_expr(func.expr, pools.expr);
-        if (expr.type != EFn) {
-            // Is a thunk - evaluate.
-            RuneEvalCtx ctx = {
-                .locals = region_alloc(sizeof(NameValAssoc), region),
-                .filename = func.env.file_path,
-                .env = env,
-                .region = region,
-                .depth = depth
-            };
-            *ctx.locals = scopy_name_val_assoc(func.env.local_vars, &a);
-            return eval_rune_internal(func.expr, ctx);
-        }
-        // if we fall out here, expression was a closure, so continue on to
-        // return it as a value.
-    }
     return (RuneEvalResult) {
         .value = ref,
     };
@@ -395,9 +388,11 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
         push_ptr(mk_str_doc(view_name_string(data->name), a), &head);
         push_ptr(mv_cat_doc(head, a), &nodes);
         for (size_t i = 0; i < data->len; i++) {
-            push_ptr(pretty_rune_value(data->values[i], env, a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_value(data->values[i], env, a), a), &nodes);
         }
-        return mv_sep_doc(nodes, a);
+        return (data->len > 0)
+            ? mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a)
+            : mv_sep_doc(nodes, a);
     }
     case ValRecord: {
         RuneRecord* record = get_rune_record(ref);
@@ -409,20 +404,20 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
             push_ptr(mv_cstr_doc(".", a), &head);
             push_ptr(mk_str_doc(view_name_string(record->values[i].name), a), &head);
             push_ptr(mv_cat_doc(head, a), &fnodes);
-            push_ptr(pretty_rune_value(record->values[i].val, env, a), &fnodes);
-            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_value(record->values[i].val, env, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
         }
         return mv_sep_doc(nodes, a);
     }
     case ValInt:
-        return pretty_i64(get_int(ref), a);
+        return pretty_i64(get_rune_int(ref), a);
       break;
     case ValList: {
         RuneList list = get_rune_list(ref);
         PtrArray nodes = mk_ptr_array(list.len + 1, a);
         push_ptr(mv_cstr_doc("list", a), &nodes);
         for (size_t i = 0; i < list.len; i++) {
-            push_ptr(pretty_rune_value(list.data[i], env, a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_value(list.data[i], env, a), a), &nodes);
         }
         return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }

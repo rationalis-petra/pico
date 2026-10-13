@@ -17,7 +17,9 @@ typedef struct {
 void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext context);
 void assert_rune_toplevel_eq(const char *string, ValRef expected, TestContext context);
 
+void test_rune_bridge(const char *string, Bridge bridge, void* expected, size_t expected_sz, TestContext context);
+
 #define TEST_EQ(str) test_rune_toplevel_eq(str, expected, context)
-#define TEST_EQ(str) test_rune_toplevel_eq(str, expected, context)
+#define TEST_BRIDGE(str) test_rune_bridge(str, bridge, &expected, sizeof(expected), context)
 
 #endif

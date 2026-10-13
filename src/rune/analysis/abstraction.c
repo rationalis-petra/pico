@@ -78,6 +78,7 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
                 for (size_t i = 0; i < host_data.names.len; i++) {
                     if (host_data.names.data[i] == head.atom.symbol.name) {
                         host_data.abstract(raw, host_data, pool, region, point, host_data.closure_data, out);
+                        return;
                     }
                 }
             }

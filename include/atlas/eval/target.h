@@ -8,7 +8,7 @@
 #include "pico/values/modular.h"
 #include "pico/data/string_array.h"
 
-#include "rune/eval/values.h"
+#include "rune/eval/eval.h"
 #include "atlas/data/error.h"
 
 typedef enum {
@@ -17,16 +17,22 @@ typedef enum {
     DepTarget,
 } DependencyType;
 
-typedef struct AtlasTarget AtlasTarget;
+typedef struct {uint64_t ref;} TargetRef;
 
 typedef struct {
     DependencyType type;
     union {
         String filename;
-        AtlasTarget* target;
+        TargetRef target;
     };
 } Dependency;
 ARRAY_HEADER(Dependency, dep, Dependency)
+
+typedef enum {
+    TPico,
+    TGeneric,
+    TFile,
+} TargetType;
 
 typedef struct {
     NameOption name;
@@ -44,21 +50,28 @@ typedef struct {
     ValRef monad;
 } GenericTarget;
 
-struct AtlasTarget {
-    bool is_generic;
+typedef struct {
+    String path; 
+    String name;
+} FileTarget;
+
+typedef struct {
+    TargetType type;
     union {
         PicoTarget pico;
         GenericTarget generic;
+        FileTarget file;
     };
-};
+} AtlasTarget;
 
-typedef enum : uint32_t {
-    ActDependency,
-    ActPicoTarget,
-    ActGenericTarget,
-    ActExecShell,
-} AtlasAction;
+typedef struct TargetMap TargetMap;
 
-AtlasTarget translate_from_rune(ValRef val, ValueHeap* heap, RegionAllocator* region, AtErrorPoint* point);
+TargetMap* mk_target_map(Allocator* a);
+void delete_target_map(TargetMap* map);
+
+TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAllocator* region, AtErrorPoint* point);
+AtlasTarget deref_target(TargetRef ref, TargetMap* map); 
+Module* target_module(TargetRef ref, TargetMap* map); 
+void set_target_module(TargetRef ref, Module* module, TargetMap* map); 
 
 #endif

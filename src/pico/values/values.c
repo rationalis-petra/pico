@@ -12,6 +12,14 @@
 static SymbolTable symbol_table;
 size_t distinct_counter = 0;
 
+bool name_option_eq(NameOption lhs, NameOption rhs) {
+    if (lhs.type != rhs.type) return true;
+    if (lhs.type == Some) {
+        return lhs.val == rhs.val;
+    }
+    return true;
+}
+
 // Helper functions
 void init_symbols(Allocator* a) {
     init_symbol_table(&symbol_table, a);
