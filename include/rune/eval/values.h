@@ -101,8 +101,8 @@ typedef struct {
 
 // Express as composite data?
 typedef struct {
-  uint64_t len;
   ValRef* data;
+  uint64_t len;
 } RuneList;
 
 /**

@@ -162,8 +162,8 @@ void assert_rune_toplevel_eq(const char *string, ValRef expected, TestContext co
 }
 
 typedef struct {
-    size_t len;
     void* data;
+    size_t len;
 } List;
 
 static size_t align_to(size_t size, size_t align) {

@@ -1,7 +1,6 @@
 #include <string.h>
 #include "platform/signals.h"
 
-#include "components/pretty/stream_printer.h"
 #include "components/pretty/standard_types.h"
 #include "pico/data/name_ptr_amap.h"
 
@@ -74,12 +73,6 @@ Pools get_pools(RuneEnv* env) {
 RuneEvalResult rune_add_def(Name name, ExprRef expr, RuneEnv* env, RegionAllocator* region) {
     RuneEvalResult result = eval_rune(expr, env, region);
     if (result.type != AValue) return result;
-    // Debug print
-    Allocator a = ra_to_gpa(region);
-    FormattedOStream* fout = get_formatted_stdout();
-    Document* doc = pretty_rune_value(result.value, env, &a);
-    write_doc_formatted(doc, 120, fout);
-    write_fstring(mv_string("\n\n"), fout);
     
     // TODO: detect duplicate definitions and produce error.
     name_ptr_insert(name, (void*)result.value.ref, &env->values);
@@ -265,6 +258,8 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
             .value = out,
         };
     };
+    case EMatch:
+        panic(mv_string("TODO: implement eval-match"));
     case ERecord: {
         ValRefOption type = {.type = None};
         if (expr.record.type.type == Some) {
@@ -288,6 +283,12 @@ RuneEvalResult eval_rune_internal(ExprRef expression, RuneEvalCtx ctx) {
             .value = out,
         };
     };
+    case ECoRecord:
+        panic(mv_string("TODO: implement eval-corecord"));
+    case ECoRecur:
+        panic(mv_string("TODO: implement eval-corecur"));
+    case EProject:
+        panic(mv_string("TODO: implement eval-project"));
 
     case EVal: {
         return (RuneEvalResult) {
@@ -394,6 +395,8 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
             ? mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a)
             : mv_sep_doc(nodes, a);
     }
+    case ValCoData:
+        panic(mv_string("TODO: pretty codata"));
     case ValRecord: {
         RuneRecord* record = get_rune_record(ref);
         PtrArray nodes = mk_ptr_array(1 + record->len, a);
@@ -409,6 +412,21 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
         }
         return mv_sep_doc(nodes, a);
     }
+    case ValCoRecord:
+        panic(mv_string("TODO: pretty corecord"));
+        // Types
+    case ValFnType:
+        panic(mv_string("TODO: pretty fn type"));
+    case ValDataType:
+        panic(mv_string("TODO: pretty data type"));
+    case ValCoDataType:
+        panic(mv_string("TODO: pretty codata type"));
+    case ValRecordType:
+        panic(mv_string("TODO: pretty record type"));
+    case ValCoRecordType:
+        panic(mv_string("TODO: pretty corecord type"));
+
+    // Constants
     case ValInt:
         return pretty_i64(get_rune_int(ref), a);
       break;
@@ -424,6 +442,9 @@ Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a) {
     case ValString:
         return mk_paren_doc("\"", "\"", mv_str_doc(get_rune_string(ref), a), a);
         break;
+
+    case ValHost:
+        panic(mv_string("TODO: pretty host value"));
     };
     panic(mv_string("Trying to produce document for invalid pretty value"));
 }

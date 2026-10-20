@@ -4,11 +4,11 @@
 
 #include "platform/memory/executable.h"
 #include "platform/filesystem/filesystem.h"
+#include "platform/process.h"
 #include "platform/signals.h"
 
 #include "data/stream.h"
 
-#include "pico/data/string_array.h"
 #include "pico/values/modular.h"
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
@@ -81,7 +81,7 @@ ExprPool* get_expr_pool(AtlasInstance* instance) {
 }
 
 static void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef target, RegionAllocator* region, AtErrorPoint* point);
-static Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, PicoTarget target, RegionAllocator* region, AtErrorPoint* point);
+static Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point);
 
 static TargetRef get_target(AtlasInstance* instance, Name name, RegionAllocator* region, AtErrorPoint* point) {
     RuneEvalResult res = get_value(name, instance->env, region);
@@ -162,7 +162,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
     }
 
     // We can guarantee at the moment that this is a pico
-    Module* module = atlas_load_pico_target(instance, package, target_ref, target.pico, region, point);
+    Module* module = atlas_load_pico_target(instance, package, target_ref, region, point);
     ModuleEntry* e = get_def_external(entry.val, module);
     if (!e) {
         PtrArray nodes = mk_ptr_array(5, &ra);
@@ -268,7 +268,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
     }
 
     // Guaranteed to be pico target as has an entry-point
-    Module* module = atlas_load_pico_target(instance, package, target_ref, target.pico, region, point);
+    Module* module = atlas_load_pico_target(instance, package, target_ref, region, point);
     ModuleEntry* e = get_def_external(entry.val, module);
     if (!e) {
         PtrArray nodes = mk_ptr_array(5, &ra);
@@ -340,7 +340,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
     }
 }
 
-Module* atlas_load_file(String filename, Package* package, Module* parent, StringArray dependencies, RegionAllocator* region, AtErrorPoint* point) {
+Module* atlas_load_file(String filename, String path, Package* package, Module* parent, StringSlice dependencies, RegionAllocator* region, AtErrorPoint* point) {
     // Create new Module in package
     // TODO: use different procedure for scripts?
     // Load module from system
@@ -366,7 +366,8 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     Module* volatile old_module = NULL;
     volatile String vol_filename = filename;
 
-    IStream* in = open_file_istream(filename, &ra);
+    String full_name = path_cat(path, filename, &ra);
+    IStream* in = open_file_istream(full_name, &ra);
     if (!in) {
         if (old_module) set_std_current_module(old_module);
         release_subregion(iter_region);
@@ -374,7 +375,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
         PtrArray docs = mk_ptr_array(4, &ra);
         push_ptr(mk_str_doc(mv_string("File not found:"), &ra), &docs);
-        push_ptr(mk_str_doc(filename, &ra), &docs);
+        push_ptr(mk_str_doc(full_name, &ra), &docs);
         AtlasError err = {
             .message = mv_sep_doc(docs, &ra),
         };
@@ -414,7 +415,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     set_std_current_module(module);
 
     for (size_t i = 0; i < dependencies.len; i++) {
-        atlas_load_file(dependencies.data[i], package, module, mk_string_array(0, &ra), region, point);
+        atlas_load_file(dependencies.data[i], path, package, module, (StringSlice){}, region, point);
     }
 
 
@@ -593,7 +594,8 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     }
 }
 
-Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, PicoTarget target, RegionAllocator* region, AtErrorPoint* point) {
+Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    PicoTarget target = deref_target(ref, instance->map).pico;
     /* Loading algorithm
      *  - For now, assume that dependencies form not just a DAG, but a tree
      *  - Therefore, we do NOT need to check for duplicates and recursion
@@ -624,7 +626,7 @@ Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, Target
     }
 
     if (target.filename.type == Some) {
-        out = atlas_load_file(target.filename.val, package, NULL, target.file_dependencies, region, point);
+        out = atlas_load_file(target.filename.val, target.path, package, NULL, target.file_dependencies, region, point);
     } else {
         if (target.name.type == None) {
             AtlasError err = {
@@ -644,7 +646,7 @@ Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, Target
         };
         out = mk_module(header, package, NULL);
         for (size_t i = 0; i < target.file_dependencies.len; i++) {
-            atlas_load_file(target.file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
+            atlas_load_file(target.file_dependencies.data[i], target.path, package, out, (StringSlice){}, region, point);
         }
     }
     
@@ -652,14 +654,80 @@ Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, Target
     return out;
 }
 
+static ValRef run_monad(Run run, String directory, AtlasInstance* instance, RegionAllocator* region, AtErrorPoint* point) {
+    Allocator a = ra_to_gpa(region);
+    switch (run.type) {
+    case RPure:
+        return run.pure;
+    case RBind:
+        panic(mv_string("TODO: bind"));
+        break;
+    case RShell: {
+        StringSlice vals = run.shell;
+        if (vals.len < 1) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell has too few arguments", &a),
+            };
+            throw_at_error(point, err);
+        }
+        StringSlice args = {
+            .len = vals.len - 1,
+            .data = vals.data + 1,
+        };
+        ProcessResult presult = create_process_in(vals.data[0], args, directory);
+        //ProcessResult presult = create_process(vals.data[0], args);
+        if (presult.type != Ok) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell command failed to launch.", &a),
+            };
+            throw_at_error(point, err);
+        }
+
+        WaitResult wresult = wait_on_process(presult.process);
+        if (wresult.type != Ok || wresult.status != 0) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell command failed.", &a),
+            };
+            throw_at_error(point, err);
+        }
+        ValueHeap* heap = get_pools(instance->env).value;
+        ValRef ref = mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+        return ref;
+    }
+    }
+    panic(mv_string("Invalid monad."));
+}
+
+void atlas_load_generic_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    GenericTarget target = deref_target(ref, instance->map).generic;
+
+    for (size_t i = 0; i < target.target_dependencies.len; i++) {
+        Dependency dep = target.target_dependencies.data[i];
+        switch (dep.type) {
+        case DepSubmoduleFile:
+            // Skip; will be loaded by atlas_load_file (below)
+            break;
+        case DepExternalFile:
+            // Skip; TODO: check that this doesn't itself invoke any targets,
+            // check file exists.
+            break;
+        case DepTarget:
+            atlas_load_target(instance, package, dep.target, region, point);
+            break;
+        }
+    }
+
+    run_monad(target.monad, target.path, instance, region, point);
+}
+
 void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
     AtlasTarget target = deref_target(ref, instance->map);
     switch (target.type) {
     case TGeneric:
-        panic(mv_string("TODO: load generic targets"));
+        atlas_load_generic_target(instance, package, ref, region, point);
         break;
     case TPico:
-        atlas_load_pico_target(instance, package, ref, target.pico, region, point);
+        atlas_load_pico_target(instance, package, ref, region, point);
         break;
     case TFile: 
         // Do nothing for files (for now) - in the future, want to check version/times.

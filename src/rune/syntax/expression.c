@@ -170,6 +170,25 @@ void free_vars_internal(ExprRef ref, ExprPool* pool, NameArray* locals, NameArra
         }
         break;
     }
+    case ECtor:
+        break;
+    case ECoRecur:
+        panic(mv_string("TODO: implement free_vars for corecur"));
+    case EMatch:
+        panic(mv_string("TODO: implement free_vars for match"));
+    case ERecord: {
+        for (size_t i = 0; i < expr.record.fields.len; i++) {
+            NameExprCell cell = get_expr_map_elt(expr.record.fields, i, pool);
+            free_vars_internal(cell.val, pool, locals, out);
+        }
+        break;
+    }
+    case ECoRecord:
+        panic(mv_string("TODO: implement free_vars for corecord"));
+    case EProject:
+        panic(mv_string("TODO: implement free_vars for project"));
+    case EVal:
+        panic(mv_string("TODO: implement free_vars for val"));
 
     case EInt:
     case EString:
@@ -193,7 +212,7 @@ NameArray free_vars(ExprRef ref, ExprPool* pool, Allocator* a) {
 
 Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a) {
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
-    DocStyle ty_former_style = scolour(colour(209, 118, 219), dstyle);
+    //DocStyle ty_former_style = scolour(colour(209, 118, 219), dstyle);
     DocStyle field_style = scolour(colour(60, 120, 210), dstyle);
     DocStyle const_style = scolour(colour(120, 170, 210), dstyle);
     DocStyle var_style = scolour(colour(212, 130, 42), dstyle);
@@ -239,6 +258,14 @@ Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a) {
         out = mv_style_doc(field_style, mv_cat_doc(nodes, a), a);
         break;
     }
+    case ECoRecur: {
+        panic(mv_string("TODO: implement pretty corecur"));
+        break;
+    }
+    case EMatch: {
+        panic(mv_string("TODO: implement pretty match"));
+        break;
+    }
     case ERecord: {
         PtrArray nodes = mk_ptr_array(1 + expr.record.fields.len, a);
         push_ptr(mv_style_doc(former_style, mv_cstr_doc("record", a), a), &nodes);
@@ -253,6 +280,22 @@ Document* pretty_rune_expr(ExprRef ref, ExprPool* pool, Allocator* a) {
             push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
         }
         return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
+    }
+    case ECoRecord: {
+        panic(mv_string("TODO: implement pretty corecord"));
+        break;
+    }
+    case EProject: {
+        panic(mv_string("TODO: implement pretty project"));
+        break;
+    }
+    case EVal: {
+        panic(mv_string("TODO: implement pretty val"));
+        break;
+    }
+    case EInt: {
+        panic(mv_string("TODO: implement pretty int"));
+        break;
     }
 
     case EString:

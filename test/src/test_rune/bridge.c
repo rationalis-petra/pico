@@ -7,8 +7,8 @@
 #include "rune/eval/eval.h"
 
 typedef struct {
-    size_t len;
     void* data;
+    size_t len;
 } List;
 
 typedef struct {
@@ -48,7 +48,7 @@ void run_rune_bridge_tests(TestLog* log, RuneEnv* env, RegionAllocator* region) 
 
     if (test_start(log, mv_string("list-value"))) {
         int64_t ints[] = {1, 2, 3};
-        List expected = {3, ints};
+        List expected = {ints, 3};
 
 
         Bridge elt = {.type = BInt};

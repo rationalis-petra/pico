@@ -3,6 +3,7 @@
 
 #include "platform/memory/region.h"
 #include "data/meta/array_header.h"
+#include "data/slice.h"
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
@@ -40,14 +41,39 @@ typedef struct {
     StringOption filename;
     NameOption entrypoint;
     DependencyArray target_dependencies;
-    StringArray file_dependencies;
+    StringSlice file_dependencies;
     Module* module;
 } PicoTarget;
 
+/** run ::
+ *   pure <any>
+ *   bind run (fn [<any>] run)
+ *   shell (list string)
+ */
+typedef struct Run Run;
+typedef enum : uint64_t {
+    RPure, RBind, RShell
+} RunType;
+
 typedef struct {
-    StringArray provides; 
+    Run* run;
+    ValRef closure;
+} RunBind;
+
+struct Run {
+    RunType type;
+    union {
+        ValRef pure;
+        RunBind bind;
+        StringSlice shell; 
+    };
+};
+
+typedef struct {
+    String path;
+    StringSlice provides; 
     DependencyArray target_dependencies;
-    ValRef monad;
+    Run monad;
 } GenericTarget;
 
 typedef struct {

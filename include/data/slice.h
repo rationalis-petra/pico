@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "data/string.h"
 #include "data/meta/slice_header.h"
 
 SLICE_TYPE(void*, Ptr)
@@ -10,5 +11,7 @@ SLICE_TYPE(void*, Ptr)
 SLICE_TYPE(uint8_t, U8)
 
 SLICE_TYPE(uint32_t, U32)
+    
+SLICE_TYPE(String, String)
 
 #endif

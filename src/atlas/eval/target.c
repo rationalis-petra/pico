@@ -42,6 +42,7 @@ TargetMap* mk_target_map(Allocator* a) {
     .gpa = a,
   };
   memset(map->modules, 0, initial_cap * sizeof(Module*));
+  memset(map->cells, 0, initial_cap * sizeof(TargetCell));
   memset(map->cells_set, 0, initial_cap * sizeof(bool));
   return map;
 }
@@ -50,6 +51,14 @@ void delete_target_map(TargetMap* map) {
     Allocator* a = map->gpa;
     mem_free(map->targets, a);
     mem_free(map->modules, a);
+    for (size_t i = 0; i < map->hash_size; i++) {
+        TargetCell* cell = map->cells[i].next;
+        while (cell)  {
+            TargetCell* prev = cell;
+            cell = cell->next;
+            mem_free(prev, a);
+        }
+    }
     mem_free(map->cells, a);
     mem_free(map->cells_set, a);
     mem_free(map, a);
@@ -66,7 +75,6 @@ static uint64_t hash_num(uint64_t num, uint64_t hash) {
 
 static uint64_t hash_string(String string, uint64_t hash) {
     // 64-bit FNV offsets and primes
-
     for (size_t i = 0; i < string.memsize; i++) {
         hash = hash ^ string.bytes[i];
         hash = hash * FNV_prime;
@@ -91,7 +99,7 @@ static uint64_t hash_name_option(NameOption opt, uint64_t hash) {
     return hash;
 }
 
-static uint64_t hash_string_array(StringArray arr, uint64_t hash) {
+static uint64_t hash_string_slice(StringSlice arr, uint64_t hash) {
     for (size_t i = 0; i < arr.len; i++) {
         hash = hash_string(arr.data[i], hash);
     }
@@ -115,6 +123,23 @@ static uint64_t hash_dependency_array(DependencyArray arr, uint64_t hash) {
     return hash;
 }
 
+static uint64_t hash_run(Run run, uint64_t hash) {
+    switch (run.type) {
+    case RPure:
+        hash = hash_num(run.pure.ref, hash);
+        break;
+    case RBind:
+        hash = hash_run(*run.bind.run, hash);
+        hash = hash_num(run.bind.closure.ref, hash);
+        break;
+    case RShell:
+        hash = hash_string_slice(run.shell, hash);
+        break;
+
+    }
+    return hash;
+}
+
 static uint64_t finalize_hash(uint64_t hash) {
     /**
      * This finalization step was taken from path.c It may not be relevant to us?
@@ -132,9 +157,10 @@ uint64_t hash_target(AtlasTarget target) {
     switch (target.type) {
     case TGeneric: {
         GenericTarget generic = target.generic;
-        hash = hash_string_array(generic.provides, hash);
+        hash = hash_string(generic.path, hash);
+        hash = hash_string_slice(generic.provides, hash);
         hash = hash_dependency_array(generic.target_dependencies, hash);
-        hash_num(generic.monad.ref, hash);
+        hash_run(generic.monad, hash);
         break;
     }
     case TPico: {
@@ -144,7 +170,7 @@ uint64_t hash_target(AtlasTarget target) {
         hash = hash_string_option(pico.filename, hash);
         hash = hash_name_option(pico.entrypoint, hash);
         hash = hash_dependency_array(pico.target_dependencies, hash);
-        hash = hash_string_array(pico.file_dependencies, hash);
+        hash = hash_string_slice(pico.file_dependencies, hash);
         hash = hash_num((uintptr_t)pico.module, hash);
         break;
     }
@@ -174,6 +200,28 @@ bool dep_array_eq(DependencyArray lhs, DependencyArray rhs) {
   return false;
 }
 
+bool string_slice_eq(StringSlice lhs, StringSlice rhs) {
+    StringArray sl = {.len = lhs.len, .size = lhs.len, .data = lhs.data};
+    StringArray sr = {.len = rhs.len, .size = rhs.len, .data = rhs.data};
+    return string_array_eq(sl, sr);
+}
+
+bool run_eq(Run lhs, Run rhs) {
+  if (lhs.type != rhs.type) return false;
+  switch (lhs.type) {
+  case RPure:
+      return (lhs.pure.ref != rhs.pure.ref);
+  case RBind: {
+    return run_eq(*lhs.bind.run, *rhs.bind.run)
+        && (lhs.bind.closure.ref == rhs.bind.closure.ref);
+  } 
+  case RShell: {
+      return string_slice_eq(lhs.shell, rhs.shell);
+  }
+  }
+  panic(mv_string("invalid targets provided to run_eq."));
+}
+
 bool target_eq(AtlasTarget lhs, AtlasTarget rhs) {
   if (lhs.type != rhs.type) return false;
   switch (lhs.type) {
@@ -183,7 +231,7 @@ bool target_eq(AtlasTarget lhs, AtlasTarget rhs) {
       if (!string_eq(lhs.generic.provides.data[i], rhs.generic.provides.data[i])) return false;
     }
     if (!dep_array_eq(lhs.generic.target_dependencies, rhs.generic.target_dependencies)) return false;
-    return lhs.generic.monad.ref == rhs.generic.monad.ref;
+    return run_eq(lhs.generic.monad, rhs.generic.monad);
   }
   case TPico: {
     return name_option_eq(lhs.pico.name, rhs.pico.name)
@@ -191,7 +239,7 @@ bool target_eq(AtlasTarget lhs, AtlasTarget rhs) {
       && string_option_eq(lhs.pico.filename, rhs.pico.filename)
       && name_option_eq(lhs.pico.entrypoint, rhs.pico.entrypoint)
       && dep_array_eq(lhs.pico.target_dependencies, rhs.pico.target_dependencies)
-      && string_array_eq(lhs.pico.file_dependencies, rhs.pico.file_dependencies)
+      && string_slice_eq(lhs.pico.file_dependencies, rhs.pico.file_dependencies)
       && lhs.pico.module == rhs.pico.module;
   } 
   case TFile: {
@@ -234,10 +282,11 @@ static TargetRef target_to_ref(AtlasTarget target, TargetMap* map) {
     size_t index = target_hash % map->hash_size;
     TargetCell* cell = &map->cells[index];
     bool is_set = map->cells_set[index];
-    size_t path_len = 0;
+    // TODO: grow hash table when path_len > 4
+    //size_t path_len = 0;
     if (is_set) {
       while (true) {
-        path_len++;
+          //path_len++;
         TargetRef extant = cell->target;
         if (target_eq(target, map->targets[extant.ref])) {
           return extant;
@@ -290,20 +339,15 @@ typedef enum : uint64_t {
 } RuneTargetType;
 
 typedef struct {
-    size_t len;
-    String* data;
-} StringList;
-
-typedef struct {
-    size_t len;
     TargetRef* data;
+    size_t len;
 } DependencyList;
 
 typedef struct {
     String path;
     DependencyList deps;
     StringOption filename;
-    StringList submodules;
+    StringSlice submodules;
 } RuneLibrary;
 
 typedef struct {
@@ -313,34 +357,11 @@ typedef struct {
     String entry_point;
 } RuneExecutable;
 
-    // run ::
-    //  pure <any>
-    //  bind run (fn [<any>] run)
-    //  shell (list string)
-typedef struct Run Run;
-typedef enum : uint64_t {
-    RPure, RBind, RShell
-} RunType;
-
-typedef struct {
-    Run* run;
-    ValRef closure;
-} RunBind;
-
-struct Run {
-    RunType type;
-    union {
-        ValRef pure;
-        RunBind bind;
-        StringList shell; 
-    };
-};
-
 typedef struct {
     String path;
     DependencyList deps;
-    StringList provides;
-    ValRef run;
+    StringSlice provides;
+    Run run;
 } RuneGeneric;
 
 typedef struct {
@@ -380,11 +401,7 @@ static AtlasTarget rune_to_atlas(RuneTarget target, Allocator* a) {
                 .path = target.library.path,
                 .filename = target.library.filename,
                 .target_dependencies = convert_dependency_list(target.library.deps, a),
-                .file_dependencies = {
-                    .len = target.library.submodules.len,
-                    .size = target.library.submodules.len,
-                    .data = target.library.submodules.data,
-                },
+                .file_dependencies = target.library.submodules,
             },
         };
     case RTExecutable:
@@ -404,11 +421,8 @@ static AtlasTarget rune_to_atlas(RuneTarget target, Allocator* a) {
         return (AtlasTarget) {
             .type = TGeneric,
             .generic = {
-                .provides = {
-                    .len = target.generic.provides.len,
-                    .size = target.generic.provides.len,
-                    .data = target.generic.provides.data,
-                },
+                .path = target.generic.path,
+                .provides = target.generic.provides,
                 .target_dependencies = convert_dependency_list(target.generic.deps, a),
                 .monad = target.generic.run,
             }

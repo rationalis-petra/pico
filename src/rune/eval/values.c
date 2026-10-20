@@ -131,8 +131,8 @@ static void* create_obj(size_t size, ValueSort sort, ValueHeap* heap) {
 ValRef mk_rune_list(size_t num_elements, ValueHeap* heap) {
     ListRepr* repr = create_obj(sizeof(ListRepr), ValList, heap);
     repr->list = (RuneList) { 
-        .len = num_elements,
         .data = mem_alloc(sizeof(ValRef) * num_elements, heap->gpa),
+        .len = num_elements,
     };
     return (ValRef){(uintptr_t)repr};
 }
@@ -379,8 +379,8 @@ void get_host_val(ValRef ref, void* data) {
 }
 
 typedef struct {
-    size_t len;
     void* data;
+    size_t len;
 } List;
 
 typedef struct {
@@ -476,8 +476,8 @@ bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a) {
             offset += elt_offset;
         }
         *(List*)data = (List) {
-            .len = list.len,
             .data = dest,
+            .len = list.len,
         };
         
         return true;
