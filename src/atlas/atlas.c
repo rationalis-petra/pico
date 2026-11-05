@@ -6,6 +6,8 @@
 #include "components/pretty/stream_printer.h"
 
 #include "pico/parse/parse.h"
+#include "rune/analysis/elaboration.h"
+#include "rune/analysis/abstraction.h"
 
 #include "atlas/atlas.h"
 #include "atlas/data/error.h"
@@ -19,6 +21,7 @@ static const char* version = "0.0.2";
 static bool load_atlas_script(AtlasInstance* instance, String path, FormattedOStream* out, RegionAllocator* region);
 bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
@@ -42,12 +45,14 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
             AtAbsCallbackData cb = {
                 .path = path,
             };
-            Toplevel top = abstract_atlas_toplevel(parse_res.result, cb, pool, region, &pi_point);
+            Toplevel top = abstract_atlas_toplevel(parse_res.result, cb, rpool, region, &pi_point);
             switch (top.type) {
             case TLDef: {
-                RuneEvalResult result = atlas_add_def(instance, top.def, region);
+                Def def = elaborate_rune_def(top.def, rpool, pool, region, &pi_point);
+                RuneEvalResult result = atlas_add_def(instance, def, region);
                 if (result.type != AValue) {
                     write_doc_formatted(result.error_message, 120, out);
+                    write_fstring(mv_string("\n"), out);
                     return true;
                 }
                 break;
@@ -222,8 +227,67 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     return fail;
 }
 
+bool register_atlas_types(AtlasInstance* instance, FormattedOStream* out, RegionAllocator* region) {
+    RegionAllocator* subregion = make_subregion(region);
+    Allocator ra = ra_to_gpa(subregion);
+
+    char* types[] = {
+        "(def Library Record [.path Int] [.depends-on Int] [.file Int] [.submodules Int])",
+        "(def Executable Record [.path Int] [.depends-on Int] [.file Int] [.entry-point Int])",
+        "(def Generic Record [.path Int] [.depends-on Int] [.provides Int] [.run Int])",
+        "(def File Record [.path Int] [.name Int])",
+    };
+    const size_t num_types = sizeof(types) / sizeof(char*);
+
+    size_t i = 0;
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
+    for (i = 0; i < num_types; i++) {
+        reset_subregion(subregion);
+        IStream* in = mv_string_istream(mv_string(types[i]), &ra);
+        PiAllocator pia = convert_to_pallocator(&ra);
+
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
+        if (parse_res.type == ParseNone) {
+            continue;
+        } else if (parse_res.type == ParseFail) {
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = parse_res.error,
+            };
+            display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), mv_string("setup"), &ra);
+            goto on_error_generic;
+        }
+
+        ExprPool* pool = get_expr_pool(instance);
+        RExprPool* rpool = mk_rexpr_pool(&ra);
+
+        //RDef abstract_rune_def(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+        RDef rdef = abstract_rune_def(parse_res.result, (HostCallbackData){}, rpool, region, &pi_point);
+        Def def = elaborate_rune_def(rdef, rpool, pool, region, &pi_point);
+        RuneEvalResult result = atlas_add_def(instance, def, region);
+        if (result.type != AValue) {
+            write_doc_formatted(result.error_message, 120, out);
+            write_fstring(mv_string("\n"), out);
+            goto on_error_generic;
+        }
+    }
+
+    release_subregion(subregion);
+    return true;
+
+ on_pi_error:
+    display_error(pi_point.multi, mv_string(types[i]), out, mv_string("setup"), &ra);
+
+ on_error_generic:
+    release_subregion(subregion);
+    return false;
+}
+
 void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
     AtlasCommand command = atlas_parse_command(args);
+
 
     switch (command.type) {
     case CInit:
@@ -231,59 +295,15 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         write_fstring(command.init.name, out);
         write_fstring(mv_string("\n"), out);
         break;
-    case CBuild: {
-        write_fstring(mv_string("WARNING: Atlas build is currently under development, and is unlikely to produce\n"), out);
-        write_fstring(mv_string("         a functioning executable file.\n"), out);
-        write_fstring(mv_string("\n"), out);
-        Allocator* stda = get_std_allocator();
-        AtlasInstance* instance = make_atlas_instance(stda);
-
-        // TODO: register package ONLY if the atlas project lists 'base' as a dependency 
-        register_package(instance, package);
-
-        RegionAllocator* region = make_region_allocator(4096, true, stda);
-        String cwd = get_current_directory(stda);
-        bool fail = load_atlas_files(cwd, out, instance, region);
-        mem_free(cwd.bytes, stda);
-        AtErrorPoint point;
-        if (catch_error(point)) {
-            Allocator ra = ra_to_gpa(region);
-            display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
-        } else {
-            if (!fail) {
-                bool has_target = false;
-                String target = {};
-                if (command.build.target.type == Some) {
-                    target = command.build.target.val;
-                    has_target = true;
-                } else {
-                    AtlasDefaultTargets defaults = atlas_default_targets(instance);
-                    if (defaults.run.type == Some) {
-                        target = view_name_string(defaults.build.val);
-                        has_target = true;
-                    }
-                }
-
-                if (has_target) {
-                    atlas_build(instance, target, region, &point);
-                } else {
-                    write_fstring(mv_string("Tried to run 'atlas build' without a target or default target.\n"), out);
-                    write_fstring(mv_string("Please either run as 'altas build <target>' or add (default :build <targetname>) to\n"), out);
-                    write_fstring(mv_string("the package in the atlas-project file.\n"), out);
-                }
-            }
-        }
-        delete_region_allocator(region);
-        delete_atlas_instance(instance);
-
-        break;
-    }
+    case CBuild:
     case CRun: {
         Allocator* stda = get_std_allocator();
+        RegionAllocator* region = make_region_allocator(4096, true, stda);
+
         AtlasInstance* instance = make_atlas_instance(stda);
+        register_atlas_types(instance, get_formatted_stdout(), region);
         register_package(instance, package);
 
-        RegionAllocator* region = make_region_allocator(4096, true, stda);
         String cwd = get_current_directory(stda);
         bool fail = load_atlas_files(cwd, out, instance, region);
         mem_free(cwd.bytes, stda);
@@ -307,7 +327,11 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
                 }
 
                 if (has_target) {
-                    atlas_run(instance, target, region, &point);
+                    if (command.type == CBuild) {
+                        atlas_build(instance, target, region, &point);
+                    } else {
+                        atlas_run(instance, target, region, &point);
+                    }
                 } else {
                     write_fstring(mv_string("Tried to run 'atlas run' without a target or default target.\n"), out);
                     write_fstring(mv_string("Please either run as 'altas run <target>' or add (default :run <targetname>) to\n"), out);

@@ -56,7 +56,7 @@ void delete_prop_set(PropSet *set) {
     mem_free(set, set->gpa);
 }
 
-void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
+void add_expr_prop(String propname, RExpr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -65,7 +65,7 @@ void add_expr_prop(String propname, ExprRef* location, PropSet* props) {
     push_prop(prop, &props->props);
 }
 
-void add_expr_option_prop(String propname, ExprRef* location, PropSet* props) {
+void add_expr_option_prop(String propname, RExpr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -74,7 +74,7 @@ void add_expr_option_prop(String propname, ExprRef* location, PropSet* props) {
     push_prop(prop, &props->props);
 }
 
-void add_expr_array_prop(String propname, ExprRef* location, PropSet* props) {
+void add_expr_array_prop(String propname, RExpr* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
@@ -128,7 +128,7 @@ void add_callback_prop(String propname, PropCb callback, void* in, void* out, Pr
     push_prop(prop, &props->props);
 }
 
-void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData host_data, ExprPool* pool, PiErrorPoint* point, RegionAllocator* region) {
+void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData host_data, RExprPool* pool, PiErrorPoint* point, RegionAllocator* region) {
     Allocator alc = ra_to_gpa(region);
     Allocator* a = &alc;
     // Step 1: confirm is branch
@@ -240,8 +240,8 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     ? term.branch.nodes.data[1]
                     : raw_slice(&term, 1);
 
-                ExprRef* dest = prop.location;
-                *dest = abstract_rune_expr(expr, host_data, pool, region, point);
+                RExpr* dest = prop.location;
+                abstract_rune_to(expr, host_data, pool, region, point, dest);
                 break;
             }
             case PExprOption: {
@@ -250,51 +250,42 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                     : raw_slice(&term, 1);
 
 
-                ExprRef* dest = prop.location;
+                RExpr* dest = prop.location;
                 if (is_key_symbol(expr, string_to_symbol(mv_string("none")))) {
-                    *dest = new_expr(pool);
-                    set_expr(*dest,
-                             (Expr) {
-                                 .type = ECtor,
-                                 .ctor.name = string_to_name(mv_string("none")),
-                             },
-                             pool);
+                    *dest = (RExpr) {
+                        .type = RECtor,
+                        .ctor.name = string_to_name(mv_string("none")),
+                    };
                 } else {
-                    ExprRef ctor_ref = new_expr(pool);
-                    Expr ctor = {
-                        .type = ECtor,
+                    RExprRef ctor_ref = new_rexpr(pool);
+                    RExpr ctor = {
+                        .type = RECtor,
                         .ctor.name = string_to_name(mv_string("some")),
                     };
-                    set_expr(ctor_ref, ctor, pool);
-                    ExprSlice members = new_expr_slice(1, pool);
-                    Expr val;
+                    set_rexpr(ctor_ref, ctor, pool);
+                    RExprSlice members = new_rexpr_slice(1, pool);
+                    RExpr val;
                     abstract_rune_to(expr, host_data, pool, region, point, &val);
-                    set_expr_elt(members, 0, val, pool);
+                    set_rexpr_elt(members, 0, val, pool);
 
-                    *dest = new_expr(pool);
-                    set_expr(*dest,
-                             (Expr){
-                                 .type = EApp,
-                                 .app.fn = ctor_ref,
-                                 .app.args = members,
-                             },
-                             pool);
+                    *dest = (RExpr) {
+                        .type = REApp,
+                        .app.fn = ctor_ref,
+                        .app.args = members,
+                    };
                 }
                 break;
             }
             case PExprArray: {
-                ExprSlice slice = new_expr_slice(term.branch.nodes.len - 1, pool);
+                RExprSlice slice = new_rexpr_slice(term.branch.nodes.len - 1, pool);
                 for (size_t i = 1; i < term.branch.nodes.len; i++) {
-                    Expr expr;
+                    RExpr expr;
                     abstract_rune_to(term.branch.nodes.data[i], host_data, pool, region, point, &expr);
-                    set_expr_elt(slice, i - 1, expr, pool);
+                    set_rexpr_elt(slice, i - 1, expr, pool);
                 }
 
-                ExprRef* dest = prop.location;
-                    *dest = new_expr(pool);
-                    set_expr(*dest,
-                             (Expr){.type = EList, .list = slice},
-                             pool);
+                RExpr* dest = prop.location;
+                *dest = (RExpr) {.type = REList, .list = slice};
                 break;
             }
             case PCallback: {

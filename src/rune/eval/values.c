@@ -35,8 +35,18 @@ typedef struct {
 
 typedef struct {
     ValueInfo info;
-    RuneRecord record;
-} RecordRepr;
+    RuneCoCase cocase;
+} CoCaseRepr;
+
+typedef struct {
+    ValueInfo info;
+    RuneDataType type;
+} DataTypeRepr;
+
+typedef struct {
+    ValueInfo info;
+    uint64_t level;
+} UniverseRepr;
 
 typedef struct {
     ValueInfo info;
@@ -80,6 +90,11 @@ void delete_value_heap(ValueHeap* heap) {
     ValueInfo* info = heap->begin;
     while (info) {
         switch (info->sort) {
+        case ValDataType: {
+            DataTypeRepr* type = (void*)info;
+            mem_free(type->type.names.data, heap->gpa);
+            break;
+        }
         case ValString: {
             StringRepr* string = (void*)info;
             mem_free(string->string.bytes, heap->gpa);
@@ -170,19 +185,19 @@ String get_rune_string(ValRef ref) {
 }
 
 // Function.
-ValRef mk_rune_closure(RuneClosureEnv environment, ExprRef ref, ValueHeap* heap) {
+ValRef mk_rune_closure(RuneClosureEnv environment, Expr expr, ValueHeap* heap) {
     ClosureRepr* repr = create_obj(sizeof(ClosureRepr), ValClosure, heap);
     repr->closure = (RuneClosure) { 
-        .expr = ref,
+        .expr = expr,
         .env = environment,
     };
     return (ValRef){(uintptr_t)repr};
 }
 
-ValRef mk_rune_curried_closure(RuneClosureEnv environment, ExprRef ref, size_t num_args, ValueHeap* heap) {
+ValRef mk_rune_curried_closure(RuneClosureEnv environment, Expr expr, size_t num_args, ValueHeap* heap) {
     ClosureRepr* repr = create_obj(sizeof(ClosureRepr), ValClosure, heap);
     repr->closure = (RuneClosure) { 
-        .expr = ref,
+        .expr = expr,
         .env = environment,
         .num_curried = num_args,
         .curried = mem_alloc(sizeof(ValRef) * num_args, heap->gpa),
@@ -221,23 +236,24 @@ RuneData* get_rune_data(ValRef ref) {
     return &repr->data;
 }
 
-ValRef mk_rune_record(ValRefOption src_type, size_t capacity, ValueHeap* heap) {
-    RecordRepr* repr = create_obj(sizeof(RecordRepr) + sizeof(NameValPr) * capacity, ValRecord, heap);
-    repr->record = (RuneRecord) { 
+ValRef mk_rune_cocase(ValRefOption src_type, RuneClosureEnv env, PatternMap fields, ValueHeap* heap) {
+    CoCaseRepr* repr = create_obj(sizeof(CoCaseRepr), ValCoCase, heap);
+    repr->cocase = (RuneCoCase) { 
         .type = src_type,
-        .len = capacity,
+        .env = env,
+        .fields = fields,
     };
     return (ValRef){(uintptr_t)repr};
 }
 
-RuneRecord* get_rune_record(ValRef ref) {
-    RecordRepr* repr = (void*)ref.ref;
+RuneCoCase* get_rune_cocase(ValRef ref) {
+    CoCaseRepr* repr = (void*)ref.ref;
 #ifdef DEBUG_ASSERT
-    if (repr->info.sort != ValRecord) {
+    if (repr->info.sort != ValCoCase) {
         panic(mv_string("getting rune record from non-record object!"));
     }
 #endif
-    return &repr->record;
+    return &repr->cocase;
 }
 
 ValRef mk_rune_int(int64_t val, ValueHeap* heap) {
@@ -254,6 +270,47 @@ int64_t get_rune_int(ValRef ref) {
     }
 #endif
     return repr->num;
+}
+
+ValRef mk_rune_data_type(ValRef universe, Name self, bool is_record, uint64_t num_names, uint64_t num_ops, ValueHeap* heap) {
+    DataTypeRepr* repr = create_obj(sizeof(DataTypeRepr) + num_ops * sizeof(AlgOpDescriptor), ValDataType, heap);
+    repr->type = (RuneDataType) {
+      .universe = universe,
+      .self = self,
+      .is_record = is_record,
+      .names = {
+          .len = num_names,
+          .data = mem_alloc(num_names * sizeof(Name), heap->gpa),
+      },
+      .len = num_ops,
+    };
+    return (ValRef){(uintptr_t)repr};
+}
+
+RuneDataType* get_rune_data_type(ValRef ref) {
+    DataTypeRepr* repr = (void*)ref.ref;
+#ifdef DEBUG_ASSERT
+    if (repr->info.sort != ValDataType) {
+        panic(mv_string("getting rune int from non-int object!"));
+    }
+#endif
+    return &repr->type;
+}
+
+ValRef mk_rune_universe(uint64_t level, ValueHeap* heap) {
+    UniverseRepr* repr = create_obj(sizeof(UniverseRepr), ValUniverse, heap);
+    repr->level = level;
+    return (ValRef){(uintptr_t)repr};
+}
+
+uint64_t get_rune_universe(ValRef ref) {
+    UniverseRepr* repr = (void*)ref.ref;
+#ifdef DEBUG_ASSERT
+    if (repr->info.sort != ValUniverse) {
+        panic(mv_string("getting rune universe from non-universe object!"));
+    }
+#endif
+    return repr->level;
 }
 
 size_t bridge_host_align(Bridge bridge) {
@@ -438,15 +495,15 @@ bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a) {
         return found;
         break;
     case BRecord: {
-        if (sort != ValRecord) return false;
-        RuneRecord* record = get_rune_record(ref);
+        if (sort != ValData) return false;
+        RuneData* record = get_rune_data(ref);
         if (template.record.len != record->len) return false;
         size_t offset = 0;
         for (size_t i = 0; i < template.record.len; i++) {
             Bridge bfield = template.record.types[i].val;
             size_t align =  bridge_host_align(bfield);
             offset = align_to(offset, align);
-            if (!get_as_host_val(record->values[i].val, bfield, data + offset, a)) return false;
+            if (!get_as_host_val(record->values[i], bfield, data + offset, a)) return false;
             size_t size = bridge_host_size(bfield);
             offset += size;
         }
@@ -490,78 +547,3 @@ bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a) {
     return false;
 }
 
-bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* a) {
-    ValueSort actual_sort = get_sort(actual);
-    ValueSort expected_sort = get_sort(expected);
-
-    if (actual_sort != expected_sort) {
-        return false;
-    }
-
-    switch (actual_sort) {
-    case ValClosure:
-        return actual.ref == expected.ref;
-    case ValData: {
-        RuneData* actual_data = get_rune_data(actual);
-        RuneData* expected_data = get_rune_data(expected);
-        if (actual_data->len != expected_data->len) return false;
-        if (actual_data->type.type != expected_data->type.type) return false;
-        if (actual_data->type.type == Some) {
-            if (!rune_value_eql(actual_data->type.val, expected_data->type.val, heap, a)) {
-                return false;
-            }
-        }
-        for (size_t i = 0; i < actual_data->len; i++) {
-            if (!rune_value_eql(actual_data->values[i], expected_data->values[i], heap, a)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case ValRecord: {
-        RuneRecord* actual_record = get_rune_record(actual);
-        RuneRecord* expected_record = get_rune_record(expected);
-        if (actual_record->len != expected_record->len) return false;
-        if (actual_record->type.type != expected_record->type.type) return false;
-        if (actual_record->type.type == Some) {
-            if (!rune_value_eql(actual_record->type.val, expected_record->type.val, heap, a)) {
-                return false;
-            }
-        }
-        for (size_t i = 0; i < actual_record->len; i++) {
-            if (actual_record->values[i].name != expected_record->values[i].name) {
-                return false;
-            }
-            if (!rune_value_eql(actual_record->values[i].val, expected_record->values[i].val, heap, a)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case ValInt:
-        return get_rune_int(actual) == get_rune_int(expected);
-    case ValString: {
-
-        String actual_string = get_rune_string(actual);
-        String expected_string = get_rune_string(expected);
-        return string_eq(actual_string, expected_string);
-    }
-    case ValList: {
-        RuneList actual_list = get_rune_list(actual);
-        RuneList expected_list = get_rune_list(expected);
-        if (actual_list.len != expected_list.len) {
-            return false;
-        }
-        for (size_t i = 0; i < actual_list.len; i++) {
-            if (!rune_value_eql(actual_list.data[i],
-                                expected_list.data[i],
-                                heap, a)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    default:
-        return actual.ref == expected.ref;
-    }
-}

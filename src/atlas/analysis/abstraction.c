@@ -20,12 +20,11 @@ typedef enum {
 
 // Will give us a type error if the callback signature changes
 HostCallback abstract_atlas;
-void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, void* cb_data, Expr* out) {
+void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, void* cb_data, RExpr* out) {
     Allocator ra = ra_to_gpa(region);
     AtAbsCallbackData cb = *(AtAbsCallbackData*)cb_data;
 
-    ExprRef path_expr = new_expr(pool);
-    set_expr(path_expr, (Expr){.type = EString, .string = cb.path}, pool);
+    RExpr path_expr = {.type = REString, .string = cb.path};
     switch (raw.type) {
     case RawBranch: {
         if (raw.branch.nodes.len == 0) {
@@ -39,49 +38,55 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
         Symbol head = get_symbol_err(rawhead, point, &ra);
         if (string_cmp(mv_string("library"), symbol_to_string(head, &ra)) == 0) {
             // Extract from the target expression into a syntax tree!
-            ExprRef ctor_ref = new_expr(pool);
-            ExprRef ttype_ref = new_expr(pool);
-            ExprSlice members = new_expr_slice(1, pool);
-            *out = (Expr) {
-                .type = EApp,
+            RExprRef ctor_ref = new_rexpr(pool);
+            RExprRef ttype_ref = new_rexpr(pool);
+            RExprSlice members = new_rexpr_slice(1, pool);
+            *out = (RExpr) {
+                .type = REApp,
                 .app = {
                     .fn = ctor_ref,
                     .args = members,
                 }
             };
 
-            Expr ctor = {
-                .type = ECtor,
+            RExpr ctor = {
+                .type = RECtor,
                 .ctor = {
                     .name = string_to_name(mv_string("library")),
                     .type = {.type = Some, .val = ttype_ref},
                 },
             };
-            set_expr(ctor_ref, ctor, pool);
+            set_rexpr(ctor_ref, ctor, pool);
 
-            Expr ttype = {
-                .type = EVal,
+            RExpr ttype = {
+                .type = REVal,
                 .value = cb.target_type,
             };
-            set_expr(ttype_ref, ttype, pool);
+            set_rexpr(ttype_ref, ttype, pool);
 
-            NameExprMap fields = new_expr_map(4, pool);
-            Expr lib_record = {
-                .type = ERecord,
+            RExprMap fields = new_rexpr_map(4, pool);
+            RExprRef lib_type = new_rexpr(pool);
+            set_rexpr(lib_type, (RExpr){.type = REVar, .var = string_to_name(mv_string("Library"))}, pool);
+            RExpr lib_record = {
+                .type = RERecord,
+                .record.type = {
+                    .type = Some,
+                    .val = lib_type,
+                },
                 .record.fields = fields,
             };
-            set_expr_elt(members, 0, lib_record, pool);
-            NameExprCell path = {
-                .name = string_to_name(mv_string("path")), 
-                .val = path_expr,
+            set_rexpr_elt(members, 0, lib_record, pool);
+            RExprCell path = {
+                .name = string_to_name(mv_string("path")),
+                .expr = path_expr,
             };
-            NameExprCell dependencies = {
+            RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
             };
-            NameExprCell filename = {
+            RExprCell filename = {
                 .name = string_to_name(mv_string("file")), 
             };
-            NameExprCell submodules = {
+            RExprCell submodules = {
                 .name = string_to_name(mv_string("submodules")), 
             };
 
@@ -96,9 +101,9 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             //   submodules :: string list
             //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("depends-on"), &dependencies.val, props);
-            add_expr_option_prop(mv_string("file"), &filename.val, props);
-            add_expr_array_prop(mv_string("submodules"), &submodules.val, props);
+            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
+            add_expr_option_prop(mv_string("file"), &filename.expr, props);
+            add_expr_array_prop(mv_string("submodules"), &submodules.expr, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, library_checks, host_data, pool, point, region);
@@ -109,55 +114,61 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             /**
              * End parsing, set expressions
              */
-            set_expr_map_elt(fields, 0, path, pool);
-            set_expr_map_elt(fields, 1, dependencies, pool);
-            set_expr_map_elt(fields, 2, filename, pool);
-            set_expr_map_elt(fields, 3, submodules, pool);
+            set_rexpr_map_elt(fields, 0, path, pool);
+            set_rexpr_map_elt(fields, 1, dependencies, pool);
+            set_rexpr_map_elt(fields, 2, filename, pool);
+            set_rexpr_map_elt(fields, 3, submodules, pool);
         } else if (string_cmp(mv_string("executable"), symbol_to_string(head, &ra)) == 0) {
             bool executable_checks[] = {false, false, false};
 
-            ExprRef ctor_ref = new_expr(pool);
-            ExprRef ttype_ref = new_expr(pool);
-            ExprSlice members = new_expr_slice(1, pool);
-            *out = (Expr) {
-                .type = EApp,
+            RExprRef ctor_ref = new_rexpr(pool);
+            RExprRef ttype_ref = new_rexpr(pool);
+            RExprSlice members = new_rexpr_slice(1, pool);
+            *out = (RExpr) {
+                .type = REApp,
                 .app = {
                     .fn = ctor_ref,
                     .args = members,
                 }
             };
-            Expr ctor = {
-                .type = ECtor,
+            RExpr ctor = {
+                .type = RECtor,
                 .ctor = {
                     .name = string_to_name(mv_string("executable")),
                     .type = {.type = Some, .val = ttype_ref},
                 },
             };
-            set_expr(ctor_ref, ctor, pool);
+            set_rexpr(ctor_ref, ctor, pool);
 
-            Expr ttype = {
-                .type = EVal,
+            RExpr ttype = {
+                .type = REVal,
                 .value = cb.target_type,
             };
-            set_expr(ttype_ref, ttype, pool);
+            set_rexpr(ttype_ref, ttype, pool);
 
-            NameExprMap fields = new_expr_map(4, pool);
-            Expr lib_record = {
-                .type = ERecord,
+            RExprMap fields = new_rexpr_map(4, pool);
+            RExprRef exec_type = new_rexpr(pool);
+            set_rexpr(exec_type, (RExpr){.type = REVar, .var = string_to_name(mv_string("Executable"))}, pool);
+            RExpr exec_record = {
+                .type = RERecord,
+                .record.type = {
+                    .type = Some,
+                    .val = exec_type,
+                },
                 .record.fields = fields,
             };
-            set_expr_elt(members, 0, lib_record, pool);
-            NameExprCell path = {
+            set_rexpr_elt(members, 0, exec_record, pool);
+            RExprCell path = {
                 .name = string_to_name(mv_string("path")), 
-                .val = path_expr,
+                .expr = path_expr,
             };
-            NameExprCell dependencies = {
+            RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
             };
-            NameExprCell filename = {
+            RExprCell filename = {
                 .name = string_to_name(mv_string("file")), 
             };
-            NameExprCell entry_point = {
+            RExprCell entry_point = {
                 .name = string_to_name(mv_string("entry-point")), 
             };
 
@@ -166,9 +177,9 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             //   entry-point :: symbol
             //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("file"), &filename.val, props);
-            add_expr_prop(mv_string("entry-point"), &entry_point.val, props);
-            add_expr_prop(mv_string("depends-on"), &dependencies.val, props);
+            add_expr_prop(mv_string("file"), &filename.expr, props);
+            add_expr_prop(mv_string("entry-point"), &entry_point.expr, props);
+            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, executable_checks, host_data, pool, point, region);
@@ -179,56 +190,62 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             /**
              * End parsing, set expressions
              */
-            set_expr_map_elt(fields, 0, path, pool);
-            set_expr_map_elt(fields, 1, dependencies, pool);
-            set_expr_map_elt(fields, 2, filename, pool);
-            set_expr_map_elt(fields, 3, entry_point, pool);
+            set_rexpr_map_elt(fields, 0, path, pool);
+            set_rexpr_map_elt(fields, 1, dependencies, pool);
+            set_rexpr_map_elt(fields, 2, filename, pool);
+            set_rexpr_map_elt(fields, 3, entry_point, pool);
         } else if (string_cmp(mv_string("target"), symbol_to_string(head, &ra)) == 0) {
             bool executable_checks[] = {false, false, false};
-            ExprRef ctor_ref = new_expr(pool);
-            ExprRef ttype_ref = new_expr(pool);
-            ExprSlice members = new_expr_slice(1, pool);
+            RExprRef ctor_ref = new_rexpr(pool);
+            RExprRef ttype_ref = new_rexpr(pool);
+            RExprSlice members = new_rexpr_slice(1, pool);
 
-            *out = (Expr) {
-                .type = EApp,
+            *out = (RExpr) {
+                .type = REApp,
                 .app = {
                     .fn = ctor_ref,
                     .args = members,
                 }
             };
 
-            Expr ctor = {
-                .type = ECtor,
+            RExpr ctor = {
+                .type = RECtor,
                 .ctor = {
                     .type = {.type = Some, .val = ttype_ref},
                     .name = string_to_name(mv_string("generic")),
                 },
             };
-            set_expr(ctor_ref, ctor, pool);
+            set_rexpr(ctor_ref, ctor, pool);
 
-            Expr ttype = {
-                .type = EVal,
+            RExpr ttype = {
+                .type = REVal,
                 .value = cb.target_type,
             };
-            set_expr(ttype_ref, ttype, pool);
+            set_rexpr(ttype_ref, ttype, pool);
 
-            NameExprMap fields = new_expr_map(4, pool);
-            Expr lib_record = {
-                .type = ERecord,
+            RExprMap fields = new_rexpr_map(4, pool);
+            RExprRef generic_type = new_rexpr(pool);
+            set_rexpr(generic_type, (RExpr){.type = REVar, .var = string_to_name(mv_string("Generic"))}, pool);
+            RExpr generic_record = {
+                .type = RERecord,
+                .record.type = {
+                    .type = Some,
+                    .val = generic_type,
+                },
                 .record.fields = fields,
             };
-            set_expr_elt(members, 0, lib_record, pool);
-            NameExprCell path = {
+            set_rexpr_elt(members, 0, generic_record, pool);
+            RExprCell path = {
                 .name = string_to_name(mv_string("path")), 
-                .val = path_expr,
+                .expr = path_expr,
             };
-            NameExprCell dependencies = {
+            RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
             };
-            NameExprCell provides = {
+            RExprCell provides = {
                 .name = string_to_name(mv_string("provides")), 
             };
-            NameExprCell run = {
+            RExprCell run = {
                 .name = string_to_name(mv_string("run")), 
             };
             // provides :: string list 
@@ -236,9 +253,9 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             // dependencies :: symbol list
 
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("depends-on"), &dependencies.val, props);
-            add_expr_array_prop(mv_string("provides"), &provides.val, props);
-            add_expr_prop(mv_string("run"), &run.val, props);
+            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
+            add_expr_array_prop(mv_string("provides"), &provides.expr, props);
+            add_expr_prop(mv_string("run"), &run.expr, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, executable_checks, host_data, pool, point, region);
@@ -249,10 +266,10 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
             /**
              * End parsing, set expressions
              */
-            set_expr_map_elt(fields, 0, path, pool);
-            set_expr_map_elt(fields, 1, dependencies, pool);
-            set_expr_map_elt(fields, 2, provides, pool);
-            set_expr_map_elt(fields, 3, run, pool);
+            set_rexpr_map_elt(fields, 0, path, pool);
+            set_rexpr_map_elt(fields, 1, dependencies, pool);
+            set_rexpr_map_elt(fields, 2, provides, pool);
+            set_rexpr_map_elt(fields, 3, run, pool);
         } else if (string_cmp(mv_string("file"), symbol_to_string(head, &ra)) == 0) {
             // Convert (file str) to 
             // (:file path str)
@@ -263,65 +280,68 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
                 };
                 throw_pi_error(point, err);
             }
-            ExprRef ctor = new_expr(pool);
-            ExprSlice args = new_expr_slice(1, pool);
-            *out = (Expr) {
-                .type = EApp,
+            RExprRef ctor = new_rexpr(pool);
+            RExprSlice args = new_rexpr_slice(1, pool);
+            *out = (RExpr) {
+                .type = REApp,
                 .app.fn = ctor,
                 .app.args = args,
             };
-            set_expr(ctor,
-                     (Expr){
-                         .type = ECtor,
+            set_rexpr(ctor,
+                     (RExpr){
+                         .type = RECtor,
                          .ctor.name = string_to_name(mv_string("file")),
                      },
                      pool);
-            NameExprMap fields = new_expr_map(2, pool);
-            Expr file_record = {
-                .type = ERecord,
+            RExprMap fields = new_rexpr_map(2, pool);
+            RExprRef file_type = new_rexpr(pool);
+            set_rexpr(file_type, (RExpr){.type = REVar, .var = string_to_name(mv_string("File"))}, pool);
+            RExpr file_record = {
+                .type = RERecord,
+                .record.type = {
+                    .type = Some,
+                    .val = file_type,
+                },
                 .record.fields = fields,
             };
-            set_expr_elt(args, 0, file_record, pool);
+            set_rexpr_elt(args, 0, file_record, pool);
 
-            ExprRef path_expr = new_expr(pool);
-            set_expr(path_expr, (Expr){.type = EString, .string = cb.path}, pool);
-
-            NameExprCell path = {
+            RExprCell path = {
                 .name = string_to_name(mv_string("path")), 
-                .val = path_expr,
+                .expr = path_expr,
             };
-            set_expr_map_elt(fields, 0, path, pool);
-            NameExprCell dependencies = {
+            set_rexpr_map_elt(fields, 0, path, pool);
+            RExprCell dependencies = {
                 .name = string_to_name(mv_string("name")), 
-                .val = abstract_rune_expr(raw.branch.nodes.data[1], host_data, pool, region, point),
             };
-            set_expr_map_elt(fields, 1, dependencies, pool);
+            abstract_rune_to(raw.branch.nodes.data[1], host_data, pool, region, point, &dependencies.expr);
+            set_rexpr_map_elt(fields, 1, dependencies, pool);
         } else if (string_cmp(mv_string("shell"), symbol_to_string(head, &ra)) == 0) {
             // Convert (shell str str str ...) to 
             // :shell (list str str str)
-            ExprRef ctor = new_expr(pool);
-            ExprSlice args = new_expr_slice(1, pool);
-            *out = (Expr) {
-                .type = EApp,
+            RExprRef ctor = new_rexpr(pool);
+            RExprSlice args = new_rexpr_slice(1, pool);
+            *out = (RExpr) {
+                .type = REApp,
                 .app.fn = ctor,
                 .app.args = args,
             };
-            set_expr(ctor,
-                     (Expr){
-                         .type = ECtor,
+            set_rexpr(ctor,
+                     (RExpr){
+                         .type = RECtor,
                          .ctor.name = string_to_name(mv_string("shell")),
                      },
                      pool);
-            ExprSlice slice = new_expr_slice(raw.branch.nodes.len - 1, pool);
+            RExprSlice slice = new_rexpr_slice(raw.branch.nodes.len - 1, pool);
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-                Expr expr;
+                RExpr expr;
                 abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &expr);
-                set_expr_elt(slice, i - 1, expr, pool);
+                set_rexpr_elt(slice, i - 1, expr, pool);
             }
 
-            set_expr_elt(args,
+            set_rexpr_elt(args,
                          0,
-                         (Expr){.type = EList, .list = slice},
+                         (RExpr){.type = REList, .list = slice},
                          pool);
 
         } else {
@@ -346,13 +366,13 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, ExprPool* pool, Reg
     panic(mv_string("Invalid raw stanza received from parsing stage."));
 }
 
-Def abstract_atlas_def(RawTree raw, AtAbsCallbackData cb_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
-    Name raw_names[] = {
-        string_to_name(mv_string("library")),
-        string_to_name(mv_string("executable")),
-        string_to_name(mv_string("target")),
-        string_to_name(mv_string("file")),
-        string_to_name(mv_string("shell")),
+RDef abstract_atlas_def(RawTree raw, AtAbsCallbackData cb_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+  Name raw_names[] = {
+      string_to_name(mv_string("library")),
+      string_to_name(mv_string("executable")),
+      string_to_name(mv_string("target")), string_to_name(mv_string("file")),
+      string_to_name(mv_string("shell")),
+      string_to_name(mv_string("do")),
     }; 
     NameArray names = {
         .data = raw_names,
@@ -377,7 +397,7 @@ bool is_require(RawTree raw) {
     return eq_symbol(&head, string_to_symbol(mv_string("require")));
 }
 
-Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
     if (is_require(raw)) { 
         Allocator ra = ra_to_gpa(region);
         StringArray out = mk_string_array(raw.branch.nodes.len - 1, &ra);

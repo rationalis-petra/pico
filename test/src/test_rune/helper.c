@@ -3,6 +3,7 @@
 
 #include "platform/memory/region.h"
 #include "platform/error.h"
+#include "platform/signals.h"
 
 #include "data/stream.h"
 
@@ -12,6 +13,7 @@
 #include "pico/parse/parse.h"
 
 #include "rune/analysis/abstraction.h"
+#include "rune/analysis/elaboration.h"
 #include "rune/eval/eval.h"
 
 #include "test/test_log.h"
@@ -32,6 +34,57 @@ static void report_rune_mismatch(TestLog* log, ValRef actual, ValRef expected, R
     push_ptr(pretty_rune_value(actual, env, a), &nodes);
     write_doc_formatted(mv_sep_doc(nodes, a), 120, os);
     test_fail(log);
+}
+
+void test_rune_add_def(const char *string, TestContext context) {
+    if (context.env == NULL) {
+        test_log_error(context.log, mv_string("Cannot add a Rune definition without a test environment."));
+        return;
+    }
+
+    RegionAllocator* subregion = make_subregion(context.region);
+    Allocator ra = ra_to_gpa(subregion);
+    PiAllocator pia = convert_to_pallocator(&ra);
+    IStream* sin = mk_string_istream(mv_string(string), &ra);
+    IStream* volatile cin = mk_capturing_istream(sin, &ra);
+
+    PiErrorPoint point;
+    if (catch_error(point)) {
+        test_log_error(context.log, mv_string("Rune error while adding test definition."));
+        display_error(point.multi, *get_captured_buffer(cin), get_fstream(context.log), mv_string("test-suite"), &ra);
+        delete_istream(cin, &ra);
+        release_subregion(subregion);
+        return;
+    }
+
+    ParseResult parse_res = parse_rune_rawtree(cin, &pia, &ra);
+    if (parse_res.type == ParseNone) {
+        test_log_error(context.log, mv_string("Rune definition parse returned none."));
+        delete_istream(cin, &ra);
+        release_subregion(subregion);
+        return;
+    }
+    if (parse_res.type == ParseFail) {
+        MultiError multi = (MultiError) { .has_many = false, .error = parse_res.error };
+        display_error(multi, *get_captured_buffer(cin), get_fstream(context.log), mv_string("rune-test"), &ra);
+        delete_istream(cin, &ra);
+        release_subregion(subregion);
+        return;
+    }
+
+    Pools pools = get_pools(context.env);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
+    HostCallbackData host_data = {0};
+    RDef rdef = abstract_rune_def(parse_res.result, host_data, rpool, subregion, &point);
+    Def def = elaborate_rune_def(rdef, rpool, pools.expr, subregion, &point);
+    RuneEvalResult result = rune_add_def(def.name, def.expr, context.env, subregion);
+    if (result.type == AError) {
+        String msg = doc_to_str(result.error_message, 120, &ra);
+        test_log_error(context.log, msg);
+    }
+
+    delete_istream(cin, &ra);
+    release_subregion(subregion);
 }
 
 void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext context) {
@@ -71,7 +124,9 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
     RuneEnv* env = context.env ? context.env : mk_rune_env(&ra);
     Pools pools = get_pools(env);
     HostCallbackData host_data = {0};
-    ExprRef expr = abstract_rune_expr(parse_res.result, host_data, pools.expr, subregion, &point);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
+    RExprRef rexpr = abstract_rune_expr(parse_res.result, host_data, rpool, subregion, &point);
+    ExprRef expr = elaborate_rune_expr(rexpr, rpool, pools.expr, subregion, &point);
     RuneEvalResult result = eval_rune(expr, env, subregion);
 
     if (result.type == AError) {
@@ -84,7 +139,7 @@ void test_rune_toplevel_eq(const char *string, ValRef expected, TestContext cont
         return;
     }
 
-    if (!rune_value_eql(result.value, expected, pools.value, &ra)) {
+    if (!rune_value_eql(result.value, expected, env, &ra)) {
         report_rune_mismatch(context.log, result.value, expected, env, &ra);
         delete_istream(cin, &ra);
         if (context.env == NULL) {
@@ -137,7 +192,9 @@ void assert_rune_toplevel_eq(const char *string, ValRef expected, TestContext co
     RuneEnv* env = mk_rune_env(&ra);
     Pools pools = get_pools(env);
     HostCallbackData host_data = {0};
-    ExprRef expr = abstract_rune_expr(parse_res.result, host_data, pools.expr, subregion, &point);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
+    RExprRef rexpr = abstract_rune_expr(parse_res.result, host_data, rpool, subregion, &point);
+    ExprRef expr = elaborate_rune_expr(rexpr, rpool, pools.expr, subregion, &point);
     RuneEvalResult result = eval_rune(expr, env, subregion);
 
     if (result.type == AError) {
@@ -148,7 +205,7 @@ void assert_rune_toplevel_eq(const char *string, ValRef expected, TestContext co
         return;
     }
 
-    if (!rune_value_eql(result.value, expected, pools.value, &ra)) {
+    if (!rune_value_eql(result.value, expected, env, &ra)) {
         report_rune_mismatch(context.log, result.value, expected, env, &ra);
         delete_istream(sin, &ra);
         delete_rune_env(env);
@@ -178,6 +235,9 @@ static bool val_eq(Bridge bridge, void* data, void* expected) {
         return (*(ValRef*)data).ref == (*(ValRef*)expected).ref;
     case BPtrWrap:
         return val_eq(*bridge.wrapped, *(void**)data, *(void**)expected);
+    case BFn: {
+        panic(mv_string("TODO: val_eq for function bridge!"));
+    }
     case BData: {
         // Check tags for equality
         if ((*(uint64_t*)data) != (*(uint64_t*)expected)) return false;
@@ -219,6 +279,9 @@ static bool val_eq(Bridge bridge, void* data, void* expected) {
         }
         return true;
     }
+    case BCustom: {
+        panic(mv_string("TODO: val_eq for custom bridge!"));
+    }
     }
     return false;
 }
@@ -259,8 +322,10 @@ void test_rune_bridge(const char *string, Bridge bridge, void* expected, size_t 
 
     RuneEnv* env = context.env ? context.env : mk_rune_env(&ra);
     Pools pools = get_pools(env);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
     HostCallbackData host_data = {0};
-    ExprRef expr = abstract_rune_expr(parse_res.result, host_data, pools.expr, subregion, &point);
+    RExprRef rexpr = abstract_rune_expr(parse_res.result, host_data, rpool, subregion, &point);
+    ExprRef expr = elaborate_rune_expr(rexpr, rpool, pools.expr, subregion, &point);
     RuneEvalResult result = eval_rune(expr, env, subregion);
 
     if (result.type == AError) {

@@ -54,4 +54,9 @@ RuneEvalResult get_value(Name name, RuneEnv* env, RegionAllocator* region);
  */
 Document* pretty_rune_value(ValRef ref, RuneEnv* env, Allocator* a);
 
+/** 
+ * Value Equality Functions (used for testing)
+ */
+bool rune_value_eql(ValRef actual, ValRef expected, RuneEnv* env, Allocator* a);
+
 #endif

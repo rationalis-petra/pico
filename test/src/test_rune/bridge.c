@@ -30,9 +30,13 @@ typedef struct ListCell {
 void run_rune_bridge_tests(TestLog* log, RuneEnv* env, RegionAllocator* region) {
     TestContext context = {
         .log = log,
-        .env = NULL,
+        .env = env,
         .region = region,
     };
+
+    if (suite_setup(log)) {
+        ADD_DEF("(def Pair Record [.x Int] [.y Int])");
+    }
 
     if (test_start(log, mv_string("int-bridge"))) {
         int64_t expected = 9871;
@@ -114,7 +118,7 @@ void run_rune_bridge_tests(TestLog* log, RuneEnv* env, RegionAllocator* region) 
                 .types = cells,
             }
         };
-        TEST_BRIDGE("(record [.x -12987] [.y 98213])");
+        TEST_BRIDGE("(record Pair [.x -12987] [.y 98213])");
     }
 
     if (test_start(log, mv_string("ptr-wrap-list"))) {

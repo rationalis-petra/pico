@@ -40,7 +40,7 @@ typedef struct {
 
 typedef struct {
     RuneClosureEnv env;
-    ExprRef expr;
+    Expr expr;
     size_t num_curried;
     ValRef* curried;
 } RuneClosure;
@@ -67,7 +67,30 @@ typedef struct {
  */
 
 typedef struct {
-    // TODO: support QIITs
+    bool named;
+    Name name;
+    ValRef value;
+} TelCell;
+
+typedef struct {
+    ValRef end;
+    TelCell cells[];
+} Tel;
+
+typedef struct {
+    Name name;
+    ValRef out;
+    uint64_t len;
+    Tel telescope;
+} AlgOpDescriptor;
+
+typedef struct {
+    ValRef universe;
+    Name self;
+    bool is_record;
+    NameSlice names;
+    uint64_t len;
+    AlgOpDescriptor ops[];
 } RuneDataType;
 
 /**
@@ -84,9 +107,6 @@ typedef struct {
 } RuneData;
 
 typedef struct {
-} RuneCoData;
-
-typedef struct {
     Name name; 
     ValRefOption type;
     uint64_t len;
@@ -95,9 +115,9 @@ typedef struct {
 
 typedef struct {
     ValRefOption type;
-    uint64_t len;
-    NameValPr values[];
-} RuneRecord;
+    RuneClosureEnv env;
+    PatternMap fields;
+} RuneCoCase;
 
 // Express as composite data?
 typedef struct {
@@ -118,18 +138,19 @@ typedef struct {
  */
 
 typedef enum {
+  // Russel (?) Universes
+  // How does universe polymorphism work?
+  ValUniverse,
+
   // User-defined data
   ValClosure,
   ValData,
-  ValCoData,
-  ValRecord,
-  ValCoRecord,
+  ValCoCase,
 
   // User-Defined Types
   ValFnType,
+
   ValDataType,
-  ValCoDataType,
-  ValRecordType,
   ValCoRecordType,
 
   // Host values (C FFI).
@@ -151,16 +172,16 @@ void delete_value_heap(ValueHeap* heap);
 ValueSort get_sort(ValRef ref);
 
 // Function (& Thunk)
-ValRef mk_rune_closure(RuneClosureEnv environment, ExprRef ref, ValueHeap* heap);
-ValRef mk_rune_curried_closure(RuneClosureEnv environment, ExprRef ref, size_t num_args, ValueHeap* heap);
+ValRef mk_rune_closure(RuneClosureEnv environment, Expr expr, ValueHeap* heap);
+ValRef mk_rune_curried_closure(RuneClosureEnv environment, Expr expr, size_t num_args, ValueHeap* heap);
 RuneClosure get_rune_closure(ValRef val);
 
 // QIIT (Data) 
 ValRef mk_rune_data(Name tag, ValRefOption src_type, size_t capacity, ValueHeap* heap);
 RuneData* get_rune_data(ValRef ref);
 
-ValRef mk_rune_record(ValRefOption src_type, size_t capacity, ValueHeap* heap);
-RuneRecord* get_rune_record(ValRef ref);
+ValRef mk_rune_cocase(ValRefOption src_type, RuneClosureEnv env, PatternMap fields, ValueHeap* heap);
+RuneCoCase* get_rune_cocase(ValRef ref);
 
 // Get/set elements of a list. (set should only be used during construction)
 ValRef mk_rune_list(size_t num_elements, ValueHeap* heap); 
@@ -173,6 +194,16 @@ String get_rune_string(ValRef ref);
 // Create Integers
 ValRef mk_rune_int(int64_t val, ValueHeap* heap); 
 int64_t get_rune_int(ValRef ref);
+
+/**
+ * Types
+ */
+
+ValRef mk_rune_data_type(ValRef universe, Name self, bool is_record, uint64_t num_names, uint64_t num_ops, ValueHeap* heap);
+RuneDataType* get_rune_data_type(ValRef ref);
+
+ValRef mk_rune_universe(uint64_t level, ValueHeap* heap); 
+uint64_t get_rune_universe(ValRef ref);
 
 /**
  * Host values
@@ -259,10 +290,5 @@ ValRef mk_host_val(Bridge bridge, void* data, ValueHeap* heap);
 Bridge get_host_bridge(ValRef ref);
 void get_host_val(ValRef ref, void* data);
 bool get_as_host_val(ValRef ref, Bridge template, void* data, Allocator* a);
-
-/* 
- * Value Helper Functions
- */
-bool rune_value_eql(ValRef actual, ValRef expected, ValueHeap* heap, Allocator* a);
 
 #endif

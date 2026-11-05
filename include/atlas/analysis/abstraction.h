@@ -7,7 +7,7 @@
 #include "pico/data/string_array.h"
 #include "pico/syntax/concrete.h"
 #include "atlas/syntax/project.h"
-#include "rune/syntax/expression.h"
+#include "rune/syntax/rich_expr.h"
 
 typedef enum : uint64_t {
     Left, Right
@@ -27,12 +27,12 @@ typedef enum {TLDef, TLRequire} ToplevelType;
 typedef struct {
     ToplevelType type;
     union {
-        Def def;
+        RDef def;
         StringArray requires;
     };
 } Toplevel;
 
-Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
+Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
 
 void abstract_atlas_project(Project* project, ProjectRecord* record, RawTree raw, RegionAllocator* region, PiErrorPoint* point);
 

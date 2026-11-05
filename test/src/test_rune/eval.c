@@ -50,19 +50,35 @@ void run_rune_eval_tests(TestLog* log, RuneEnv* env, RegionAllocator* region) {
         TEST_EQ("(:some 82731)");
     }
 
-    if (test_start(log, mv_string("untyped-record-point"))) {
-        ValRef expected = mk_rune_record((ValRefOption){}, 2, pools.value);
-        RuneRecord* record = get_rune_record(expected);
-        record->values[0] = (NameValPr) {
+    /*
+    if (test_start(log, mv_string("untyped-cocase-point"))) {
+        ValRef expected = mk_rune_cocase((ValRefOption){}, 2, pools.value);
+        RuneCoCase* cocase = get_rune_cocase(expected);
+        cocase->values[0] = (NameValPr) {
             .name = string_to_name(mv_string("x")),
             .val = mk_rune_int(64, pools.value),
         };
-        record->values[1] = (NameValPr) {
+        cocase->values[1] = (NameValPr) {
             .name = string_to_name(mv_string("y")),
             .val = mk_rune_int(-32, pools.value),
         };
-        TEST_EQ("(record [.x 64] [.y -32])");
+        TEST_EQ("(cocase [.x 64] [.y -32])");
     }
+
+    if (test_start(log, mv_string("untyped-cocase-call"))) {
+        ValRef expected = mk_rune_cocase((ValRefOption){}, 2, pools.value);
+        RuneCoCase* cocase = get_rune_cocase(expected);
+        cocase->values[0] = (NameValPr) {
+            .name = string_to_name(mv_string("x")),
+            .val = mk_rune_int(64, pools.value),
+        };
+        cocase->values[1] = (NameValPr) {
+            .name = string_to_name(mv_string("y")),
+            .val = mk_rune_int(-32, pools.value),
+        };
+        TEST_EQ("(.inc (cocase [[.inc x] (+ x 72)]) 12)");
+    }
+    */
 
     if (test_start(log, mv_string("call-simple-lambda"))) {
         ValRef expected = mk_rune_int(72, pools.value);

@@ -5,15 +5,19 @@
 #include "rune/analysis/abstraction_errors.h"
 
 // Functional Core
-static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
-static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
-static void mk_record_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
-static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+static void mk_fn_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
+static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
+static void mk_cocase_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
+static void mk_record_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
+static void mk_app_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
+
+// Type Constructors
+static void mk_record_ty_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
 
 // Literals
-static void mk_list_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out);
+static void mk_list_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out);
 
-Def abstract_rune_def(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+RDef abstract_rune_def(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     if (raw.type != RawBranch || raw.branch.nodes.len < 3) {
@@ -45,14 +49,14 @@ Def abstract_rune_def(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
     RawTree expr = raw.branch.nodes.len == 3
         ? raw.branch.nodes.data[2]
         : raw_slice(&raw, 2);
-    ExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
-    return (Def) {
+    RExprRef ref = abstract_rune_expr(expr, host_data, pool, region, point);
+    return (RDef) {
         .name = name.atom.symbol.name,
         .expr = ref 
     };
 }
 
-void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+void abstract_rune_to(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     switch (raw.type) {
@@ -69,10 +73,19 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
             mk_fn_expr(raw, host_data, pool, region, point, out);
         } else if (eq_symbol(&head, string_to_symbol(mv_string(":")))) {
             mk_ctor_expr(raw, host_data, pool, region, point, out);
+        // } else if (eq_symbol(&head, string_to_symbol(mv_string(";")))) {
+        //     mk_coctor_expr(raw, host_data, pool, region, point, out);
+        } else if (eq_symbol(&head, string_to_symbol(mv_string("corecord")))) {
+            mk_cocase_expr(raw, host_data, pool, region, point, out);
         } else if (eq_symbol(&head, string_to_symbol(mv_string("record")))) {
             mk_record_expr(raw, host_data, pool, region, point, out);
         } else if (eq_symbol(&head, string_to_symbol(mv_string("list")))) {
             mk_list_expr(raw, host_data, pool, region, point, out);
+
+        // Types
+        // TODO: Data, Codata, Corecord
+        } else if (eq_symbol(&head, string_to_symbol(mv_string("Record")))) {
+            mk_record_ty_expr(raw, host_data, pool, region, point, out);
         } else {
             if (is_symbol(head)) {
                 for (size_t i = 0; i < host_data.names.len; i++) {
@@ -99,8 +112,8 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
             break;
         }
         case AIntegral: {
-            *out = (Expr) {
-                .type = EInt,
+            *out = (RExpr) {
+                .type = REInt,
                 .num = raw.atom.int_64,
             };
             return;
@@ -114,15 +127,15 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
             break;
         }
         case ASymbol: {
-            *out = (Expr) {
-                .type = EVar,
+            *out = (RExpr) {
+                .type = REVar,
                 .var = raw.atom.symbol.name,
             };
             return;
         }
         case AString: {
-            *out = (Expr) {
-                .type = EString,
+            *out = (RExpr) {
+                .type = REString,
                 .string = raw.atom.string,
             };
             return;
@@ -137,16 +150,16 @@ void abstract_rune_to(RawTree raw, HostCallbackData host_data, ExprPool* pool, R
     panic(mv_string("Invalid raw syntax provided to rune."));
 }
 
-ExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
-    ExprRef ref = new_expr(pool);
-    Expr expr;
+RExprRef abstract_rune_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+    RExprRef ref = new_rexpr(pool);
+    RExpr expr;
     abstract_rune_to(raw, host_data, pool, region, point, &expr);
-    set_expr(ref, expr, pool);
+    set_rexpr(ref, expr, pool);
     return ref;
 }
 
 
-static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+static void mk_fn_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     if (raw.branch.nodes.len < 3) {
@@ -168,15 +181,15 @@ static void mk_fn_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, 
         };
         throw_pi_error(point, err);
     }
-    ExprRef body = abstract_rune_expr(raw_body, host_data, pool, region, point);
-    *out = (Expr) {
-        .type = EFn,
+    RExprRef body = abstract_rune_expr(raw_body, host_data, pool, region, point);
+    *out = (RExpr) {
+        .type = REFn,
         .fn.args = arr,
         .fn.body = body,
     };
 }
 
-static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
     Allocator ra = ra_to_gpa(region);
     Allocator* a = &ra;
     if (raw.branch.nodes.len > 3 || raw.branch.nodes.len < 2) {
@@ -194,35 +207,35 @@ static void mk_ctor_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool
         };
         throw_pi_error(point, err);
     }
-    ExprOption body = {.type = None};
+    RExprOption body = {.type = None};
     if (raw.branch.nodes.len == 3) {
-      body = (ExprOption) {
+      body = (RExprOption) {
           .type = Some,
           .val = abstract_rune_expr(raw.branch.nodes.data[2], host_data, pool, region, point),
       };
     }
-    *out = (Expr) {
-        .type = ECtor,
+    *out = (RExpr) {
+        .type = RECtor,
         .ctor.name = name.name,
         .ctor.type = body,
     };
 }
 
-static void mk_record_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
-    ExprOption body = {.type = None};
+static void mk_cocase_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
+    RExprOption body = {.type = None};
     size_t pad = 1;
     if (raw.branch.nodes.len > 1) {
         RawTree maybe_type = raw.branch.nodes.data[1];
         if (maybe_type.type != RawBranch || maybe_type.branch.hint == HExpression) {
             pad++;
-            body = (ExprOption) {
+            body = (RExprOption) {
                 .type = Some,
                 .val = abstract_rune_expr(maybe_type, host_data, pool, region, point),
             };
         }
     }
 
-    NameExprMap fields = new_expr_map(raw.branch.nodes.len - pad, pool);
+    RPatternMap fields = new_rpat_map(raw.branch.nodes.len - pad, pool);
     for (size_t i = 0; i < fields.len; i++) {
         RawTree fdesc = raw.branch.nodes.data[i + pad];
         if (fdesc.type != RawBranch) {
@@ -239,46 +252,138 @@ static void mk_record_expr(RawTree raw, HostCallbackData host_data, ExprPool* po
         }
 
         RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1); 
-        ExprRef fexpr = abstract_rune_expr(val_desc, host_data, pool, region, point);
-        NameExprCell cell = {
+        RExprRef fexpr = abstract_rune_expr(val_desc, host_data, pool, region, point);
+        RPatternCell cell = {
             .name = field.name,
-            .val = fexpr,
+            .pattern.body = fexpr,
         };
-        set_expr_map_elt(fields, i, cell, pool);
+        set_rpat_map_elt(fields, i, cell, pool);
     }
-    *out = (Expr) {
-        .type = ERecord,
+    *out = (RExpr) {
+        .type = RECoRecord,
+        .corecord.type = body,
+        .corecord.fields = fields,
+    };
+}
+
+static void mk_record_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
+    RExprOption body = {.type = None};
+    size_t pad = 1;
+    if (raw.branch.nodes.len > 1) {
+        RawTree maybe_type = raw.branch.nodes.data[1];
+        if (maybe_type.type != RawBranch || maybe_type.branch.hint == HExpression) {
+            pad++;
+            body = (RExprOption) {
+                .type = Some,
+                .val = abstract_rune_expr(maybe_type, host_data, pool, region, point),
+            };
+        }
+    }
+
+    RExprMap fields = new_rexpr_map(raw.branch.nodes.len - pad, pool);
+    for (size_t i = 0; i < fields.len; i++) {
+        RawTree fdesc = raw.branch.nodes.data[i + pad];
+        if (fdesc.type != RawBranch) {
+            record_bad_fdesc_type(fdesc, point, region);
+        }
+
+        if (fdesc.branch.nodes.len < 2) {
+            record_bad_fdesc_len(fdesc, point, region);
+        }
+
+        Symbol field;
+        if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
+            record_bad_fdesc_fieldname(fdesc, point, region);
+        }
+
+        RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1);
+        RExpr fexpr;
+        abstract_rune_to(val_desc, host_data, pool, region, point, &fexpr);
+        RExprCell cell = {
+            .name = field.name,
+            .expr = fexpr,
+        };
+        set_rexpr_map_elt(fields, i, cell, pool);
+    }
+    *out = (RExpr) {
+        .type = RERecord,
         .record.type = body,
         .record.fields = fields,
     };
 }
 
-static void mk_app_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
+static void mk_app_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
     RawTree head = raw.branch.nodes.data[0];
-    ExprRef fn = abstract_rune_expr(head, host_data, pool, region, point);
+    RExprRef fn = abstract_rune_expr(head, host_data, pool, region, point);
 
-    ExprSlice args = new_expr_slice(raw.branch.nodes.len - 1, pool);
+    RExprSlice args = new_rexpr_slice(raw.branch.nodes.len - 1, pool);
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-        Expr out;
+        RExpr out;
         abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
-        set_expr_elt(args, i - 1, out, pool);
+        set_rexpr_elt(args, i - 1, out, pool);
     }
-    *out = (Expr) {
-        .type = EApp,
+    *out = (RExpr) {
+        .type = REApp,
         .app.fn = fn,
         .app.args = args,
     };
 }
 
-static void mk_list_expr(RawTree raw, HostCallbackData host_data, ExprPool* pool, RegionAllocator* region, PiErrorPoint* point, Expr* out) {
-    ExprSlice args = new_expr_slice(raw.branch.nodes.len - 1, pool);
+static void mk_list_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
+    RExprSlice args = new_rexpr_slice(raw.branch.nodes.len - 1, pool);
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-        Expr out;
+        RExpr out;
         abstract_rune_to(raw.branch.nodes.data[i], host_data, pool, region, point, &out);
-        set_expr_elt(args, i - 1, out, pool);
+        set_rexpr_elt(args, i - 1, out, pool);
     }
-    *out = (Expr) {
-        .type = EList,
+    *out = (RExpr) {
+        .type = REList,
         .list = args,
+    };
+}
+
+static void mk_record_ty_expr(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point, RExpr* out) {
+    RExprOption body = {.type = None};
+    size_t pad = 1;
+    if (raw.branch.nodes.len > 1) {
+        RawTree maybe_type = raw.branch.nodes.data[1];
+        if (maybe_type.type != RawBranch || maybe_type.branch.hint == HExpression) {
+            pad++;
+            body = (RExprOption) {
+                .type = Some,
+                .val = abstract_rune_expr(maybe_type, host_data, pool, region, point),
+            };
+        }
+    }
+
+    RExprMap fields = new_rexpr_map(raw.branch.nodes.len - pad, pool);
+    for (size_t i = 0; i < fields.len; i++) {
+        RawTree fdesc = raw.branch.nodes.data[i + pad];
+        if (fdesc.type != RawBranch) {
+            record_bad_fdesc_type(fdesc, point, region);
+        }
+
+        if (fdesc.branch.nodes.len < 2) {
+            record_bad_fdesc_len(fdesc, point, region);
+        }
+
+        Symbol field;
+        if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
+            record_bad_fdesc_fieldname(fdesc, point, region);
+        }
+
+        RawTree val_desc = fdesc.branch.nodes.len == 2 ? fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1);
+        RExpr fexpr;
+        abstract_rune_to(val_desc, host_data, pool, region, point, &fexpr);
+        RExprCell cell = {
+            .name = field.name,
+            .expr = fexpr,
+        };
+        set_rexpr_map_elt(fields, i, cell, pool);
+    }
+    *out = (RExpr) {
+        .type = RERecordType,
+        .record_ty.type = body,
+        .record_ty.fields = fields,
     };
 }
