@@ -15,11 +15,17 @@ struct PlWindow {};
 
 Display* get_x11_display();
 
+typedef struct {
+    bool claimed_by_hedron;
+    bool claimed_by_cpu;
+} WindowRenderData;
+
 struct PlWindow {
     Window x11_window;
-
     uint32_t width;
     uint32_t height;
+
+    WindowRenderData render;
 
     // Internal state (used by us!)
     bool should_close;
@@ -70,6 +76,11 @@ struct PlWindow {
 
 #include <windows.h>
 
+typedef struct {
+    bool claimed_by_hedron;
+    bool claimed_by_cpu;
+} WindowRenderData;
+
 struct PlWindow {
     HWND impl;
     bool should_close;
@@ -77,6 +88,8 @@ struct PlWindow {
 
     uint32_t width;
     uint32_t height;
+
+    WindowRenderData render;
 };
 
 #else

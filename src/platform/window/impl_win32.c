@@ -3,6 +3,7 @@
 #ifdef WINDOW_SYSTEM
 #if (OS_FAMILY == WINDOWS)
 
+#include "platform/signals.h"
 #include "platform/window/window.h"
 #include "platform/window/winkey_translate.h"
 #include "platform/window/internal.h"
@@ -74,7 +75,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     case WM_KEYDOWN:
     case WM_KEYUP: {
-        RawKey key = keycode_to_rawkey(wParam);
+        RawKey key = keycode_to_rawkey(wParam, lParam);
         WinMessage message = (WinMessage){
             .type = KeyEvent,
             .key_event.key_id = key,
@@ -151,6 +152,14 @@ WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
     return (WinMessageSlice){.data = out.data, .len = out.len};
 }
 
+FrameBufferOption acquire_framebuffer(PlWindow* window) {
+    panic(mv_string("TODO: implement framebuffer acquisition on windows"));
+}
+
+void present_framebuffer(FrameBuffer frame, PlWindow* window) {
+    panic(mv_string("TODO: implement framebuffer presentation on windows"));
+}
+
 // Key handling: 
 struct KeyboardState {
     uint8_t keys[256];
@@ -169,8 +178,7 @@ void destroy_keyboard_state(KeyboardState* state) {
 }
 
 void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState *state) {
-    WPARAM keycode = rawkey_to_keycode(raw);
-    state->keys[keycode] = is_pressed << 7;
+    state->keys[raw] = is_pressed << 7;
 }
 void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState *state) {
     // TODO: implement me!

@@ -138,7 +138,7 @@ Result_t kill_process(Process process) {
 #elif OS_FAMILY == WINDOWS
 #include <windows.h>
 
-ProcessResult create_process(String command, StringArray args) {
+ProcessResult create_process(String command, StringSlice args) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
     Allocator* a = get_std_allocator();
@@ -181,7 +181,56 @@ ProcessResult create_process(String command, StringArray args) {
     // Close thread handle
     CloseHandle( pi.hThread );
 
-    return (ProcessResult) {.result = Ok, .process = {.handle = pi.hProcess}};
+    return (ProcessResult) {.type = Ok, .process = {.handle = pi.hProcess}};
+}
+
+ProcessResult create_process_in(String command, StringSlice args, String directory) {
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    Allocator* a = get_std_allocator();
+    size_t total_memsize = command.memsize + 1;
+    for (size_t i = 0; i < args.len; i++) {
+        total_memsize += args.data[i].memsize + 1;
+    }
+    char* c_command = mem_alloc(total_memsize, a);
+    char* c_directory = to_c_string(directory, a);
+    memcpy(c_command, command.bytes, command.memsize);
+    c_command[command.memsize] = ' ';
+    size_t offset = command.memsize + 1;
+    // TODO (BUG): do proper sanitization of inputs (adding quotes to arugments etc.)
+    for (size_t i = 0; i < args.len; i++) {
+        memcpy(c_command + offset, args.data[i].bytes, args.data[i].memsize);
+        c_command[offset + args.data[i].memsize] = ' ';
+        offset += args.data[i].memsize + 1;
+    }
+    c_command[offset - 1] = '\0';
+
+    ZeroMemory( &si, sizeof(si) );
+    si.cb = sizeof(si);
+    ZeroMemory( &pi, sizeof(pi) );
+
+    // Start the child process. 
+    if( !CreateProcess( NULL,   // No module name (use command line)
+        c_command,      // Command line
+        NULL,           // Process handle not inheritable
+        NULL,           // Thread handle not inheritable
+        FALSE,          // Set handle inheritance to FALSE
+        0,              // No creation flags
+        NULL,           // Use parent's environment block
+        c_directory,    // Use the caller-provided working directory
+        &si,            // Pointer to STARTUPINFO structure
+        &pi )           // Pointer to PROCESS_INFORMATION structure
+    ) 
+    {
+        mem_free(c_directory, a);
+        panic(mv_string("TODO: add proper error checks to process creation on windows"));
+    }
+
+    // Close thread handle
+    CloseHandle( pi.hThread );
+    mem_free(c_directory, a);
+
+    return (ProcessResult) {.type = Ok, .process = {.handle = pi.hProcess}};
 }
 
 WaitResult wait_on_process(Process process) {
@@ -189,9 +238,9 @@ WaitResult wait_on_process(Process process) {
     CloseHandle( process.handle ); // TODO: where to insert handle closing?? make a part of the API?
     DWORD exit_code;
     if (GetExitCodeProcess(process.handle, &exit_code)) {
-        return (WaitResult) {.result = Err, .status = 0};
+        return (WaitResult) {.type = Err, .status = 0};
     } else {
-        return (WaitResult) {.result = Ok, .status = exit_code};
+        return (WaitResult) {.type = Ok, .status = exit_code};
     }
 
 }
