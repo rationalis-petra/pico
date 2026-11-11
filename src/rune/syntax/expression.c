@@ -301,7 +301,16 @@ void free_vars_internal(Expr expr, ExprPool* pool, NameArray* locals, NameArray*
         break;
     }
     case ECase:
-        panic(mv_string("TODO: implement free_vars for match"));
+        free_vars_internal(get_expr(expr.ecase.val, pool), pool, locals, out);
+        for (size_t i = 0; i < expr.ecase.fields.len; i++) {
+            PatternCell cell = get_expr_ptn_map_elt(expr.ecase.fields, i, pool);
+            for (size_t i = 0; i < cell.pattern.args.len; i++) {
+                push_name(cell.pattern.args.data[i], locals);
+            }
+            free_vars_internal(get_expr(cell.pattern.body, pool), pool, locals, out);
+            locals->len -= cell.pattern.args.len;
+        }
+        break;
     case ECoCase: {
         for (size_t i = 0; i < expr.cocase.fields.len; i++) {
             PatternCell cell = get_expr_ptn_map_elt(expr.cocase.fields, i, pool);

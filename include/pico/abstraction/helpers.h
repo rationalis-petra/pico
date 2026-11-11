@@ -7,7 +7,6 @@
 
 Symbol get_symbol_err(RawTree raw, PiErrorPoint* point, Allocator* a);
 
-
 // Helper functions for implementing macros (also used in the standard library)
 bool eq_symbol(RawTree* raw, Symbol s);
 bool is_symbol(RawTree raw);

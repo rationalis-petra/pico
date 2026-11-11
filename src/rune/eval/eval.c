@@ -30,7 +30,6 @@ typedef struct {
 
 typedef struct {
     RuneEnv* env;
-    String filename;
     NameValAssoc* locals;
     RegionAllocator* region;
     size_t depth;
@@ -318,8 +317,40 @@ RuneEvalResult eval_rune_internal(Expr expr, RuneEvalCtx ctx) {
         .value = out,
       };
     };
-    case ECase:
-        panic(mv_string("TODO: implement eval-match"));
+    case ECase: {
+        RuneEvalResult result = eval_rune_internal(get_expr(expr.ecase.val, pool), ctx);
+        if (result.type != AValue) return result;
+        ValueSort sort = get_sort(result.value);
+        if (sort != ValData) {
+          return (RuneEvalResult) {
+            .type = AError,
+            .error_message = mv_cstr_doc("case on non-data value.", &a),
+          };
+        }
+        RuneData* scrutinee = get_rune_data(result.value);
+        for (size_t i = 0; i < expr.ecase.fields.len; i++) {
+            PatternCell cell = get_expr_ptn_map_elt(expr.ecase.fields, i, pool);
+            if (cell.name == scrutinee->name) {
+                if (cell.pattern.args.len != scrutinee->len) {
+                    return (RuneEvalResult) {
+                        .type = AError,
+                        .error_message = mv_cstr_doc("case failed to match value: scrutinee and pattern disagree on number of values.", &a),
+                    };
+                }
+
+                for (size_t j = 0; j < scrutinee->len; j++) {
+                    name_val_bind(cell.pattern.args.data[j], scrutinee->values[j], ctx.locals);
+                }
+                RuneEvalResult res = eval_rune_internal(get_expr(cell.pattern.body, pool), ctx);
+                ctx.locals->len -= scrutinee->len;
+                return res;
+            }
+        }
+        return (RuneEvalResult) {
+            .type = AError,
+            .error_message = mv_cstr_doc("case failed to match value.", &a),
+        };
+    }
     case ECoCase: {
         ValRefOption type = {.type = None};
         if (expr.cocase.type.type == Some) {
@@ -469,13 +500,69 @@ RuneEvalResult eval_rune(ExprRef expression, RuneEnv* env, RegionAllocator* regi
     Allocator a = ra_to_gpa(region);
     RuneEvalCtx ctx = {
         .locals = region_alloc(sizeof(NameValAssoc), region),
-        //.filename = val.closure.env.file_path,
         .env = env,
         .region = region,
         .depth = 0,
     };
     *ctx.locals = mk_name_val_assoc(2, &a);
     return eval_rune_internal(get_expr(expression, get_pools(env).expr), ctx);
+}
+
+RuneEvalResult eval_apply(ValRef fn, ValRef arg, RuneEnv* env, RegionAllocator* region) {
+    // fn, arg, env, region
+    Allocator a = ra_to_gpa(region);
+    Pools pools = get_pools(env);
+    ExprPool* pool = pools.expr;
+    ValueHeap* heap = pools.value;
+    ValueSort sort = get_sort(fn);
+    if (sort == ValClosure) {
+        RuneClosure func = get_rune_closure(fn);
+        if (func.expr.type != EFn) {
+            return (RuneEvalResult) {
+                .type = AError,
+                .error_message = mv_cstr_doc("Non-function used as a function.", &a),
+            };
+        }
+        const size_t req_args = func.expr.fn.args.len - func.num_curried;
+
+        if (req_args > 1) {
+            // Curry
+            ValRef new = mk_rune_curried_closure(func.env, func.expr, func.num_curried + 1, heap);
+            RuneClosure newc = get_rune_closure(new);
+            for (size_t i = 0; i < func.num_curried; i++) {
+                newc.curried[i] = func.curried[i];
+            }
+            newc.curried[func.num_curried] = arg;
+            return (RuneEvalResult) {
+                .type = AValue,
+                .value = new,
+            };
+        } else {
+            // Apply
+            NameValAssoc* new_locals = region_alloc(sizeof(NameValAssoc), region);
+            *new_locals = mk_name_val_assoc(1 + func.env.local_vars.len, &a);
+            RuneEvalCtx new_ctx = {
+                .locals = new_locals,
+                .env = env,
+                .region = region,
+                .depth = 0,
+            };
+            for (size_t i = 0; i < func.num_curried; i++) {
+                name_val_bind(func.expr.fn.args.data[i], func.curried[i], new_locals);
+            }
+            name_val_bind(func.expr.fn.args.data[func.num_curried], arg, new_locals);
+            for (size_t i = 0; i < func.env.local_vars.len; i++) {
+                NameValACell cell = func.env.local_vars.data[i];
+                name_val_bind(cell.key, cell.val, new_locals);
+            }
+            return eval_rune_internal(get_expr(func.expr.fn.body, pool), new_ctx);
+        }
+    } else {
+        return (RuneEvalResult) {
+            .type = AError,
+            .error_message = mv_cstr_doc("Non-function used as a function in eval_apply.", &a),
+        };
+    }
 }
 
 

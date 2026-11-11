@@ -80,6 +80,16 @@ void run_rune_eval_tests(TestLog* log, RuneEnv* env, RegionAllocator* region) {
     }
     */
 
+    if (test_start(log, mv_string("case-data-some"))) {
+        ValRef expected = mk_rune_int(3987, pools.value);
+        TEST_EQ("(case (:some 3987) [[:some val] val] [:none 3] )");
+    }
+
+    if (test_start(log, mv_string("case-data-none"))) {
+        ValRef expected = mk_rune_int(3, pools.value);
+        TEST_EQ("(case :none [[:some val] val] [:none 3])");
+    }
+
     if (test_start(log, mv_string("call-simple-lambda"))) {
         ValRef expected = mk_rune_int(72, pools.value);
         TEST_EQ("((fn [x] x) 72)");

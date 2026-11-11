@@ -44,6 +44,11 @@ void rune_add_val_def(Name name, ValRef ref, RuneEnv* env);
 RuneEvalResult eval_rune(ExprRef expression, RuneEnv* env, RegionAllocator* region);
 
 /**
+ * Apply a given function to an argument
+ */
+RuneEvalResult eval_apply(ValRef fn, ValRef arg, RuneEnv* env, RegionAllocator* region);
+
+/**
  * Get the value of a definition that was previously added to the environment.
  * Note that definitions are not evaluated until 
  */

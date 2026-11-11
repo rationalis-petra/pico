@@ -28,9 +28,13 @@ typedef enum {
   // Embedded Values
   REVal,
 
+  // Builtins + Sugar
   REInt,
   REString,
   REList,
+
+  REIf,
+  REDoNotation,
 } RExprType;
 
 typedef struct {
@@ -97,7 +101,37 @@ typedef struct {
 typedef struct {
     RExprOption type;
     RPatternMap fields;
-} RExprFix; // 
+} RExprFix; //
+
+typedef struct {
+    RExprRef cond;
+    RExprRef ontrue;
+    RExprRef onfalse;
+} RExprIf;
+
+typedef enum {
+    // TODO: applicative, map?
+    DBind, DSeq, 
+} DoSort;
+
+typedef struct {
+    RExprRef fst;
+    Name var;
+    RExprRef snd;
+} DoBind;
+
+typedef struct {
+    RExprRef fst;
+    RExprRef snd;
+} DoSeq;
+
+typedef struct {
+    DoSort sort;
+    union {
+        DoBind bind;
+        DoSeq seq;
+    };
+} RExprDo;
 
 typedef struct {
     RExprType type;
@@ -117,10 +151,12 @@ typedef struct {
         // Embedded value
         ValRef value;
 
-        // Literals 
+        // Literals + Sugar
         int64_t num;
         RExprSlice list;
         String string;
+        RExprIf if_expr;
+        RExprDo do_expr;
     };
 } RExpr;
 
@@ -158,8 +194,6 @@ typedef struct {
     Name name;
     RExprRef expr;
 } RDef;
-
-//NameArray free_vars(RExprRef ref, RExprPool* pool, Allocator* a);
 
 Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a);
 

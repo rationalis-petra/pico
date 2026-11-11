@@ -80,6 +80,10 @@ ExprPool* get_expr_pool(AtlasInstance* instance) {
     return get_pools(instance->env).expr;
 }
 
+ValueHeap* get_val_heap(AtlasInstance* instance) {
+    return get_pools(instance->env).value;
+}
+
 static void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef target, RegionAllocator* region, AtErrorPoint* point);
 static Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point);
 
@@ -654,14 +658,26 @@ Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, Target
     return out;
 }
 
-static ValRef run_monad(Run run, String directory, AtlasInstance* instance, RegionAllocator* region, AtErrorPoint* point) {
+typedef struct {
+    String current_dir;
+} RunState;
+
+static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, RegionAllocator* region, AtErrorPoint* point) {
     Allocator a = ra_to_gpa(region);
     switch (run.type) {
     case RPure:
         return run.pure;
-    case RBind:
-        panic(mv_string("TODO: bind"));
+    case RBind: {
+        ValRef arg = run_monad(*run.bind.run, state, instance, region, point);
+        RuneEvalResult result = eval_apply(run.bind.fn, arg, instance->env, region);
+        if (result.type == AValue) {
+            return result.value;
+        } else {
+            AtlasError err = {.message = result.error_message,};
+            throw_at_error(point, err);
+        }
         break;
+    }
     case RShell: {
         StringSlice vals = run.shell;
         if (vals.len < 1) {
@@ -674,7 +690,7 @@ static ValRef run_monad(Run run, String directory, AtlasInstance* instance, Regi
             .len = vals.len - 1,
             .data = vals.data + 1,
         };
-        ProcessResult presult = create_process_in(vals.data[0], args, directory);
+        ProcessResult presult = create_process_in(vals.data[0], args, state->current_dir);
         //ProcessResult presult = create_process(vals.data[0], args);
         if (presult.type != Ok) {
             AtlasError err = {
@@ -693,6 +709,11 @@ static ValRef run_monad(Run run, String directory, AtlasInstance* instance, Regi
         ValueHeap* heap = get_pools(instance->env).value;
         ValRef ref = mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
         return ref;
+    }
+    case RSetCurrentDir: {
+        state->current_dir = run.set_cwd;
+        ValueHeap* heap = get_pools(instance->env).value;
+        return mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
     }
     }
     panic(mv_string("Invalid monad."));
@@ -717,7 +738,10 @@ void atlas_load_generic_target(AtlasInstance* instance, Package* package, Target
         }
     }
 
-    run_monad(target.monad, target.path, instance, region, point);
+    RunState state = {
+        .current_dir = target.path,
+    };
+    run_monad(target.monad, &state, instance, region, point);
 }
 
 void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {

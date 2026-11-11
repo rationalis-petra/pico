@@ -1009,14 +1009,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
     }
     case FMatch: {
         if (raw.branch.nodes.len < 2) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Match expects at least 1 argument", a);
-            throw_pi_error(ctx.point, err);
-        }
-        if (!is_expr(raw.branch.nodes.data[1])) {
-            err.range = raw.branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Match expects first argument to be expression (use parentheses '(' and ')')", a);
-            throw_pi_error(ctx.point, err);
+            match_not_enough_terms(raw, ctx);
         }
         SynRef sval = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
@@ -1030,13 +1023,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             // Get the clause
             RawTree raw_clause = raw.branch.nodes.data[i];
             if (raw_clause.type != RawBranch || raw_clause.branch.nodes.len < 2) {
-                err.range = raw_clause.range;
-                err.message = mv_cstr_doc("Match Clause has incorrect number of elements!", a);
-                throw_pi_error(ctx.point, err);
+                match_clause_not_enough_terms(raw_clause, ctx);
             }
 
             // Get the pattern
-
             Symbol clause_tagname = {}; 
             SymbolArray clause_binds = {};
             bool is_wildcard = false;
@@ -1044,50 +1034,37 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             if (raw_pattern.type != RawBranch) {
                 if (eq_symbol(&raw_pattern, string_to_symbol(mv_string("_")))) {
                     if (i + 1 != raw.branch.nodes.len) {
-                        err.range = raw_clause.range;
-                        err.message = mv_cstr_doc("A wildcard pattern must be the last pattern in a match clause.", a);
-                        throw_pi_error(ctx.point, err);
+                        match_wildcard_must_be_last(raw_clause, ctx);
                     }
 
                     is_wildcard = true;
                 } else {
-                    err.range = raw_clause.range;
-                    err.message = mv_cstr_doc("Expecting pattern but got a symbol instead. This is not yet supported.", a);
-                    throw_pi_error(ctx.point, err);
+                    match_pattern_is_atom(raw_clause, ctx);
                 }
             } else {
-                // The pattern has two parts: the variables & the tag
-                // The tag should be in a constructor (i.e. list)
-
+                /**
+                 * The pattern has two parts: the variables & the tag
+                 * The tag should be in a constructor (i.e. list)
+                 */
                 RawTree mcol = raw_pattern.branch.nodes.data[0];
                 if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
                     RawTree mname = raw_pattern.branch.nodes.data[1];
                     if (!is_symbol(mname)) {
-                        err.range = mname.range;
-                        err.message = mv_cstr_doc("Bad pattern in match clause", a);
-                        throw_pi_error(ctx.point, err);
+                        match_pattern_head_malformed(mname, ctx);
                     }
 
                     clause_tagname = mname.atom.symbol;
                     clause_binds = mk_symbol_array(0, a);
                 } else {
                     if (!get_fieldname(&raw_pattern.branch.nodes.data[0], FColon, &clause_tagname)) {
-                        PtrArray nodes = mk_ptr_array(2, a);
-                        push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
-                        push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
-                        Document* doc = mv_sep_doc(nodes, a);
-                        err.range = raw_clause.range;
-                        err.message = doc;
-                        throw_pi_error(ctx.point, err);
+                        match_pattern_no_tagname(raw_clause, ctx);
                     }
 
                     clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
                     for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
                         RawTree raw_name = raw_pattern.branch.nodes.data[s];
                         if (!is_symbol(raw_name)) {
-                            err.range = raw_clause.range;
-                            err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
-                            throw_pi_error(ctx.point, err);
+                            match_pattern_bad_binding(raw_clause, ctx);
                         }
                         push_symbol(raw_name.atom.symbol, &clause_binds); 
                     }

@@ -49,15 +49,20 @@ typedef struct {
  *   pure <any>
  *   bind run (fn [<any>] run)
  *   shell (list string)
+ *   set-current-directory string
+ *   record-exists string
  */
 typedef struct Run Run;
 typedef enum : uint64_t {
-    RPure, RBind, RShell
+  RPure, RBind,
+  RShell,
+  RSetCurrentDir,
+  RRecordExists,
 } RunType;
 
 typedef struct {
     Run* run;
-    ValRef closure;
+    ValRef fn;
 } RunBind;
 
 struct Run {
@@ -66,6 +71,7 @@ struct Run {
         ValRef pure;
         RunBind bind;
         StringSlice shell; 
+        String record;
     };
 };
 

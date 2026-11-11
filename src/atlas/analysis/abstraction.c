@@ -370,9 +370,9 @@ RDef abstract_atlas_def(RawTree raw, AtAbsCallbackData cb_data, RExprPool* pool,
   Name raw_names[] = {
       string_to_name(mv_string("library")),
       string_to_name(mv_string("executable")),
-      string_to_name(mv_string("target")), string_to_name(mv_string("file")),
+      string_to_name(mv_string("target")),
+      string_to_name(mv_string("file")),
       string_to_name(mv_string("shell")),
-      string_to_name(mv_string("do")),
     }; 
     NameArray names = {
         .data = raw_names,

@@ -130,10 +130,14 @@ static uint64_t hash_run(Run run, uint64_t hash) {
         break;
     case RBind:
         hash = hash_run(*run.bind.run, hash);
-        hash = hash_num(run.bind.closure.ref, hash);
+        hash = hash_num(run.bind.fn.ref, hash);
         break;
     case RShell:
         hash = hash_string_slice(run.shell, hash);
+        break;
+    case RSetCurrentDir:
+    case RRecordExists:
+        hash = hash_string(run.record, hash);
         break;
 
     }
@@ -211,13 +215,14 @@ bool run_eq(Run lhs, Run rhs) {
   switch (lhs.type) {
   case RPure:
       return (lhs.pure.ref != rhs.pure.ref);
-  case RBind: {
+  case RBind:
     return run_eq(*lhs.bind.run, *rhs.bind.run)
-        && (lhs.bind.closure.ref == rhs.bind.closure.ref);
-  } 
-  case RShell: {
+        && (lhs.bind.fn.ref == rhs.bind.fn.ref);
+  case RShell:
       return string_slice_eq(lhs.shell, rhs.shell);
-  }
+  case RSetCurrentDir:
+  case RRecordExists:
+      return string_eq(lhs.record, rhs.record);
   }
   panic(mv_string("invalid targets provided to run_eq."));
 }
@@ -518,6 +523,12 @@ TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAl
         {.name = string_to_name(mv_string("shell")),
          .len = 1,
          .types = &bstring_list,},
+        {.name = string_to_name(mv_string("set-current-directory")),
+         .len = 1,
+         .types = &bstring,},
+        {.name = string_to_name(mv_string("record-exists")),
+         .len = 1,
+         .types = &bstring,},
     };
     run_bridge = (Bridge) {
         .type = BData,

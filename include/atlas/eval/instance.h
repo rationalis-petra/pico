@@ -34,6 +34,7 @@ typedef struct {
 } AtlasDefaultTargets;
 AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance);
 ExprPool* get_expr_pool(AtlasInstance* instance);
+ValueHeap* get_val_heap(AtlasInstance* instance);
 
 /**
  * Given that a project has been loaded, lookup the 'target' in the atlas

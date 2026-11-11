@@ -1,3 +1,4 @@
+#include <string.h>
 #include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/region.h"
@@ -227,7 +228,7 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     return fail;
 }
 
-bool register_atlas_types(AtlasInstance* instance, FormattedOStream* out, RegionAllocator* region) {
+bool register_atlas_globals(AtlasInstance* instance, FormattedOStream* out, RegionAllocator* region) {
     RegionAllocator* subregion = make_subregion(region);
     Allocator ra = ra_to_gpa(subregion);
 
@@ -236,6 +237,9 @@ bool register_atlas_types(AtlasInstance* instance, FormattedOStream* out, Region
         "(def Executable Record [.path Int] [.depends-on Int] [.file Int] [.entry-point Int])",
         "(def Generic Record [.path Int] [.depends-on Int] [.provides Int] [.run Int])",
         "(def File Record [.path Int] [.name Int])",
+        // Functions
+        "(def set-current-directory fn [x] (:set-current-directory x))",
+        "(def record-exists fn [x] (:record-exists x))",
     };
     const size_t num_types = sizeof(types) / sizeof(char*);
 
@@ -274,6 +278,25 @@ bool register_atlas_types(AtlasInstance* instance, FormattedOStream* out, Region
         }
     }
 
+    // Project Root
+    { 
+        ExprPool* pool = get_expr_pool(instance);
+        String cwdir = get_current_directory(&ra);
+        ValueHeap* heap = get_val_heap(instance);
+        ValRef val = mk_rune_string(cwdir.memsize, heap);
+        String rune_cwd = get_rune_string(val);
+        memcpy(rune_cwd.bytes, cwdir.bytes, cwdir.memsize);
+        ExprRef ref = new_expr(pool);
+        set_expr(ref, (Expr){.type = EVal, .value = val}, pool);
+        Def def = {.name = string_to_name(mv_string("project-root")), ref};
+        RuneEvalResult result = atlas_add_def(instance, def, region);
+        if (result.type != AValue) {
+            write_doc_formatted(result.error_message, 120, out);
+            write_fstring(mv_string("\n"), out);
+            goto on_error_generic;
+        }
+    }
+
     release_subregion(subregion);
     return true;
 
@@ -301,7 +324,7 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         RegionAllocator* region = make_region_allocator(4096, true, stda);
 
         AtlasInstance* instance = make_atlas_instance(stda);
-        register_atlas_types(instance, get_formatted_stdout(), region);
+        register_atlas_globals(instance, get_formatted_stdout(), region);
         register_package(instance, package);
 
         String cwd = get_current_directory(stda);

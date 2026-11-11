@@ -192,6 +192,69 @@ _Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, Abstracti
     throw_pi_error(ctx.point, err);
 }
 
+// Match
+// ---------
+_Noreturn void match_not_enough_terms(RawTree raw, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Match expects at least 1 argument.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_clause_not_enough_terms(RawTree raw, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Match clause expects at least 2 arguments: a pattern an a body.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_wildcard_must_be_last(RawTree raw_clause, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw_clause.range,
+        .message = mv_cstr_doc("A wildcard pattern must be the last pattern in a match clause.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_pattern_is_atom(RawTree raw_clause, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw_clause.range,
+        .message = mv_cstr_doc("Expecting pattern but got an atom instead. This is not yet supported.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_pattern_head_malformed(RawTree raw, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("For patterns not in square brackets, they are expected to be be :<symbol>, e.g. :none", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_pattern_no_tagname(RawTree clause, AbstractionICtx ctx) {
+    RawTree pattern = clause.branch.nodes.data[0];
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), ctx.gpa), &nodes);
+    push_ptr(pretty_rawtree(pattern.branch.nodes.data[0], ctx.gpa), &nodes);
+    Document* doc = mv_sep_doc(nodes, ctx.gpa);
+    PicoError err = {
+        .range = clause.range,
+        .message = doc,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void match_pattern_bad_binding(RawTree raw, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Pattern binding was not a symbol!", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // Flags
 // ------
 _Noreturn void flags_empty_requires_val(RawTree raw, AbstractionICtx ctx) {

@@ -308,6 +308,14 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
         out = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
         break;
     }
+    case REIf: {
+        panic(mv_string("TODO: implement pretty do if"));
+        break;
+    }
+    case REDoNotation: {
+        panic(mv_string("TODO: implement pretty do notation"));
+        break;
+    }
     }
     if (out == NULL) {
         panic(mv_string("Invalid expression provided to pretty_rune_expr"));
