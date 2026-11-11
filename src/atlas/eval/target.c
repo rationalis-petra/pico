@@ -5,6 +5,39 @@
 
 #include "rune/eval/values.h"
 #include "atlas/eval/target.h"
+#define POPULATE_RUN_BRIDGE \
+    Bridge bind_types[] = { \
+        {.type = BPtrWrap, .wrapped = &run_bridge}, \
+        {.type = BPassthrough}, \
+    }; \
+    Bridge pass_bridge = {.type = BPassthrough}; \
+    BridgeVariant run_variants[] = { \
+        {.name = string_to_name(mv_string("pure")), \
+         .len = 1, \
+         .types = &pass_bridge}, \
+        {.name = string_to_name(mv_string("bind")), \
+         .len = 2, \
+         .types = bind_types,}, \
+        {.name = string_to_name(mv_string("shell")), \
+         .len = 1, \
+         .types = &bstring_list,}, \
+        {.name = string_to_name(mv_string("set-current-directory")), \
+         .len = 1, \
+         .types = &bstring,}, \
+        {.name = string_to_name(mv_string("create-directory")), \
+         .len = 1, \
+         .types = &bstring,}, \
+        {.name = string_to_name(mv_string("record-exists")), \
+         .len = 1, \
+         .types = &bstring,}, \
+    }; \
+    run_bridge = (Bridge) { \
+        .type = BData, \
+        .data = { \
+            .len = sizeof(run_variants) / sizeof(BridgeVariant), \
+            .variants = run_variants, \
+        }, \
+    }; \
 
 ARRAY_COMMON_IMPL(Dependency, dep, Dependency);
 
@@ -136,6 +169,7 @@ static uint64_t hash_run(Run run, uint64_t hash) {
         hash = hash_string_slice(run.shell, hash);
         break;
     case RSetCurrentDir:
+    case RCreateDirectory:
     case RRecordExists:
         hash = hash_string(run.record, hash);
         break;
@@ -221,6 +255,7 @@ bool run_eq(Run lhs, Run rhs) {
   case RShell:
       return string_slice_eq(lhs.shell, rhs.shell);
   case RSetCurrentDir:
+  case RCreateDirectory:
   case RRecordExists:
       return string_eq(lhs.record, rhs.record);
   }
@@ -444,6 +479,27 @@ static AtlasTarget rune_to_atlas(RuneTarget target, Allocator* a) {
     panic(mv_string("Invalid rune target provided to rune_to_atlas"));
 }
 
+Run translate_monad_from_rune(ValRef val, RuneEnv* env, RegionAllocator* region, AtErrorPoint* point) {
+    Allocator a = ra_to_gpa(region);
+
+    Bridge bstring = {.type = BString};
+    Bridge bstring_list = {.type = BList, .element = &bstring};
+    Bridge run_bridge;
+    POPULATE_RUN_BRIDGE;
+
+    Run run;
+    if (!get_as_host_val(val, run_bridge, &run, &a)) {
+        PtrArray nodes = mk_ptr_array(4, &a);
+        push_ptr(mv_cstr_doc("Value is not an atlas monad:", &a), &nodes);
+        push_ptr(pretty_rune_value(val, env, &a), &nodes);
+        AtlasError error = { 
+            .message = mv_sep_doc(nodes, &a)
+        };
+        throw_at_error(point, error);
+    }
+    return run;
+}
+
 TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAllocator* region, AtErrorPoint* point)  {
     Allocator a = ra_to_gpa(region);
 
@@ -508,35 +564,7 @@ TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAl
     //  bind run (fn [<any>] run)
     //  shell (list string)
     Bridge run_bridge;
-    Bridge bind_types[] = {
-        {.type = BPtrWrap, .wrapped = &run_bridge},
-        {.type = BPassthrough},
-    };
-    Bridge pass_bridge = {.type = BPassthrough};
-    BridgeVariant run_variants[] = {
-        {.name = string_to_name(mv_string("pure")),
-         .len = 1,
-         .types = &pass_bridge},
-        {.name = string_to_name(mv_string("bind")),
-         .len = 2,
-         .types = bind_types,},
-        {.name = string_to_name(mv_string("shell")),
-         .len = 1,
-         .types = &bstring_list,},
-        {.name = string_to_name(mv_string("set-current-directory")),
-         .len = 1,
-         .types = &bstring,},
-        {.name = string_to_name(mv_string("record-exists")),
-         .len = 1,
-         .types = &bstring,},
-    };
-    run_bridge = (Bridge) {
-        .type = BData,
-        .data = {
-            .len = sizeof(run_variants) / sizeof(BridgeVariant),
-            .variants = run_variants,
-        },
-    };
+    POPULATE_RUN_BRIDGE;
 
     BRecCell generic_types[] = {
         {.name = string_to_name(mv_string("path")),

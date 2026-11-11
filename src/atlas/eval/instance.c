@@ -664,6 +664,7 @@ typedef struct {
 
 static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, RegionAllocator* region, AtErrorPoint* point) {
     Allocator a = ra_to_gpa(region);
+ run_again:
     switch (run.type) {
     case RPure:
         return run.pure;
@@ -671,7 +672,9 @@ static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, Regio
         ValRef arg = run_monad(*run.bind.run, state, instance, region, point);
         RuneEvalResult result = eval_apply(run.bind.fn, arg, instance->env, region);
         if (result.type == AValue) {
-            return result.value;
+            // Result should be a monad: translate it & run again
+            run = translate_monad_from_rune(result.value, instance->env, region, point);
+            goto run_again;
         } else {
             AtlasError err = {.message = result.error_message,};
             throw_at_error(point, err);
@@ -711,9 +714,26 @@ static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, Regio
         return ref;
     }
     case RSetCurrentDir: {
-        state->current_dir = run.set_cwd;
+        state->current_dir = run.record;
         ValueHeap* heap = get_pools(instance->env).value;
         return mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+    }
+    case RCreateDirectory: {
+        ValueHeap* heap = get_pools(instance->env).value;
+        String path = run.record;
+        String full_path = path_cat(state->current_dir, path, &a);
+        create_directory(full_path);
+        return mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+    }
+    case RRecordExists: {
+        ValueHeap* heap = get_pools(instance->env).value;
+        String path = run.record;
+        String full_path = path_cat(state->current_dir, path, &a);
+        if (record_exists(full_path)) {
+            return mk_rune_data(string_to_name(mv_string("true")), (ValRefOption){}, 0, heap);
+        } else {
+            return mk_rune_data(string_to_name(mv_string("false")), (ValRefOption){}, 0, heap);
+        }
     }
     }
     panic(mv_string("Invalid monad."));

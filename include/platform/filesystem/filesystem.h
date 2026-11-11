@@ -134,7 +134,6 @@ typedef struct {
 
 RecordResult set_permissions(String file, FilePermissions perms);
 
-
 bool record_exists(String path);
 
 typedef enum {

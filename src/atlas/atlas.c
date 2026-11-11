@@ -238,7 +238,9 @@ bool register_atlas_globals(AtlasInstance* instance, FormattedOStream* out, Regi
         "(def Generic Record [.path Int] [.depends-on Int] [.provides Int] [.run Int])",
         "(def File Record [.path Int] [.name Int])",
         // Functions
+        "(def pure fn [x] (:pure x))",
         "(def set-current-directory fn [x] (:set-current-directory x))",
+        "(def create-directory fn [x] (:create-directory x))",
         "(def record-exists fn [x] (:record-exists x))",
     };
     const size_t num_types = sizeof(types) / sizeof(char*);

@@ -57,6 +57,7 @@ typedef enum : uint64_t {
   RPure, RBind,
   RShell,
   RSetCurrentDir,
+  RCreateDirectory,
   RRecordExists,
 } RunType;
 
@@ -101,6 +102,7 @@ typedef struct TargetMap TargetMap;
 TargetMap* mk_target_map(Allocator* a);
 void delete_target_map(TargetMap* map);
 
+Run translate_monad_from_rune(ValRef val, RuneEnv* env, RegionAllocator* region, AtErrorPoint* point);
 TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAllocator* region, AtErrorPoint* point);
 AtlasTarget deref_target(TargetRef ref, TargetMap* map); 
 Module* target_module(TargetRef ref, TargetMap* map); 
