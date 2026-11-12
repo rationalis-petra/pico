@@ -310,6 +310,7 @@ bool is_mandatory(PropType type) {
     switch (type) {
     case PName:
     case PExpr:
+    case PString:
         return true;
     default:
         return false;
@@ -324,7 +325,7 @@ void check_props(PropSet* props, bool checks[], Range range, PiErrorPoint* point
 
         if (!checks[i] && is_mandatory(prop.type)) {
             PtrArray nodes = mk_ptr_array(4, a);
-            push_ptr(mv_str_doc(mv_string("Missing stanza clause: "), a), &nodes);
+            push_ptr(mv_str_doc(mv_string("Missing stanza clause:"), a), &nodes);
             push_ptr(mk_str_doc(props->props.data[i].name, a), &nodes);
 
             Document* message = mv_sep_doc(nodes, a);

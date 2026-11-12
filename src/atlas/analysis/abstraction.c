@@ -82,12 +82,14 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             };
             RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
+                .expr = {.type = REList},
             };
             RExprCell filename = {
                 .name = string_to_name(mv_string("file")), 
             };
             RExprCell submodules = {
                 .name = string_to_name(mv_string("submodules")), 
+                .expr = {.type = REList},
             };
 
             /**
@@ -101,7 +103,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             //   submodules :: string list
             //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
+            add_expr_option_prop(mv_string("depends-on"), &dependencies.expr, props);
             add_expr_option_prop(mv_string("file"), &filename.expr, props);
             add_expr_array_prop(mv_string("submodules"), &submodules.expr, props);
 
@@ -164,6 +166,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             };
             RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
+                .expr = {.type = REList},
             };
             RExprCell filename = {
                 .name = string_to_name(mv_string("file")), 
@@ -179,7 +182,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             PropSet* props = make_prop_set(3, &ra);
             add_expr_prop(mv_string("file"), &filename.expr, props);
             add_expr_prop(mv_string("entry-point"), &entry_point.expr, props);
-            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
+            add_expr_option_prop(mv_string("depends-on"), &dependencies.expr, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {
                 parse_prop(raw.branch.nodes.data[i], props, executable_checks, host_data, pool, point, region);
@@ -241,6 +244,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             };
             RExprCell dependencies = {
                 .name = string_to_name(mv_string("depends-on")), 
+                .expr = {.type = REList},
             };
             RExprCell provides = {
                 .name = string_to_name(mv_string("provides")), 
@@ -253,7 +257,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             // dependencies :: symbol list
 
             PropSet* props = make_prop_set(3, &ra);
-            add_expr_prop(mv_string("depends-on"), &dependencies.expr, props);
+            add_expr_option_prop(mv_string("depends-on"), &dependencies.expr, props);
             add_expr_array_prop(mv_string("provides"), &provides.expr, props);
             add_expr_prop(mv_string("run"), &run.expr, props);
 
