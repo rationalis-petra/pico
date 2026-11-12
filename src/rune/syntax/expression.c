@@ -414,12 +414,26 @@ Document* pretty_rune_expr(Expr expr, ExprPool* pool, Allocator* a) {
         panic(mv_string("TODO: implement pretty record."));
     }
     case ECase: {
-        panic(mv_string("TODO: implement pretty case"));
-        break;
+        PtrArray nodes = mk_ptr_array(1 + expr.ecase.fields.len, a);
+        PtrArray head_nodes = mk_ptr_array(2, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("case", a), a), &head_nodes);
+        push_ptr(mv_nest_doc(2, pretty_rune_expr(get_expr(expr.ecase.val, pool), pool, a), a), &head_nodes);
+        push_ptr(mv_sep_doc(head_nodes, a), &nodes);
+        for (size_t i = 0; i < expr.ecase.fields.len; i++) {
+            PatternCell cell = get_expr_ptn_map_elt(expr.ecase.fields, i, pool);
+            PtrArray fnodes = mk_ptr_array(2, a);
+            PtrArray head =  mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(".", a), &head);
+            push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
+            push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_expr(get_expr(cell.pattern.body, pool), pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
+        }
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }
     case ECoCase: {
         PtrArray nodes = mk_ptr_array(1 + expr.cocase.fields.len, a);
-        push_ptr(mv_style_doc(former_style, mv_cstr_doc("record", a), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("corecord", a), a), &nodes);
         for (size_t i = 0; i < expr.cocase.fields.len; i++) {
             PatternCell cell = get_expr_ptn_map_elt(expr.cocase.fields, i, pool);
             PtrArray fnodes = mk_ptr_array(2, a);

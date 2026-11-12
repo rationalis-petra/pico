@@ -104,7 +104,7 @@ void abstract_atlas(RawTree raw, HostCallbackData host_data, RExprPool* pool, Re
             //   dependencies :: dependency list
             PropSet* props = make_prop_set(3, &ra);
             add_expr_option_prop(mv_string("depends-on"), &dependencies.expr, props);
-            add_expr_option_prop(mv_string("file"), &filename.expr, props);
+            add_option_expr_prop(mv_string("file"), &filename.expr, props);
             add_expr_array_prop(mv_string("submodules"), &submodules.expr, props);
 
             for (size_t i = 1; i < raw.branch.nodes.len; i++) {

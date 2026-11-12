@@ -21,7 +21,15 @@ void add_name_array_prop(String propname, NameArray* location, PropSet* props);
 
 // Expressions
 void add_expr_prop(String propname, RExpr* location, PropSet* props);
+
+// Option expr will look for the expression at propname. If it exists, will
+// write :some <expr> to the location, otherwise will write :none. 
+void add_option_expr_prop(String propname, RExpr* location, PropSet* props);
+
+// Option expr will look for the expression at propname. If it exists, will
+// write <expr> to the location, otherwise will write nothing. 
 void add_expr_option_prop(String propname, RExpr* location, PropSet* props);
+
 void add_expr_array_prop(String propname, RExpr* location, PropSet* props);
 
 typedef void (*PropCb)(RawTree raw, PiErrorPoint *point, void* in, void* out);

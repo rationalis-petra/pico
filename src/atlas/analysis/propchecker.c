@@ -7,6 +7,7 @@
 
 typedef enum {
     PExpr,
+    POptionExpr,
     PExprOption,
     PExprArray,
 
@@ -61,6 +62,15 @@ void add_expr_prop(String propname, RExpr* location, PropSet* props) {
         .name = propname,
         .location = location,
         .type = PExpr,
+    };
+    push_prop(prop, &props->props);
+}
+
+void add_option_expr_prop(String propname, RExpr* location, PropSet* props) {
+    Prop prop = {
+        .name = propname,
+        .location = location,
+        .type = POptionExpr,
     };
     push_prop(prop, &props->props);
 }
@@ -244,7 +254,7 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                 abstract_rune_to(expr, host_data, pool, region, point, dest);
                 break;
             }
-            case PExprOption: {
+            case POptionExpr: {
                 RawTree expr = (term.branch.nodes.len == 2)
                     ? term.branch.nodes.data[1]
                     : raw_slice(&term, 1);
@@ -274,6 +284,16 @@ void parse_prop(RawTree term, PropSet* props, bool checks[], HostCallbackData ho
                         .app.args = members,
                     };
                 }
+                break;
+            }
+            case PExprOption: {
+                RawTree expr = (term.branch.nodes.len == 2)
+                    ? term.branch.nodes.data[1]
+                    : raw_slice(&term, 1);
+
+
+                RExpr* dest = prop.location;
+                abstract_rune_to(expr, host_data, pool, region, point, dest);
                 break;
             }
             case PExprArray: {
