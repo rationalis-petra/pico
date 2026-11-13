@@ -79,6 +79,8 @@ struct PlWindow {
 typedef struct {
     bool claimed_by_hedron;
     bool claimed_by_cpu;
+    uint32_t* pixels;
+    size_t memsize;
 } WindowRenderData;
 
 struct PlWindow {

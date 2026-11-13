@@ -3,6 +3,8 @@
 #ifdef WINDOW_SYSTEM
 #if (OS_FAMILY == WINDOWS)
 
+#include <limits.h>
+#include <string.h>
 #include "platform/signals.h"
 #include "platform/window/window.h"
 #include "platform/window/winkey_translate.h"
@@ -15,8 +17,39 @@
 
 static Allocator* wsa = NULL;
 static HINSTANCE app_handle = 0;
+static HMODULE gdi32_handle = NULL;
+typedef int (WINAPI *StretchDIBitsFn)(HDC, int, int, int, int, int, int, int, int,
+                                      const VOID*, const BITMAPINFO*, UINT, DWORD);
+static StretchDIBitsFn stretch_dibits = NULL;
 static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
+
+static void draw_framebuffer(HDC dc, RECT client_area, FrameBuffer frame) {
+    BITMAPINFO bitmap_info = {0};
+    bitmap_info.bmiHeader.biSize = sizeof(bitmap_info.bmiHeader);
+    bitmap_info.bmiHeader.biWidth = (LONG)frame.stride;
+    bitmap_info.bmiHeader.biHeight = -(LONG)frame.height;
+    bitmap_info.bmiHeader.biPlanes = 1;
+    bitmap_info.bmiHeader.biBitCount = 32;
+    bitmap_info.bmiHeader.biCompression = BI_RGB;
+
+#ifdef DEBUG_ASSERT
+    if (!stretch_dibits) {
+        panic(mv_string("Window system was not initialized before presenting a framebuffer"));
+    }
+#endif
+    stretch_dibits(dc,
+                   0, 0,
+                   client_area.right - client_area.left,
+                   client_area.bottom - client_area.top,
+                   0, 0,
+                   (int)frame.width,
+                   (int)frame.height,
+                   frame.pixels,
+                   &bitmap_info,
+                   DIB_RGB_COLORS,
+                   SRCCOPY);
+}
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PlWindow* window;
@@ -97,6 +130,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 int pl_init_window_system(Allocator* a) {
     wsa = a;
     app_handle = GetModuleHandle(NULL);
+    gdi32_handle = LoadLibraryA("gdi32.dll");
+    if (!gdi32_handle) {
+        return 1;
+    }
+    FARPROC procedure = GetProcAddress(gdi32_handle, "StretchDIBits");
+    memcpy(&stretch_dibits, &procedure, sizeof(stretch_dibits));
+    if (!stretch_dibits) {
+        FreeLibrary(gdi32_handle);
+        gdi32_handle = NULL;
+        return 1;
+    }
 
     wind_class.lpfnWndProc = WindowProc;
     wind_class.hInstance = app_handle;
@@ -106,7 +150,11 @@ int pl_init_window_system(Allocator* a) {
 }
 
 void pl_teardown_window_system() {
-    // Dummy method
+    if (gdi32_handle) {
+        FreeLibrary(gdi32_handle);
+        gdi32_handle = NULL;
+        stretch_dibits = NULL;
+    }
 }
 
 PlWindow* pl_create_window(String name, int width, int height) {
@@ -153,11 +201,62 @@ WinMessageSlice pl_poll_events(PlWindow* window, Allocator* a) {
 }
 
 FrameBufferOption acquire_framebuffer(PlWindow* window) {
-    panic(mv_string("TODO: implement framebuffer acquisition on windows"));
+    if (!window || window->width == 0 || window->height == 0 ||
+        window->render.claimed_by_hedron || window->render.claimed_by_cpu) {
+        return (FrameBufferOption){.type = None};
+    }
+
+    size_t width = window->width;
+    size_t height = window->height;
+    if (width > (size_t)-1 / sizeof(uint32_t) / height) {
+        return (FrameBufferOption){.type = None};
+    }
+
+    size_t required_bytes = width * height * sizeof(uint32_t);
+    if (window->render.memsize < required_bytes) {
+        uint32_t* pixels = mem_realloc(window->render.pixels, required_bytes, wsa);
+        if (!pixels) {
+            return (FrameBufferOption){.type = None};
+        }
+        window->render.pixels = pixels;
+        window->render.memsize = required_bytes;
+    }
+
+    window->render.claimed_by_cpu = true;
+    return (FrameBufferOption) {
+        .type = Some,
+        .val = {
+            .pixels = window->render.pixels,
+            .memsize = required_bytes,
+            .width = window->width,
+            .height = window->height,
+            .stride = window->width,
+        },
+    };
 }
 
 void present_framebuffer(FrameBuffer frame, PlWindow* window) {
-    panic(mv_string("TODO: implement framebuffer presentation on windows"));
+    if (!window) {
+        return;
+    }
+
+    if (!frame.pixels || frame.width == 0 || frame.height == 0 ||
+        frame.stride < frame.width || frame.width > LONG_MAX ||
+        frame.height > LONG_MAX || frame.stride > LONG_MAX ||
+        frame.height > (size_t)-1 / sizeof(uint32_t) / frame.stride ||
+        frame.memsize < (size_t)frame.stride * frame.height * sizeof(uint32_t)) {
+        window->render.claimed_by_cpu = false;
+        return;
+    }
+
+    HDC dc = GetDC(window->impl);
+    if (dc) {
+        RECT client_area;
+        GetClientRect(window->impl, &client_area);
+        draw_framebuffer(dc, client_area, frame);
+        ReleaseDC(window->impl, dc);
+    }
+    window->render.claimed_by_cpu = false;
 }
 
 // Key handling: 
