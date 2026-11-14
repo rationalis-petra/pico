@@ -4,6 +4,7 @@
 #include "data/meta/array_header.h"
 #include "data/string.h"
 
-ARRAY_HEADER(String, string, String)
+ARRAY_HEADER(String, string, String);
+bool string_array_eq(StringArray lhs, StringArray rhs);
 
 #endif

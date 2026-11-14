@@ -19,7 +19,7 @@
 #include "app/help_string.h"
 #include "app/repl.h"
 
-static const char* version = "0.2.8";
+static const char* version = "0.2.9";
 
 int main(int argc, char** argv) {
   // Setup
@@ -65,8 +65,9 @@ int main(int argc, char** argv) {
 
   switch (command.type) {
   case CRepl: {
-    /** TODO (FUTURE BUG): move the codegen init to BEFORE the base package
-        is created! */
+    /* TODO (FUTURE BUG): move the codegen init to BEFORE the base package
+     * is created!
+     */
     init_codegen(command.repl.backend, stdalloc);
 
     Package* user_pkg = mk_user_package(base, &module_allocator, subregion);

@@ -41,6 +41,18 @@ _Noreturn void struct_bad_fdesc_len(RawTree raw, AbstractionICtx ctx);
 _Noreturn void struct_bad_fdesc_fieldname(RawTree raw, AbstractionICtx ctx);
 _Noreturn void struct_duplicate_fieldname(RawTree raw, Symbol fname, AbstractionICtx ctx);
 
+// Patterns
+_Noreturn void match_not_enough_terms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_clause_not_enough_terms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_wildcard_must_be_last(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_pattern_is_atom(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_pattern_head_malformed(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_pattern_no_tagname(RawTree raw, AbstractionICtx ctx);
+_Noreturn void match_pattern_bad_binding(RawTree raw, AbstractionICtx ctx);
+
+// Flags
+_Noreturn void flags_empty_requires_val(RawTree raw, AbstractionICtx ctx);
+
 // ------------------------------------------------------------
 //   Type Formers
 // ------------------------------------------------------------

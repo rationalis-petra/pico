@@ -49,6 +49,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         return mk_str_doc(mv_string("float"), a);
     case CSDouble:
         return mk_str_doc(mv_string("double"), a);
+    case CSStaticArray: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(pretty_ctype(type->array.element, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", pretty_u64(type->array.len, a), a), &nodes);
+        return mv_sep_doc(nodes, a);
+    }
     case CSCEnum: {
         // enum name { l1 = n1, l2 = n2 }
         PtrArray main_nodes = mk_ptr_array(2, a);
@@ -202,6 +208,9 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
         return pretty_float(*(float*)data, a);
     case CSDouble:
         return pretty_double(*(double*)data, a);
+    case CSStaticArray: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for static arrays"), a);
+    }
     case CSCEnum: {
         return mk_str_doc(mv_string("pretty_cval not implemented for enum"), a);
     }
@@ -282,7 +291,8 @@ size_t c_size_align(size_t size, size_t align) {
     return size + pad;
 }
 
-size_t c_size_of(CType type) {
+size_t c_align_of_internal(CType type, bool in_composite);
+size_t c_size_of_internal(CType type, bool in_composite) {
 #if (ABI == SYSTEM_V_64 || ABI == WIN_64)
     // System V ABI
     switch (type.sort) {
@@ -300,6 +310,14 @@ size_t c_size_of(CType type) {
         // NOTE: seems like you can get 32-bit pointers somehow
         // (ILP32)
         return 8;
+    case CSStaticArray: {
+        if (in_composite) {
+            size_t size = c_size_of_internal(*type.array.element, false);
+            return size * type.array.len;
+        } else {
+            return 8;
+        }
+    }
     case CSStruct: {
         // From the standard:
         // Structures and unions assume the alignment of their most strictly aligned component. Each
@@ -313,13 +331,13 @@ size_t c_size_of(CType type) {
         size_t max_align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             CType ftype = type.structure.fields.data[i].val;
-            size_t fsize = c_size_of(ftype);
+            size_t fsize = c_size_of_internal(ftype, true);
             if (fsize == 0) continue; // Skip things that are void, sturctures
                                       // of void, etc.
-            align = c_align_of(ftype);
+            align = c_align_of_internal(ftype, true);
             max_align = max_align > align ? max_align : align;
             size = c_size_align(size, align);
-            size += c_size_of(ftype);
+            size += fsize;
         }
         return c_size_align(size, max_align);
     }
@@ -352,7 +370,11 @@ size_t c_size_of(CType type) {
     panic(mv_string("invalid c size"));
 }
 
-size_t c_align_of(CType type) {
+size_t c_size_of(CType type) {
+    return c_size_of_internal(type, false);
+}
+
+size_t c_align_of_internal(CType type, bool in_composite) {
 #if (ABI == SYSTEM_V_64 || ABI == WIN_64)
 
     // System V ABI
@@ -373,6 +395,13 @@ size_t c_align_of(CType type) {
         // NOTE: seems like you can get 32-bit pointers somehow
         // (ILP32)
         return 8;
+    case CSStaticArray: {
+        if (in_composite) {
+            return c_align_of_internal(*type.array.element, false);
+        } else {
+            return 8;
+        }
+    }
     case CSStruct: {
         // From the standard:
         // Structures and unions assume the alignment of their most strictly aligned component. Each
@@ -383,7 +412,7 @@ size_t c_align_of(CType type) {
         // The contents of any padding is undefined.
         size_t align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            size_t tmp = c_align_of(type.structure.fields.data[i].val);
+            size_t tmp = c_align_of_internal(type.structure.fields.data[i].val, true);
             align = align > tmp ? align : tmp;
         }
         return align;
@@ -392,7 +421,7 @@ size_t c_align_of(CType type) {
         // See struct for details
         size_t align = 0;
         for (size_t i = 0; i < type.cunion.fields.len; i++) {
-            size_t tmp = c_align_of(*(CType*)type.cunion.fields.data[i].val);
+            size_t tmp = c_align_of_internal(*(CType*)type.cunion.fields.data[i].val, true);
             align = align > tmp ? align : tmp;
         }
         return align;
@@ -414,7 +443,11 @@ size_t c_align_of(CType type) {
 #endif
     // TODO (LOGIC BUG): this should be a return result or thrown error,
     // as it may indicate an error in user code, not internal code!
-    panic(mv_string("invalid c size"));
+    panic(mv_string("invalid c align"));
+}
+
+size_t c_align_of(CType type) {
+    return c_align_of_internal(type, false);
 }
 
 // Resource Management
@@ -434,6 +467,9 @@ void delete_c_type(CType t, PiAllocator* pia) {
         }
         sdelete_name_ctype_piamap(t.proc.args);
         delete_c_type_p(t.proc.ret, pia);
+        break;
+    case CSStaticArray:
+        delete_c_type_p(t.array.element, pia);
         break;
     case CSStruct:
         for (size_t i = 0; i < t.structure.fields.len; i++) {
@@ -478,6 +514,10 @@ CType copy_c_type(CType t, PiAllocator* pia) {
             out.proc.args.data[i].val = copy_c_type(t.proc.args.data[i].val, pia);
         }
         out.proc.ret = copy_c_type_p(t.proc.ret, pia);
+        break;
+    case CSStaticArray:
+        out.array.element = copy_c_type_p(t.array.element, pia);
+        out.array.len = t.array.len;
         break;
     case CSStruct:
         out.structure.fields = scopy_name_ctype_piamap(t.structure.fields, pia);
@@ -566,6 +606,16 @@ CType mk_struct_ctype(PiAllocator* pia, size_t nfields, ...) {
     };
 }
 
+CType mk_array_ctype(PiAllocator* a, size_t len, CType val) {
+    CType* elt = call_alloc(sizeof(CType), a);
+    *elt = val;
+    return (CType) {
+        .sort = CSStaticArray,
+        .array.len = len, // None
+        .array.element = elt,
+    };
+}
+
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
 CType mk_enum_ctype(PiAllocator* pia, CPrimInt store, size_t nfields, ...) {
     va_list args;
@@ -606,6 +656,12 @@ CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
         .sort = CSUnion,
         .cunion.fields = fields,
     };
+}
+
+CType mk_option_ctype(PiAllocator* pia, CType val) {
+    return mk_struct_ctype(pia, 2,
+                           "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "value", val);
 }
 
 CType mk_result_ctype(PiAllocator* pia, CType val, CType err) {

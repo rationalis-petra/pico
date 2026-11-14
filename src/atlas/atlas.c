@@ -1,28 +1,37 @@
+#include <string.h>
 #include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/region.h"
 #include "platform/filesystem/filesystem.h"
 
-#include "atlas/atlas.h"
+#include "components/pretty/stream_printer.h"
 
+#include "pico/parse/parse.h"
+#include "rune/analysis/elaboration.h"
+#include "rune/analysis/abstraction.h"
+
+#include "atlas/atlas.h"
 #include "atlas/data/error.h"
 #include "atlas/app/command_line_opts.h"
 #include "atlas/app/help_string.h"
-#include "atlas/parse.h"
 #include "atlas/analysis/abstraction.h"
 #include "atlas/eval/instance.h"
 
-static const char* version = "0.0.1";
+static const char* version = "0.0.2";
 
+static bool load_atlas_script(AtlasInstance* instance, String path, FormattedOStream* out, RegionAllocator* region);
 bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
+    RExprPool* rpool = mk_rexpr_pool(&ra);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
+    bool fail = false;
     bool running = true;
     while (running) {
-        AtParseResult parse_res = parse_atlas_defs(in, region);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {
@@ -33,24 +42,89 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
             display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), filename, &ra);
             goto on_error_generic;
         } else {
-            Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
-            switch (stanza.type) {
-            case StExecutable:
-                add_executable(stanza.executable, path, instance);
-                break;
-            case StLibrary:
-                add_library(stanza.library, path, instance);
+            ExprPool* pool = get_expr_pool(instance);
+            AtAbsCallbackData cb = {
+                .path = path,
+            };
+            Toplevel top = abstract_atlas_toplevel(parse_res.result, cb, rpool, region, &pi_point);
+            switch (top.type) {
+            case TLDef: {
+                Def def = elaborate_rune_def(top.def, rpool, pool, region, &pi_point);
+                RuneEvalResult result = atlas_add_def(instance, def, region);
+                if (result.type != AValue) {
+                    write_doc_formatted(result.error_message, 120, out);
+                    write_fstring(mv_string("\n"), out);
+                    return true;
+                }
                 break;
             }
+            case TLRequire: {
+                for (size_t i = 0; i < top.requires.len; i++) {
+                    String new_path = path_cat(path, top.requires.data[i], &ra);
+                    fail = load_atlas_script(instance, new_path, out, region);
+                }
+                // TODO: load 
+                break;
+            }
+            }
+        if (fail) running = false;
         }
     }
 
-    return false;
+    return fail;
 
  on_pi_error:
     display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
  on_error_generic:
     return true;
+}
+
+static bool load_atlas_script(AtlasInstance* instance, String path, FormattedOStream* out, RegionAllocator* region) {
+    Allocator* stda = get_std_allocator();
+    DirectoryResult dir_res = open_directory(path, stda);
+    if (dir_res.type == Err) {
+        write_fstring(mv_string("Failed to open directory '"), out);
+        write_fstring(path, out);
+        write_fstring(mv_string("' while loading atlas files.\n"), out);
+        return true;
+    }
+
+    Directory* dir = dir_res.directory;
+    DirEntArray entries = list_children(dir, stda);
+
+    bool fail = false;
+    bool found_script = false;
+    for (size_t i = 0; i < entries.len; i++) {
+      DirectoryEntry entry = entries.data[i];
+      // Search through for atlas-project
+      if (string_cmp(entry.name, mv_string("atlas")) == 0) {
+          found_script = true;
+          String newpath = path_cat(path, entry.name, stda);
+          IStream* fstream = open_file_istream(newpath, stda);
+          IStream* captured_fstream = mk_capturing_istream(fstream, stda);
+          RegionAllocator* subregion = make_subregion(region);
+
+          //bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
+          fail = process_atlas(instance, captured_fstream, out, path, entry.name, region);
+
+          release_subregion(subregion);
+          delete_istream(captured_fstream, stda);
+          delete_istream(fstream, stda);
+          mem_free(newpath.bytes, stda);
+          break;
+      }
+    }
+    if (!found_script) {
+        write_fstring(mv_string("Failed find file 'atlas'."), out);
+        return true;
+    }
+
+    for (size_t i = 0; i < entries.len; i++) {
+        mem_free(entries.data[i].name.bytes, stda);
+    }
+    sdelete_dirent_array(entries);
+    close_directory(dir);
+    return fail;
 }
 
 bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
@@ -64,7 +138,8 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
 
     bool running = true;
     while (running) {
-        AtParseResult parse_res = parse_atlas_defs(in, region);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
         if (parse_res.type == ParseNone) {
             running = false;
         } else if (parse_res.type == ParseFail) {
@@ -106,32 +181,19 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     DirectoryResult dir_res = open_directory(path, stda);
     if (dir_res.type == Err) {
         write_fstring(mv_string("Failed to open directory while loading atlas files."), out);
+        return true;
     }
 
     Directory* dir = dir_res.directory;
     DirEntArray entries = list_children(dir, stda);
 
     bool fail = false;
+    bool found_project = false;
     for (size_t i = 0; i < entries.len; i++) {
       DirectoryEntry entry = entries.data[i];
-      // If is a non-hidden directory
-      if (entry.is_directory && (entry.name.memsize > 0 && entry.name.bytes[0] != '.')) {
-          String newpath = path_cat(path, entry.name, stda);
-          fail = load_atlas_files(newpath, out, instance, region);
-          mem_free(newpath.bytes, stda);
-      } else if (string_cmp(entry.name, mv_string("atlas")) == 0) {
-          String newpath = path_cat(path, entry.name, stda);
-          IStream* fstream = open_file_istream(newpath, stda);
-          IStream* captured_fstream = mk_capturing_istream(fstream, stda);
-          RegionAllocator* subregion = make_subregion(region);
-
-          fail = process_atlas(instance, captured_fstream, out, path, newpath, region);
-
-          release_subregion(subregion);
-          delete_istream(captured_fstream, stda);
-          delete_istream(fstream, stda);
-          mem_free(newpath.bytes, stda);
-      } else if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
+      // Search through for atlas-project
+      if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
+          found_project = true;
           String newpath = path_cat(path, entry.name, stda);
           IStream* fstream = open_file_istream(newpath, stda);
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
@@ -143,9 +205,12 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
           delete_istream(captured_fstream, stda);
           delete_istream(fstream, stda);
           mem_free(newpath.bytes, stda);
+          break;
       }
-
-      if (fail) break;
+    }
+    if (!found_project) {
+        write_fstring(mv_string("Failed find file 'atlas-project'. Atlas must be run from a directory containing an 'atlas-project' file."), out);
+        return true;
     }
 
     for (size_t i = 0; i < entries.len; i++) {
@@ -153,11 +218,101 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     }
     sdelete_dirent_array(entries);
     close_directory(dir);
+
+    if (fail) return fail;
+
+
+    Project proj = get_instance_project(instance);
+    fail = load_atlas_script(instance, proj.package.build_file, out, region);
+
     return fail;
+}
+
+bool register_atlas_globals(AtlasInstance* instance, FormattedOStream* out, RegionAllocator* region) {
+    RegionAllocator* subregion = make_subregion(region);
+    Allocator ra = ra_to_gpa(subregion);
+
+    char* types[] = {
+        "(def Library Record [.path Int] [.depends-on Int] [.file Int] [.submodules Int])",
+        "(def Executable Record [.path Int] [.depends-on Int] [.file Int] [.entry-point Int])",
+        "(def Generic Record [.path Int] [.depends-on Int] [.provides Int] [.run Int])",
+        "(def File Record [.path Int] [.name Int])",
+        // Functions
+        "(def pure fn [x] (:pure x))",
+        "(def set-current-directory fn [x] (:set-current-directory x))",
+        "(def create-directory fn [x] (:create-directory x))",
+        "(def record-exists fn [x] (:record-exists x))",
+    };
+    const size_t num_types = sizeof(types) / sizeof(char*);
+
+    size_t i = 0;
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
+    for (i = 0; i < num_types; i++) {
+        reset_subregion(subregion);
+        IStream* in = mv_string_istream(mv_string(types[i]), &ra);
+        PiAllocator pia = convert_to_pallocator(&ra);
+
+        ParseResult parse_res = parse_rune_rawtree(in, &pia, &ra);
+        if (parse_res.type == ParseNone) {
+            continue;
+        } else if (parse_res.type == ParseFail) {
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = parse_res.error,
+            };
+            display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), mv_string("setup"), &ra);
+            goto on_error_generic;
+        }
+
+        ExprPool* pool = get_expr_pool(instance);
+        RExprPool* rpool = mk_rexpr_pool(&ra);
+
+        //RDef abstract_rune_def(RawTree raw, HostCallbackData host_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point) {
+        RDef rdef = abstract_rune_def(parse_res.result, (HostCallbackData){}, rpool, region, &pi_point);
+        Def def = elaborate_rune_def(rdef, rpool, pool, region, &pi_point);
+        RuneEvalResult result = atlas_add_def(instance, def, region);
+        if (result.type != AValue) {
+            write_doc_formatted(result.error_message, 120, out);
+            write_fstring(mv_string("\n"), out);
+            goto on_error_generic;
+        }
+    }
+
+    // Project Root
+    { 
+        ExprPool* pool = get_expr_pool(instance);
+        String cwdir = get_current_directory(&ra);
+        ValueHeap* heap = get_val_heap(instance);
+        ValRef val = mk_rune_string(cwdir.memsize, heap);
+        String rune_cwd = get_rune_string(val);
+        memcpy(rune_cwd.bytes, cwdir.bytes, cwdir.memsize);
+        ExprRef ref = new_expr(pool);
+        set_expr(ref, (Expr){.type = EVal, .value = val}, pool);
+        Def def = {.name = string_to_name(mv_string("project-root")), ref};
+        RuneEvalResult result = atlas_add_def(instance, def, region);
+        if (result.type != AValue) {
+            write_doc_formatted(result.error_message, 120, out);
+            write_fstring(mv_string("\n"), out);
+            goto on_error_generic;
+        }
+    }
+
+    release_subregion(subregion);
+    return true;
+
+ on_pi_error:
+    display_error(pi_point.multi, mv_string(types[i]), out, mv_string("setup"), &ra);
+
+ on_error_generic:
+    release_subregion(subregion);
+    return false;
 }
 
 void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
     AtlasCommand command = atlas_parse_command(args);
+
 
     switch (command.type) {
     case CInit:
@@ -165,40 +320,15 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         write_fstring(command.init.name, out);
         write_fstring(mv_string("\n"), out);
         break;
-    case CBuild: {
-        write_fstring(mv_string("WARNING: Atlas build is currently under development, and is unlikely to produce\n"), out);
-        write_fstring(mv_string("         a functioning executable file.\n"), out);
-        write_fstring(mv_string("\n"), out);
-        Allocator* stda = get_std_allocator();
-        AtlasInstance* instance = make_atlas_instance(stda);
-
-        // TODO: register package ONLY if the atlas project lists 'base' as a dependency 
-        register_package(instance, package);
-
-        RegionAllocator* region = make_region_allocator(4096, true, stda);
-        String cwd = get_current_directory(stda);
-        bool fail = load_atlas_files(cwd, out, instance, region);
-        mem_free(cwd.bytes, stda);
-        AtErrorPoint point;
-        if (catch_error(point)) {
-            Allocator ra = ra_to_gpa(region);
-            display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
-        } else {
-            if (!fail) {
-                atlas_build(instance, command.build.target, region, &point);
-            }
-        }
-        delete_region_allocator(region);
-        delete_atlas_instance(instance);
-
-        break;
-    }
+    case CBuild:
     case CRun: {
         Allocator* stda = get_std_allocator();
+        RegionAllocator* region = make_region_allocator(4096, true, stda);
+
         AtlasInstance* instance = make_atlas_instance(stda);
+        register_atlas_globals(instance, get_formatted_stdout(), region);
         register_package(instance, package);
 
-        RegionAllocator* region = make_region_allocator(4096, true, stda);
         String cwd = get_current_directory(stda);
         bool fail = load_atlas_files(cwd, out, instance, region);
         mem_free(cwd.bytes, stda);
@@ -208,7 +338,30 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
             display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
             if (!fail) {
-                atlas_run(instance, command.run.target, region, &point);
+                bool has_target = false;
+                String target = {};
+                if (command.run.target.type == Some) {
+                    target = command.run.target.val;
+                    has_target = true;
+                } else {
+                    AtlasDefaultTargets defaults = atlas_default_targets(instance);
+                    if (defaults.run.type == Some) {
+                        target = view_name_string(defaults.run.val);
+                        has_target = true;
+                    }
+                }
+
+                if (has_target) {
+                    if (command.type == CBuild) {
+                        atlas_build(instance, target, region, &point);
+                    } else {
+                        atlas_run(instance, target, region, &point);
+                    }
+                } else {
+                    write_fstring(mv_string("Tried to run 'atlas run' without a target or default target.\n"), out);
+                    write_fstring(mv_string("Please either run as 'altas run <target>' or add (default :run <targetname>) to\n"), out);
+                    write_fstring(mv_string("the package in the atlas-project file.\n"), out);
+                }
             }
         }
         delete_region_allocator(region);

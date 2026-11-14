@@ -13,6 +13,26 @@ void run_unary_op_assembler_tests(TestLog *log, Allocator *a) {
     ArenaAllocator* arena = make_arena_allocator(16384, a);
     Allocator gpa = aa_to_gpa(arena);
 
+    /* TODO: fix up pop encoding!
+    if (test_start(log, mv_string("pop-r64"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x59, 0x90 };
+            build_unary_op(Pop, reg(RCX, sz_64), ass, &gpa, &point);
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("pop-[rcx]"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0x8f, 0x41, 0x90 };
+            build_unary_op(Pop, rref8(RCX, 0, sz_64), ass, &gpa, &point);
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+    */
+
     if (test_start(log, mv_string("bswap-r64"))) { // MovSD XMM0, XMM1
         ASM_TEST() {
             uint8_t expected[] = { 0x48, 0x0F, 0xCE, 0x90 };

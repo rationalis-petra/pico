@@ -54,6 +54,9 @@ typedef enum {
     // TODO (Refactor) can probably remove SConstructor?
     SConstructor,
     SVariant,
+    SFlags,
+    SFlagsIntersect,
+    SFlagsEmpty,
     SMatch,
     STile,
     STileElt,
@@ -95,6 +98,7 @@ typedef enum {
     STileType,
     SStructType,
     SEnumType,
+    SFlagsType,
     SResetType,
     SDynamicType,
     SNamedType,
@@ -207,6 +211,18 @@ typedef struct {
     size_t tag;
     SynArray args;
 } SynVariant;
+
+typedef struct {
+    SynArray flags;
+} SynFlags;
+
+typedef struct {
+    SynArray flags;
+} SynFlagsIntersect;
+
+typedef struct {
+    SynRef val;
+} SynFlagsEmpty;
 
 typedef struct {
     Symbol tagname;
@@ -426,6 +442,11 @@ typedef struct {
 } SynEnumType;
 
 typedef struct {
+    uint8_t size;
+    SymbolArray flags;
+} SynFlagsType;
+
+typedef struct {
     SynRef in;
     SynRef out;
 } SynResetType;
@@ -484,6 +505,9 @@ struct Syntax {
         SynUnseal unseal;
         SynConstructor constructor;
         SynVariant variant;
+        SynFlags flags;
+        SynFlagsIntersect flags_intersect;
+        SynFlagsEmpty flags_empty;
         SynMatch match;
         SynMkTile array;
         SynTileElt array_elt;
@@ -520,6 +544,7 @@ struct Syntax {
         SynArrayType array_type;
         SynStructType struct_type;
         SynEnumType enum_type;
+        SynFlagsType flags_type;
         SynResetType reset_type;
         SynRef dynamic_type;
         SynBind bind_type;

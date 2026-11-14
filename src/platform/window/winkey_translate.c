@@ -6,14 +6,16 @@
 #include "platform/window/window.h"
 #include "platform/signals.h"
 
-RawKey keycode_to_rawkey(WPARAM windows_keycode) {
+RawKey keycode_to_rawkey(WPARAM windows_keycode, LPARAM lParam) {
+    DWORD scancode = (lParam >> 16) & 0xFF;
+
     switch (windows_keycode) {
     case VK_BACK:
         return RKEY_BACKSPACE;
     case VK_RETURN:
         return RKEY_ENTER;
     case VK_SHIFT:
-        return RKEY_SHIFT;
+        return (scancode == 0x36) ? RKEY_RSHIFT : RKEY_LSHIFT;
     case VK_SPACE:
         return RKEY_SPACE;
     case 0x30:
@@ -213,7 +215,8 @@ WPARAM rawkey_to_keycode(RawKey rawkey) {
     case RKEY_SPACE:
         return VK_SPACE;
 
-    case RKEY_SHIFT:
+    case RKEY_RSHIFT:
+    case RKEY_LSHIFT:
         return VK_SHIFT;
     case RKEY_BACKSPACE:
         return VK_BACK;
@@ -406,7 +409,8 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
       switch (key) {
       case RKEY_BACKSPACE:
           return PKEY_BACKSPACE;
-      case RKEY_SHIFT:
+      case RKEY_LSHIFT:
+      case RKEY_RSHIFT:
           return PKEY_SHIFT;
       case RKEY_ENTER:
           return PKEY_ENTER;

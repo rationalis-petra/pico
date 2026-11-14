@@ -10,13 +10,23 @@
 //   + parse_sybol - for symbols, is called by parse_atom
 // + numbers - for decimal or floating-point numbers
 
-static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
-static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
-static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a);
+typedef enum : uint8_t {
+    Relic, Rune
+} TargetLang;
+
+typedef struct {
+    TargetLang target;
+    PiAllocator *pia;
+    Allocator* a;
+} ParseContext;
+
+static ParseResult parse_expr(IStream* is, uint32_t expected, ParseContext ctx);
+static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, ParseContext ctx);
+static ParseResult parse_atom(IStream* is, ParseContext ctx);
+static ParseResult parse_number(uint8_t base, IStream* is, ParseContext ctx);
+static ParseResult parse_string(IStream* is, ParseContext ctx);
+static ParseResult parse_rawstring(IStream* is, ParseContext ctx);
+static ParseResult parse_hash(IStream* is, ParseContext ctx);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -28,10 +38,26 @@ bool is_symchar(uint32_t codepoint);
 bool is_special_char(uint32_t codepoint);
 
 ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
-    return parse_expr(is, '\0', pia, a);
+    ParseContext ctx = {
+        .target = Relic,
+        .pia = pia,
+        .a = a,
+    };
+    return parse_expr(is, '\0', ctx);
 }
 
-ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a) {
+ParseResult parse_rune_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
+    ParseContext ctx = {
+        .target = Rune,
+        .pia = pia,
+        .a = a,
+    };
+    return parse_expr(is, '\0', ctx);
+}
+
+ParseResult parse_expr(IStream* is, uint32_t expected, ParseContext ctx) {
+    PiAllocator* pia = ctx.pia;
+    Allocator* a = ctx.a;
     // default if we never enter loop body 
     ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
@@ -45,17 +71,17 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         switch (peek(is, &point)) {
         case StreamSuccess:
             if (point == '(') {
-                out = parse_list(is, ')', HExpression, pia, a);
+                out = parse_list(is, ')', HExpression, ctx);
             }
             else if (point == '[') {
-                out = parse_list(is, ']', HSpecial, pia, a);
+                out = parse_list(is, ']', HSpecial, ctx);
             }
             else if (point == '{') {
-                out = parse_list(is, '}', HImplicit, pia, a);
+                out = parse_list(is, '}', HImplicit, ctx);
             }
             //  0x27E8 = ⟨, 0x27E9 = ⟩
             else if (point == 0x27E8) {
-                out = parse_list(is, 0x27E9, HData, pia, a);
+                out = parse_list(is, 0x27E9, HData, ctx);
             }
             else if ((point == ':') | (point == '.') | (point == '^')) {
                 size_t start = bytecount(is);
@@ -76,16 +102,16 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 };
             }
             else if (point == '"') {
-                out = parse_string(is, pia, a);
+                out = parse_string(is, ctx);
             }
             else if (point == '~') {
-                out = parse_rawstring(is, pia, a);
+                out = parse_rawstring(is, ctx);
             }
             else if (point == '#') {
-                out = parse_hash(is, pia, a);
+                out = parse_hash(is, ctx);
             }
             else if (is_numchar(point, 10) || point == '-') {
-                out = parse_number(10, is, pia, a);
+                out = parse_number(10, is, ctx);
             }
             else if (is_whitespace(point) || is_comment_start(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -96,7 +122,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 break;
             }
             else if (is_symchar(point)) {
-                out = parse_atom(is, pia, a);
+                out = parse_atom(is, ctx);
             } else if (point == expected) {
                 // We couldn't do a parse!
                 out.type = ParseNone;
@@ -253,7 +279,9 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
     return out;
 }
 
-ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a) {
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, ParseContext ctx) {
+    PiAllocator* pia = ctx.pia;
+    Allocator* a = ctx.a;
     ParseResult res;
     res.type = ParseSuccess;
     ParseResult out;
@@ -267,7 +295,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllo
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_expr(is, terminator, pia, a);
+        res = parse_expr(is, terminator, ctx);
 
         if (res.type == ParseFail) {
             out = res;
@@ -310,15 +338,15 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllo
     return out;
 }
 
-static ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, ParseContext ctx);
 
-ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
-    U32Array symchars = mk_u32_array(16, a);
+ParseResult parse_atom(IStream* is, ParseContext ctx) {
+    U32Array symchars = mk_u32_array(16, ctx.a);
     size_t start = bytecount(is);
-    return parse_atom_prepped(symchars, start, is, pia, a);
+    return parse_atom_prepped(symchars, start, is, ctx);
 }
 
-ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, ParseContext ctx) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
      * and ':' such as Maybe:none and foo.var are also considered by the parser
@@ -327,6 +355,8 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
      * 
      * The general approach is as follows:
      */
+    PiAllocator* pia = ctx.pia;
+    Allocator* a = ctx.a;
     uint32_t codepoint;
     StreamResult result;
     ParseResult out = {.type = ParseNone};
@@ -410,7 +440,8 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
     return out;
 }
 
-ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_number(uint8_t base, IStream* is, ParseContext ctx) {
+    Allocator* a = ctx.a;
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -471,7 +502,7 @@ ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator*
         } else {
             U32Array symchars = mk_u32_array(16, a);
             push_u32('-', &symchars);
-            return parse_atom_prepped(symchars, start, is, pia, a);
+            return parse_atom_prepped(symchars, start, is, ctx);
         }
     }
 
@@ -556,14 +587,19 @@ ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator*
     }
 }
 
-ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_string(IStream* is, ParseContext ctx) {
+    Allocator* a = ctx.a;
+    PiAllocator* pia = ctx.pia;
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
     size_t start = bytecount(is);
     next(is, &codepoint); // consume token (")
 
+    RawTreePiList nodes = {};
+
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
+        // Case 1: Escape characters
         if (codepoint == '\\') {
             next(is, &codepoint);
             size_t escape_start = bytecount(is);
@@ -591,6 +627,44 @@ ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a) {
                 };
             }
         }
+        // Case 2: Embedded expressions (Rune only)
+        //   for example: "2 + 2 is ~(2 + 2)" 
+        if (codepoint == '~' && ctx.target == Rune) {
+          size_t str_end = bytecount(is);
+          next(is, &codepoint);
+          if ((result = peek(is, &codepoint)) != StreamSuccess)
+            break;
+          if (codepoint == '(') {
+            if (nodes.len == 0) {
+              nodes = mk_rawtree_list(8, pia);
+              RawTree str = {
+                .type = RawAtom,
+                .range.start = start,
+                .range.end = str_end,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(mv_string("join")),
+              };
+              push_rawtree(str, &nodes);
+            }
+            ParseResult res = parse_list(is, ')', HExpression, ctx);
+            if (res.type != ParseSuccess) return res;
+            RawTree str = {
+              .type = RawAtom,
+              .range.start = start,
+              .range.end = str_end,
+              .atom.type = AString,
+              .atom.string = string_from_UTF_32(arr, a),
+            };
+            arr.len = 0;
+            start = bytecount(is);
+            push_rawtree(str, &nodes);
+            push_rawtree(res.result, &nodes);
+            continue;
+          }
+          push_u32('~', &arr);
+          continue;
+        }
+
         push_u32(codepoint, &arr);
         next(is, &codepoint);
     }
@@ -604,18 +678,40 @@ ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a) {
         };
     }
 
-    next(is, &codepoint); // consume token (")
-    return (ParseResult) {
+    next(is, &codepoint); // consume token "
+    if (nodes.len == 0) {
+      return (ParseResult) {
         .type = ParseSuccess,
         .result.type = RawAtom,
         .result.range.start = start,
         .result.range.end = bytecount(is),
         .result.atom.type = AString,
         .result.atom.string = string_from_UTF_32(arr, a),
-    };
+      };
+    } else {
+      if (arr.len != 0) {
+        RawTree string_end = {
+          .type = RawAtom,
+          .range.start = start,
+          .range.end = bytecount(is),
+          .atom.type = AString,
+          .atom.string = string_from_UTF_32(arr, a),
+        };
+        push_rawtree(string_end, &nodes);
+      }
+      return (ParseResult) {
+        .type = ParseSuccess,
+        .result.type = RawBranch,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
+        .result.branch.hint = HExpression,
+        .result.branch.nodes = nodes,
+      };
+    }
 }
 
-ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_rawstring(IStream* is, ParseContext ctx) {
+    Allocator* a = ctx.a;
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
@@ -666,7 +762,8 @@ ParseResult build_char_lit(int64_t codepoint, Range range) {
     };
 }
 
-ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_hash(IStream* is, ParseContext ctx) {
+    Allocator* a = ctx.a;
     StreamResult result;
     uint32_t codepoint;
     size_t start = bytecount(is);
@@ -694,11 +791,11 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
         next(is, &codepoint); // Consume '_'
         switch (char_lit) {
         case 'b':
-            return parse_number(2, is, pia, a);
+            return parse_number(2, is, ctx);
         case 'o':
-            return parse_number(8, is, pia, a);
+            return parse_number(8, is, ctx);
         case 'x':
-            return parse_number(16, is, pia, a);
+            return parse_number(16, is, ctx);
         default:
             return (ParseResult) {
                 .type = ParseFail,

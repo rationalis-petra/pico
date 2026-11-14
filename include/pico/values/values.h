@@ -3,21 +3,28 @@
 
 #include <stdint.h>
 
+#include "data/meta/slice_header.h"
 #include "data/array.h"
 #include "data/string.h"
+#include "data/option.h"
 #include "components/pretty/document.h"
 
 typedef uint64_t Name;
 typedef U64Array NameArray;
+SLICE_TYPE(Name, Name)
 #define mk_name_array(sz, alloc) mk_u64_array(sz, alloc)
 #define push_name(name, arr) push_u64(name, arr)
 #define scopy_name_array(arr, alloc) scopy_u64_array(arr, alloc)
 #define sdelete_name_array(arr) sdelete_u64_array(arr)
+#define find_name(name, arr) find_u64(name, arr)
 
 typedef struct {
     Name name;
     uint64_t did;
 } Symbol;
+
+OPTION_TYPE(Name, Name);
+bool name_option_eq(NameOption lhs, NameOption rhs);
 
 // Forward declarations of environment.h (to avoid circular includes!)
 typedef struct env_capture env_capture;
@@ -84,6 +91,9 @@ typedef enum TermFormer {
     FStructure,
     FProjector,
     FVariant,
+    FFlags,
+    FFlagsIntersect,
+    FFlagsEmpty,
     FMatch,
     FInstance,
 
@@ -123,6 +133,7 @@ typedef enum TermFormer {
     FProcType,
     FStructType,
     FEnumType,
+    FFlagsType,
     FResetType,
     FDynamicType,
     FNamedType,

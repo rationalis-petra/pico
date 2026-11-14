@@ -15,11 +15,17 @@ struct PlWindow {};
 
 Display* get_x11_display();
 
+typedef struct {
+    bool claimed_by_hedron;
+    bool claimed_by_cpu;
+} WindowRenderData;
+
 struct PlWindow {
     Window x11_window;
-
     uint32_t width;
     uint32_t height;
+
+    WindowRenderData render;
 
     // Internal state (used by us!)
     bool should_close;
@@ -30,20 +36,38 @@ struct PlWindow {
 
 struct wl_display* get_wl_display();
 
+typedef struct {
+    struct wl_buffer* wl_buf;
+    uint32_t* pixels;
+    size_t memsize;
+    size_t width;
+    size_t height;
+    bool busy;
+    int fd;
+} WinBuffer;
+
+typedef struct {
+    bool claimed_by_hedron;
+    bool claimed_by_cpu;
+    uint32_t current_buffer;
+    WinBuffer buffers[2];
+} WindowRenderData;
+
 struct PlWindow {
     struct wl_surface* surface; // Window surface (from compositor)
-    struct wl_buffer* buffer; // control/access to shared memory buffer
     struct xdg_toplevel* toplevel; // This represents the window, and allows us
                                    // to do things like interact with header
                                    // bars (if they exist) etc.
     struct xdg_surface* xdg_surface; // ??
-    uint8_t* pixles; // pointer to the shared memory (pixels)
 
     String name;
     uint32_t width;
     uint32_t height;
 
+    WindowRenderData render;
+
     // Internal state (used by us!)
+    bool configured;
     bool should_close;
     WinMessageArray messages;
 };
@@ -52,6 +76,13 @@ struct PlWindow {
 
 #include <windows.h>
 
+typedef struct {
+    bool claimed_by_hedron;
+    bool claimed_by_cpu;
+    uint32_t* pixels;
+    size_t memsize;
+} WindowRenderData;
+
 struct PlWindow {
     HWND impl;
     bool should_close;
@@ -59,6 +90,8 @@ struct PlWindow {
 
     uint32_t width;
     uint32_t height;
+
+    WindowRenderData render;
 };
 
 #else

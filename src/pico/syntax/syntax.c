@@ -114,6 +114,12 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("<constructor>");
     case SVariant:
         return mv_string("<variant>");
+    case SFlags:
+        return mv_string("<flags>");
+    case SFlagsIntersect:
+        return mv_string("<flags-intersect>");
+    case SFlagsEmpty:
+        return mv_string("<flags-empty?>");
     case SMatch:
         return mv_string("match");
     case STile:
@@ -190,6 +196,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("Struct");
     case SEnumType:
         return mv_string("Enum");
+    case SFlagsType:
+        return mv_string("Flags");
     case SResetType:
         return mv_string("Reset");
     case SDynamicType:
@@ -492,6 +500,33 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         } else {
             out = mv_sep_doc(nodes, a);
         }
+        break;
+    }
+    case SFlags: {
+        PtrArray nodes = mk_ptr_array(syntax.flags.flags.len, a);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("flags", a), a), &nodes);
+        for (size_t i = 0; i < syntax.flags.flags.len; i++) {
+            SynRef inner = syntax.flags.flags.data[i];
+            push_ptr(pretty_syntax_internal(inner, tape, ctx, a), &nodes);
+        }
+        out = mk_paren_doc("(", ")",  mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SFlagsIntersect: {
+        PtrArray nodes = mk_ptr_array(syntax.flags_intersect.flags.len, a);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("flags-intersect", a), a), &nodes);
+        for (size_t i = 0; i < syntax.flags_intersect.flags.len; i++) {
+            SynRef inner = syntax.flags_intersect.flags.data[i];
+            push_ptr(pretty_syntax_internal(inner, tape, ctx, a), &nodes);
+        }
+        out = mk_paren_doc("(", ")",  mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SFlagsEmpty: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("flags-empty?", a), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax.flags_empty.val, tape, ctx, a), &nodes);
+        out = mk_paren_doc("(", ")",  mv_sep_doc(nodes, a), a);
         break;
     }
     case SMatch: {
@@ -1055,25 +1090,34 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
+    case SFlagsType: {
+        PtrArray nodes = mk_ptr_array(syntax.flags_type.flags.len, a) ;
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("Flags", a), a), &nodes);
+        push_ptr(pretty_u8(syntax.flags_type.size, a), &nodes);
+        for (size_t i = 0; i < syntax.flags_type.flags.len; i++) {
+            push_ptr(mk_str_doc(view_symbol_string(syntax.flags_type.flags.data[i]), a), &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case SResetType: {
-        PtrArray nodes = mk_ptr_array(4, a) ;
-        push_ptr(mv_str_doc(mk_string("(Reset ", a), a), &nodes);
+        PtrArray nodes = mk_ptr_array(3, a) ;
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("Reset", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.reset_type.in, tape, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.reset_type.out, tape, ctx, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SDynamicType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
-        push_ptr(mk_str_doc(mv_string("Dynamic"), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("Dynamic", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.dynamic_type, tape, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SNamedType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
-        push_ptr(mk_str_doc(mv_string("Named"), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("Named", a), a), &nodes);
         push_ptr(mk_str_doc(symbol_to_string(syntax.named_type.name, a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.named_type.body, tape, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
@@ -1081,7 +1125,7 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     }
     case SDistinctType: {
         PtrArray nodes = mk_ptr_array(4, a) ;
-        push_ptr(mk_str_doc(mv_string("Distinct"), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("Distinct", a), a), &nodes);
         push_ptr(mk_str_doc(view_symbol_string(syntax.distinct_type.name), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.distinct_type.body, tape, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);

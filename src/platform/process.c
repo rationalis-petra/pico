@@ -12,26 +12,27 @@
 #include <sys/wait.h>
 #include <spawn.h>
 
-ProcessResult create_process(String command, StringArray args) {
+ProcessResult create_process(String command, StringSlice args) {
     Allocator* a = get_std_allocator();
     pid_t pid;
     char* c_command = to_c_string(command, a);
-    char** c_args = mem_alloc(sizeof(char*) * (args.len + 1), a);
+    char** c_args = mem_alloc(sizeof(char*) * (args.len + 2), a);
+    c_args[0] = c_command;
     for (size_t i = 0; i < args.len; i++) {
-        c_args[i] = to_c_string(args.data[i], a);
+        c_args[i + 1] = to_c_string(args.data[i], a);
     }
-    c_args[args.len] = NULL;
+    c_args[args.len + 1] = NULL;
     // TODO (DESIGN): The 'p' means that spawn will search 'path' (as opposed to
     //                being) absolute only.
     int status = posix_spawnp(&pid, c_command, NULL, NULL, c_args, environ);
     for (size_t i = 0; i < args.len; i++) {
-        mem_free(c_args[i], a);
+        mem_free(c_args[i + 1], a);
     }
     mem_free(c_args, a);
     mem_free(c_command, a);
 
     if (status == 0) {
-        return (ProcessResult) {.result = Ok, .process = {.id = pid}};
+        return (ProcessResult) {.type = Ok, .process = {.id = pid}};
     } else  {
         SpawnError err;
         switch (status) {
@@ -50,7 +51,60 @@ ProcessResult create_process(String command, StringArray args) {
         default:
             panic(mv_string("unrecognized errno in create_process"));
         }
-        return (ProcessResult) {.result = Err, .error = err};
+        return (ProcessResult) {.type = Err, .error = err};
+    }
+
+}
+
+ProcessResult create_process_in(String command, StringSlice args, String directory) {
+    Allocator* a = get_std_allocator();
+    pid_t pid;
+    char* c_command = to_c_string(command, a);
+    char* c_directory = to_c_string(directory, a);
+    char** c_args = mem_alloc(sizeof(char*) * (args.len + 2), a);
+    c_args[0] = c_command;
+    for (size_t i = 0; i < args.len; i++) {
+        c_args[i + 1] = to_c_string(args.data[i], a);
+    }
+    c_args[args.len + 1] = NULL;
+    // TODO (DESIGN): The 'p' means that spawn will search 'path' (as opposed to
+    //                being) absolute only.
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    int status = posix_spawn_file_actions_addchdir_np(&actions, c_directory);
+    if (status == 0) {
+        status = posix_spawnp(&pid, c_command, &actions, NULL, c_args, environ);
+    }
+    posix_spawn_file_actions_destroy(&actions);
+    for (size_t i = 0; i < args.len; i++) {
+        mem_free(c_args[i + 1], a);
+    }
+    mem_free(c_args, a);
+    mem_free(c_directory, a);
+    mem_free(c_command, a);
+
+    if (status == 0) {
+        return (ProcessResult) {.type = Ok, .process = {.id = pid}};
+    } else  {
+        SpawnError err;
+        switch (status) {
+        case ENOENT:
+            err = SPExecNotExists;
+            break;
+        case EAGAIN:
+            err = SpNoMemory;
+            break;
+        case ENOMEM:
+            err = SpNoMemory;
+            break;
+        case ENOSYS:
+            err = SpNotSupported;
+            break;
+        default:
+            // Note: error may have been from swapn_file_actions_destory;
+            panic(mv_string("unrecognized errno in create_process_in"));
+        }
+        return (ProcessResult) {.type = Err, .error = err};
     }
 
 }
@@ -59,13 +113,13 @@ WaitResult wait_on_process(Process process) {
     int status;
     int result = waitpid(process.id, &status, 0);
     if (result == -1) {
-        return (WaitResult) {.result = Err, .status = 0};
+        return (WaitResult) {.type = Err, .status = 0};
     }
     // 2. Inspect the status AFTER waitpid populates 'status'
     if (WIFEXITED(status)) {
         int exit_code = WEXITSTATUS(status);
         // Process exited normally with exit_code
-        return (WaitResult) {.result = Ok, .status = exit_code};
+        return (WaitResult) {.type = Ok, .status = exit_code};
     }
     // See https://www.man7.org/linux/man-pages/man2/wait.2.html
     panic(mv_string("TODO: finish wait_on_process"));
@@ -84,7 +138,7 @@ Result_t kill_process(Process process) {
 #elif OS_FAMILY == WINDOWS
 #include <windows.h>
 
-ProcessResult create_process(String command, StringArray args) {
+ProcessResult create_process(String command, StringSlice args) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
     Allocator* a = get_std_allocator();
@@ -127,7 +181,56 @@ ProcessResult create_process(String command, StringArray args) {
     // Close thread handle
     CloseHandle( pi.hThread );
 
-    return (ProcessResult) {.result = Ok, .process = {.handle = pi.hProcess}};
+    return (ProcessResult) {.type = Ok, .process = {.handle = pi.hProcess}};
+}
+
+ProcessResult create_process_in(String command, StringSlice args, String directory) {
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    Allocator* a = get_std_allocator();
+    size_t total_memsize = command.memsize + 1;
+    for (size_t i = 0; i < args.len; i++) {
+        total_memsize += args.data[i].memsize + 1;
+    }
+    char* c_command = mem_alloc(total_memsize, a);
+    char* c_directory = to_c_string(directory, a);
+    memcpy(c_command, command.bytes, command.memsize);
+    c_command[command.memsize] = ' ';
+    size_t offset = command.memsize + 1;
+    // TODO (BUG): do proper sanitization of inputs (adding quotes to arugments etc.)
+    for (size_t i = 0; i < args.len; i++) {
+        memcpy(c_command + offset, args.data[i].bytes, args.data[i].memsize);
+        c_command[offset + args.data[i].memsize] = ' ';
+        offset += args.data[i].memsize + 1;
+    }
+    c_command[offset - 1] = '\0';
+
+    ZeroMemory( &si, sizeof(si) );
+    si.cb = sizeof(si);
+    ZeroMemory( &pi, sizeof(pi) );
+
+    // Start the child process. 
+    if( !CreateProcess( NULL,   // No module name (use command line)
+        c_command,      // Command line
+        NULL,           // Process handle not inheritable
+        NULL,           // Thread handle not inheritable
+        FALSE,          // Set handle inheritance to FALSE
+        0,              // No creation flags
+        NULL,           // Use parent's environment block
+        c_directory,    // Use the caller-provided working directory
+        &si,            // Pointer to STARTUPINFO structure
+        &pi )           // Pointer to PROCESS_INFORMATION structure
+    ) 
+    {
+        mem_free(c_directory, a);
+        panic(mv_string("TODO: add proper error checks to process creation on windows"));
+    }
+
+    // Close thread handle
+    CloseHandle( pi.hThread );
+    mem_free(c_directory, a);
+
+    return (ProcessResult) {.type = Ok, .process = {.handle = pi.hProcess}};
 }
 
 WaitResult wait_on_process(Process process) {
@@ -135,9 +238,9 @@ WaitResult wait_on_process(Process process) {
     CloseHandle( process.handle ); // TODO: where to insert handle closing?? make a part of the API?
     DWORD exit_code;
     if (GetExitCodeProcess(process.handle, &exit_code)) {
-        return (WaitResult) {.result = Err, .status = 0};
+        return (WaitResult) {.type = Err, .status = 0};
     } else {
-        return (WaitResult) {.result = Ok, .status = exit_code};
+        return (WaitResult) {.type = Ok, .status = exit_code};
     }
 
 }

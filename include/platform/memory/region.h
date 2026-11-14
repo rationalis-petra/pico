@@ -15,7 +15,7 @@ typedef struct RegionAllocator RegionAllocator;
  */
 RegionAllocator* make_region_allocator(size_t initial_regionsize, bool dynamic_regionsize, Allocator* a);
 
-void* region_alloc(RegionAllocator* a, size_t memsize);
+void* region_alloc(size_t memsize, RegionAllocator* a);
 
 RegionAllocator* make_subregion(RegionAllocator* a);
 

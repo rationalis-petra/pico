@@ -4,16 +4,36 @@
 #include "platform/memory/region.h"
 
 #include "pico/data/error.h"
-#include "atlas/syntax/concrete.h"
-#include "atlas/syntax/stanza.h"
+#include "pico/data/string_array.h"
+#include "pico/syntax/concrete.h"
 #include "atlas/syntax/project.h"
+#include "rune/syntax/rich_expr.h"
 
 typedef enum : uint64_t {
     Left, Right
 } MResult_t;
 
-Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point);
+typedef struct {
+    String path;
+    ValRef target_type;
+    ValRef lib_type;
+    ValRef exec_type;
+    ValRef generic_type;
 
-void abstract_atlas_project(Project* project, ProjectRecord* record, RawAtlas raw, RegionAllocator* region, PiErrorPoint* point);
+    ValRef dependency_type;
+} AtAbsCallbackData;
+
+typedef enum {TLDef, TLRequire} ToplevelType;
+typedef struct {
+    ToplevelType type;
+    union {
+        RDef def;
+        StringArray requires;
+    };
+} Toplevel;
+
+Toplevel abstract_atlas_toplevel(RawTree raw, AtAbsCallbackData cb_data, RExprPool* pool, RegionAllocator* region, PiErrorPoint* point);
+
+void abstract_atlas_project(Project* project, ProjectRecord* record, RawTree raw, RegionAllocator* region, PiErrorPoint* point);
 
 #endif

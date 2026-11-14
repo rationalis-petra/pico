@@ -34,10 +34,5 @@ typedef struct {
 TopLevel abstract(RawTree raw, AbstractionCtx ctx);
 SynRef abstract_expr(RawTree raw, AbstractionCtx ctx);
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point);
-RawTree* raw_slice(RawTree* raw, size_t drop, PiAllocator* pia);
-
-// Helper functions for implementing macros (also used in the standard library)
-bool eq_symbol(RawTree* raw, Symbol s);
-bool is_symbol(RawTree raw);
 
 #endif
