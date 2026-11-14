@@ -12,22 +12,9 @@
 #include "rune/eval/eval.h"
 #include "atlas/data/error.h"
 
-typedef enum {
-    DepSubmoduleFile,
-    DepExternalFile,
-    DepTarget,
-} DependencyType;
-
 typedef struct {uint64_t ref;} TargetRef;
 
-typedef struct {
-    DependencyType type;
-    union {
-        String filename;
-        TargetRef target;
-    };
-} Dependency;
-ARRAY_HEADER(Dependency, dep, Dependency)
+ARRAY_HEADER(TargetRef, dep, Dependency)
 
 typedef enum {
     TPico,

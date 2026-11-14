@@ -39,7 +39,7 @@
         }, \
     }; \
 
-ARRAY_COMMON_IMPL(Dependency, dep, Dependency);
+ARRAY_COMMON_IMPL(TargetRef, dep, Dependency);
 
 typedef struct TargetCell TargetCell;
 struct TargetCell { 
@@ -141,17 +141,8 @@ static uint64_t hash_string_slice(StringSlice arr, uint64_t hash) {
 
 static uint64_t hash_dependency_array(DependencyArray arr, uint64_t hash) {
     for (size_t i = 0; i < arr.len; i++) {
-        Dependency dep = arr.data[i]; 
-        hash = hash_num(dep.type, hash);
-        switch (dep.type) {
-        case DepSubmoduleFile:
-        case DepExternalFile:
-            hash = hash_string(dep.filename, hash);
-            break;
-        case DepTarget:
-            hash = hash_num(dep.target.ref, hash);
-            break;
-        }
+        TargetRef dep = arr.data[i]; 
+        hash = hash_num(dep.ref, hash);
     }
     return hash;
 }
@@ -224,16 +215,9 @@ uint64_t hash_target(AtlasTarget target) {
 bool dep_array_eq(DependencyArray lhs, DependencyArray rhs) {
   if (lhs.len != rhs.len) return false;
   for (size_t i = 0; i < lhs.len; i++)  {
-    Dependency lhd = lhs.data[i];
-    Dependency rhd = rhs.data[i];
-    if (lhd.type != rhd.type) return false;
-    switch (lhd.type) {
-    case DepSubmoduleFile:
-    case DepExternalFile:
-      return string_eq(lhd.filename, rhd.filename);
-    case DepTarget:
-      return lhd.target.ref == rhd.target.ref;
-    }
+    TargetRef lhd = lhs.data[i];
+    TargetRef rhd = rhs.data[i];
+    return lhd.ref == rhd.ref;
   }
   return false;
 }
@@ -423,11 +407,7 @@ static AtlasTarget rune_to_atlas(RuneTarget target, Allocator* a);
 static DependencyArray convert_dependency_list(DependencyList list, Allocator* a) {
     DependencyArray deps = mk_dep_array(list.len, a);
     for (size_t i = 0; i < list.len; i++) {
-        Dependency dep = {
-            .type = DepTarget,
-            .target = list.data[i],
-        };
-        push_dep(dep, &deps);
+        push_dep(list.data[i], &deps);
     }
     return deps;
 }

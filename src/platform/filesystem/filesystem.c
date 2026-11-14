@@ -51,6 +51,14 @@ String error_description(RecordError err) {
 //     Paths 
 // ---------------------------------------------------------------------------
 
+bool is_absolute_path(String str) {
+#if OS_FAMILY == WINDOWS
+    panic(mv_string("TODO: is_absolude_path for windows"));
+#else
+    return str.memsize > 0 && str.bytes[0] == '/'; 
+#endif
+}
+
 String path_cat(String path1, String path2, Allocator *alloc){
 #if OS_FAMILY == WINDOWS
     return string_ncat(alloc, 3, path1, mv_string("\\"), path2);
@@ -498,6 +506,14 @@ RecordResult delete_file(String path) {
 #endif
 }
 
+int fstime_comp(FSTime lhs, FSTime rhs) {
+    if (lhs.epoch_sec != rhs.epoch_sec) {
+        return lhs.epoch_sec - rhs.epoch_sec;
+    } else {
+        return lhs.epoch_ns - rhs.epoch_ns;
+    }
+}
+
 RecordResult set_permissions(String file, FilePermissions perms) {
 #if OS_FAMILY == UNIX
     RecordResult res = {.type = Ok};
@@ -720,19 +736,35 @@ RecordInfo record_info(String path) {
       return (RecordInfo){.type = RINotExists};
   }
 
+  RecordInfo out = {};
   switch (record_stat.st_mode & S_IFMT) {
   case S_IFDIR:
-      return (RecordInfo) {
+      out = (RecordInfo) {
           .type = RIDirectory,
       };
+      break;
   case S_IFREG:
-      return (RecordInfo) {
+      out = (RecordInfo) {
           .type = RIFile,
           .file.file_size = record_stat.st_size,
       };
+      break;
   default:
       // TODO: handle remaining modes...
       panic(mv_string("not able to handle this st_mode yet!"));
   }
+  out.read_time = (FSTime) {
+      .epoch_sec = record_stat.st_atim.tv_sec,
+      .epoch_ns = record_stat.st_atim.tv_nsec,
+  };
+  out.modification_time = (FSTime) {
+      .epoch_sec = record_stat.st_mtim.tv_sec,
+      .epoch_ns = record_stat.st_mtim.tv_nsec,
+  };
+  out.change_time = (FSTime) {
+      .epoch_sec = record_stat.st_ctim.tv_sec,
+      .epoch_ns = record_stat.st_ctim.tv_nsec,
+  };
+  return out;
 #endif
 }

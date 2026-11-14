@@ -614,19 +614,8 @@ Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, Target
     Module* out = NULL;
     // First, load all dependencies
     for (size_t i = 0; i < target.target_dependencies.len; i++) {
-        Dependency dep = target.target_dependencies.data[i];
-        switch (dep.type) {
-        case DepSubmoduleFile:
-            // Skip; will be loaded by atlas_load_file (below)
-            break;
-        case DepExternalFile:
-            // Skip; TODO: check that this doesn't itself invoke any targets,
-            // check file exists.
-            break;
-        case DepTarget:
-            atlas_load_target(instance, package, dep.target, region, point);
-            break;
-        }
+        TargetRef dep = target.target_dependencies.data[i];
+        atlas_load_target(instance, package, dep, region, point);
     }
 
     if (target.filename.type == Some) {
@@ -740,28 +729,51 @@ static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, Regio
 }
 
 void atlas_load_generic_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    Allocator a = ra_to_gpa(region);
     GenericTarget target = deref_target(ref, instance->map).generic;
 
+    FSTime last_mod = {}; 
     for (size_t i = 0; i < target.target_dependencies.len; i++) {
-        Dependency dep = target.target_dependencies.data[i];
-        switch (dep.type) {
-        case DepSubmoduleFile:
-            // Skip; will be loaded by atlas_load_file (below)
+        TargetRef dep = target.target_dependencies.data[i];
+        atlas_load_target(instance, package, dep, region, point);
+
+        AtlasTarget dep_target = deref_target(dep, instance->map);
+        switch (dep_target.type) {
+        case TGeneric:
+            // TODO: file output?
             break;
-        case DepExternalFile:
-            // Skip; TODO: check that this doesn't itself invoke any targets,
-            // check file exists.
+        case TPico:
             break;
-        case DepTarget:
-            atlas_load_target(instance, package, dep.target, region, point);
+        case TFile: {
+            String path = path_cat(dep_target.file.path, dep_target.file.name, &a);
+            RecordInfo info = record_info(path);
+            if (fstime_comp(info.modification_time, last_mod) > 0) {
+                last_mod = info.modification_time;
+            }
             break;
+        }
         }
     }
 
-    RunState state = {
-        .current_dir = target.path,
-    };
-    run_monad(target.monad, &state, instance, region, point);
+    bool can_skip = false;
+    for (size_t i = 0; i < target.provides.len; i++) {
+        String provided = target.provides.data[i];
+        if (!is_absolute_path(provided)) {
+            provided = path_cat(target.path, provided, &a);
+        }
+        // Get the files produced by this target: the target can be skipped ONLY
+        RecordInfo info = record_info(provided);
+        if (fstime_comp(info.modification_time, last_mod) > 0) {
+            can_skip = true;
+        }
+    }
+
+    if (!can_skip) {
+        RunState state = {
+            .current_dir = target.path,
+        };
+        run_monad(target.monad, &state, instance, region, point);
+    }
 }
 
 void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
