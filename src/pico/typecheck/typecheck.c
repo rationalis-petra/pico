@@ -157,18 +157,44 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         .logger = ctx.logger,
     };
 
-    if (type->sort == TProc && untyped.type == SProcedure) {
-        if (untyped.procedure.implicits.len != type->proc.implicits.len) {
+    // Case 1: Eliminator expressions. Unlike constructors, these expressions
+    //   have no matching type. This means that we simply propagate constraints
+    //   inward. If the match is successful then we return, not progressing to
+    //   case 2.
+    switch (untyped.type) {
+    case SIf: {
+      PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+      *t = (PiType) {.sort = TPrim,.prim = Bool};
+      type_check_i(untyped.if_expr.condition, t, (Range){}, env, ctx);
+      type_check_i(untyped.if_expr.true_branch, type, tysrc, env, ctx);
+      type_check_i(untyped.if_expr.false_branch, type, tysrc, env, ctx);
+      set_type(ref, type, ctx.tape);;
+      return;
+    }
+    default:
+      break;
+    }
+
+    PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+
+    // Case 2: Constructor expressions. Unlike elimnators, these expressions
+    //   have a matching type, e.g. SStructure and TStruct. This means that we
+    //   cannot simply propagate constraints inward, we must deconstruct the
+    //   type and match appropriate parts of the type to appropriate parts of
+    //   the expression. In the default case, we resort to simple inference
+    if (unwrapped->sort == TProc && untyped.type == SProcedure) {
+        PiType* proc = unwrapped;
+        if (untyped.procedure.implicits.len != proc->proc.implicits.len) {
             type_error_proc_incorrect_num_implicits(ref, type, ctx);
         }
-        if (untyped.procedure.args.len != type->proc.args.len) {
+        if (untyped.procedure.args.len != proc->proc.args.len) {
             type_error_proc_incorrect_num_args(ref, type, ctx);
         }
 
         PiType* kind0 = call_alloc(sizeof(PiType), ctx.pia);
         *kind0 = (PiType){.sort = TType,};
-        for (size_t i = 0; i < type->proc.implicits.len; i++) {
-            PiType* ann = type->proc.implicits.data[i];
+        for (size_t i = 0; i < proc->proc.implicits.len; i++) {
+            PiType* ann = proc->proc.implicits.data[i];
             SymPtrCell cell = untyped.procedure.implicits.data[i];
             if (cell.val) {
                 PiType* aty = eval_type(*(SynRef*)cell.val, env, ctx);
@@ -200,8 +226,8 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
             }
             type_var(cell.key, ann, env);
         }
-        for (size_t i = 0; i < type->proc.args.len; i++) {
-            PiType* ann = type->proc.args.data[i];
+        for (size_t i = 0; i < proc->proc.args.len; i++) {
+            PiType* ann = proc->proc.args.data[i];
             SymPtrCell cell = untyped.procedure.args.data[i];
             if (cell.val) {
                 PiType* aty = eval_type(*(SynRef*)cell.val, env, ctx);
@@ -232,14 +258,15 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         set_type(ref, type, ctx.tape);
-        type_check_i(untyped.procedure.body, type->proc.ret, tysrc, env, ctx);
+        type_check_i(untyped.procedure.body, proc->proc.ret, tysrc, env, ctx);
         pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
         if (untyped.procedure.is_recursive) {
             pop_type(env);
         }
         
-    } else if (type->sort == TAll && untyped.type == SAll) {
-        if (untyped.all.args.len != type->binder.vars.len) {
+    } else if (unwrapped->sort == TAll && untyped.type == SAll) {
+        PiType* all = unwrapped;
+        if (untyped.all.args.len != all->binder.vars.len) {
             type_error_all_incorrect_num_vars(ref, type, ctx);
         }
 
@@ -272,9 +299,84 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         }
 
         set_type(ref, type, ctx.tape);
-        type_check_i(untyped.all.body, type->binder.body, tysrc, env, ctx); 
+        type_check_i(untyped.all.body, all->binder.body, tysrc, env, ctx); 
         pop_types(env, untyped.all.args.len);
+    } else if (unwrapped->sort == TStruct && untyped.type == SStructure) {
+      bool all_fields_required = true;
+      PiType* struct_type = unwrapped;
+      if (untyped.structure.has_base == Some) {
+        type_infer_i(untyped.structure.base, env, ctx);
+        PiType* base_ty;
+        if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
+          base_ty = eval_type(untyped.structure.base, env, ctx);
+          all_fields_required = true;
+        } else {
+          base_ty = get_type(untyped.structure.base, ctx.tape);
+          all_fields_required = false;
+        }
+        UnifyResult out = unify(type, base_ty, uctx);
+        UnifyReason reason = {
+          .type = URCheck,
+          .check.range = get_range(ref, ctx.tape).term,
+          .check.expected = type,
+          .check.actual = base_ty
+        };
+        check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
+      }
 
+      if (all_fields_required) {
+        // If we expect this structure to have a particular type
+        // (provided), then there are two checks that need doing:
+        // 1. Check if any fields are missing when a new struct is being created
+        // TODO (PERFORMANCE): feels like there should be a more
+        //      efficient algorithm here?
+        SymbolArray missing_fields = mk_symbol_array(4, ctx.a);
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+          Symbol field = struct_type->structure.fields.data[i].key;
+          bool has_field = false;
+          for (size_t j = 0; j < untyped.structure.fields.len; j++) {
+            if (symbol_eq(field, untyped.structure.fields.data[j].key))
+              has_field = true;
+          }
+          if (!has_field) {
+            push_symbol(field, &missing_fields);
+          }
+        }
+                
+        if (missing_fields.len > 0) {
+          type_error_struct_missing_fields(struct_type, ref, missing_fields, ctx);
+        }
+      }
+
+      // 2. Check if any fields are present but should not be
+      SymbolArray extra_fields = mk_symbol_array(4, ctx.a);
+      for (size_t i = 0; i < untyped.structure.fields.len; i++) {
+        Symbol field = untyped.structure.fields.data[i].key;
+        bool has_field = false;
+        for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+          if (symbol_eq(field, struct_type->structure.fields.data[j].key))
+            has_field = true;
+        }
+        if (!has_field) {
+          push_symbol(field, &extra_fields);
+        }
+      }
+
+      if (extra_fields.len > 0) {
+        type_error_struct_extra_fields(struct_type, ref, extra_fields, ctx);
+      }
+
+      for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+        SynRef* field_syn = sym_syn_lookup(struct_type->structure.fields.data[i].key, untyped.structure.fields);
+        if (field_syn) {
+          PiType* field_ty = struct_type->structure.fields.data[i].val;
+          Range tysrc = get_range(untyped.structure.base, ctx.tape).term;
+          type_check_i(*field_syn, field_ty, tysrc, env, ctx);
+        } else if (all_fields_required) {
+          panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
+        }
+      }
+      set_type(ref, type, ctx.tape);
     } else {
         // If we can't easily traverse into the structure/type, then 
         type_infer_i(ref, env, ctx);
@@ -288,6 +390,7 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
         };
         check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
     }
+
 }
 
 // "internal" type inference. Destructively mutates types.
@@ -543,7 +646,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                              tysrc, env, ctx);
             }
 
-            set_type(ref, fn_type->proc.ret, ctx.tape);;
+            set_type(ref, fn_type->proc.ret, ctx.tape);
 
         } else if (fn_type->sort == TAll) {
             SynArray types = mk_syn_array(fn_type->binder.vars.len, a);
@@ -723,29 +826,47 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped.variant.has_enum_type == Some) {
             set_type(ref, eval_type(untyped.variant.enum_type, env, ctx), ctx.tape);;
-            PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
+            PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
 
-            if (enum_type->sort != TEnum) {
-                type_error_invalid_variant_type(enum_type, ref, ctx);
+            if ((src_type->sort != TEnum) & (src_type->sort != TFlags))  {
+                type_error_invalid_constructor_type(src_type, ref, ctx);
             }
 
-            bool found_variant = false;
-            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
-                    untyped.variant.tag = i;
-                    found_variant = true;
+            if (src_type->sort == TEnum) {
+                bool found_variant = false;
+                PiType* enum_type = src_type;
+                for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                    if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_variant = true;
 
-                    // Generate variant has no args
-                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                    if (args->len != 0) {
-                        type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        // If this variant expects args, throw error
+                        PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                        if (args->len != 0) {
+                            type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (!found_variant) {
-                type_error_missing_variant_tag(enum_type, ref, ctx);
+                if (!found_variant) {
+                    type_error_missing_variant_tag(enum_type, ref, ctx);
+                }
+            } else {
+                PiType* flags_type = src_type;
+                bool found_flag = false;
+                for (size_t i = 0; i < flags_type->flags.flag_values.len; i++) {
+                    if (symbol_eq(flags_type->flags.flag_values.data[i], untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_flag = true;
+                        set_syntax(ref, untyped, ctx.tape);
+                        break;
+                    }
+                }
+
+                if (!found_flag) {
+                    type_error_missing_flag(flags_type, ref, ctx);
+                }
             }
         } else {
             set_type(ref, mk_uvar(ctx.pia), ctx.tape);;
@@ -767,34 +888,54 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped.variant.has_enum_type == Some) {
             set_type(ref, eval_type(untyped.variant.enum_type, env, ctx), ctx.tape);;
-            PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
+            PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, a);
 
-            if (enum_type->sort != TEnum) {
-                type_error_invalid_variant_type(enum_type, ref, ctx);
+            if ((src_type->sort != TEnum) & (src_type->sort != TFlags)) {
+                type_error_invalid_variant_type(src_type, ref, ctx);
             }
+            if (src_type->sort == TEnum) {
+                PiType* enum_type = src_type;
 
-            bool found_variant = false;
-            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
-                    untyped.variant.tag = i;
-                    found_variant = true;
+                bool found_variant = false;
+                for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                    if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_variant = true;
 
-                    // Generate variant has no args
-                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                    if (args->len != untyped.variant.args.len) {
-                        type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        // Generate variant has no args
+                        PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                        if (args->len != untyped.variant.args.len) {
+                            type_error_incorrect_num_variant_args(enum_type, ref, i, ctx);
+                        }
+
+                        for (size_t i = 0; i < args->len; i++) {
+                            Range tysrc = get_range(untyped.variant.enum_type, ctx.tape).term;
+                            type_check_i(untyped.variant.args.data[i], args->data[i], tysrc, env, ctx);
+                        }
+                        break;
                     }
-
-                    for (size_t i = 0; i < args->len; i++) {
-                        Range tysrc = get_range(untyped.variant.enum_type, ctx.tape).term;
-                        type_check_i(untyped.variant.args.data[i], args->data[i], tysrc, env, ctx);
-                    }
-                    break;
                 }
-            }
 
-            if (!found_variant) {
-                type_error_missing_variant_tag(enum_type, ref, ctx);
+                if (!found_variant) {
+                    type_error_missing_variant_tag(enum_type, ref, ctx);
+                }
+            } else {
+                PiType* flags_type = src_type;
+                bool found_flag = false;
+                if (untyped.variant.args.len != 0)
+                    type_error_flag_has_args(flags_type, ref, ctx);
+
+                for (size_t i = 0; i < flags_type->flags.flag_values.len; i++) {
+                    if (symbol_eq(flags_type->flags.flag_values.data[i], untyped.variant.tagname)) {
+                        untyped.variant.tag = i;
+                        found_flag = true;
+                        break;
+                    }
+                }
+
+                if (!found_flag) {
+                    type_error_missing_flag(flags_type, ref, ctx);
+                }
             }
         } else {
             set_type(ref, mk_uvar(ctx.pia), ctx.tape);;
@@ -814,6 +955,39 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             UnifyResult out = add_variant_constraint(get_type(ref, ctx.tape)->uvar, range, untyped.variant.tagname, types, uctx);
             check_result_out(out, range, (UnifyReason){.type = URNone}, a, point);
         }
+        break;
+    }
+    case SFlags: {
+        PiType* flag_type = mk_uvar(ctx.pia);
+        if (untyped.flags.flags.len == 0) {
+            set_type(ref, flag_type, ctx.tape);
+        } else {
+            Range range = get_range(ref, ctx.tape).term;
+            for (size_t i = 0; i < untyped.flags.flags.len; i++) {
+                type_check_i(untyped.flags.flags.data[i], flag_type, range, env, ctx);
+            }
+            set_type(ref, flag_type, ctx.tape);
+        }
+        break;
+    }
+    case SFlagsIntersect: {
+        PiType* flag_type = mk_uvar(ctx.pia);
+        if (untyped.flags.flags.len == 0) {
+            set_type(ref, flag_type, ctx.tape);
+        } else {
+            Range range = get_range(ref, ctx.tape).term;
+            for (size_t i = 0; i < untyped.flags_intersect.flags.len; i++) {
+                type_check_i(untyped.flags_intersect.flags.data[i], flag_type, range, env, ctx);
+            }
+            set_type(ref, flag_type, ctx.tape);
+        }
+        break;
+    }
+    case SFlagsEmpty: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType) {.sort = TPrim, .prim = Bool};
+        type_infer_i(untyped.flags_empty.val, env, ctx);
+        set_type(ref, t, ctx.tape);
         break;
     }
     case SMatch: {
@@ -1037,14 +1211,11 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SStructure: {
         if (untyped.structure.has_base == Some) {
-            bool all_fields_required;
             type_infer_i(untyped.structure.base, env, ctx);
             if (is_sort_or_kind(*get_type(untyped.structure.base, ctx.tape))) {
                 set_type(ref, eval_type(untyped.structure.base, env, ctx), ctx.tape);
-                all_fields_required = true;
             } else {
                 set_type(ref, get_type(untyped.structure.base, ctx.tape), ctx.tape);
-                all_fields_required = false;
             }
 
             PiType* struct_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
@@ -1053,55 +1224,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 type_error_struct_invalid_type(struct_type, ref, ctx);
             }
 
-            // Check if any fields are missing when a new struct is being created
-            // error message:
-            if (get_type(untyped.structure.base, ctx.tape)->sort == TKind) {
-                SymbolArray missing_fields = mk_symbol_array(4, a);
-                for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                    Symbol field = struct_type->structure.fields.data[i].key;
-                    bool has_field = false;
-                    for (size_t j = 0; j < untyped.structure.fields.len; j++) {
-                        if (symbol_eq(field, untyped.structure.fields.data[j].key))
-                            has_field = true;
-                    }
-                    if (!has_field) {
-                        push_symbol(field, &missing_fields);
-                    }
-                }
-                
-                if (missing_fields.len > 0) {
-                    PtrArray docs = mk_ptr_array(2 + missing_fields.len, a);
-                    if (missing_fields.len == 1) {
-                        push_ptr(mv_cstr_doc("Structure value definition is missing the field:", a), &docs);
-                        push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[0]), a), &docs);
-                    } else {
-                        push_ptr(mv_cstr_doc("Structure value definition is missing the fields:", a), &docs);
-                        for (size_t i = 0; i < missing_fields.len; i++) {
-                            if (i < missing_fields.len - 2) {
-                                push_ptr(mv_str_doc(string_cat(view_symbol_string(missing_fields.data[i]), mv_string(","), a), a), &docs);
-                            } else if (i == missing_fields.len - 2) {
-                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
-                                push_ptr(mv_cstr_doc("and", a), &docs);
-                            } else {
-                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
-                            }
-                        }
-                    }
-                    err.message = mv_hsep_doc(docs, a);
-                    throw_pi_error(point, err);
-                }
-            }
-
-            for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                SynRef* field_syn = sym_syn_lookup(struct_type->structure.fields.data[i].key, untyped.structure.fields);
-                if (field_syn) {
-                    PiType* field_ty = struct_type->structure.fields.data[i].val;
-                    Range tysrc = get_range(untyped.structure.base, ctx.tape).term;
-                    type_check_i(*field_syn, field_ty, tysrc, env, ctx);
-                } else if (all_fields_required) {
-                    panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
-                }
-            }
+            type_check_i(ref, get_type(ref, ctx.tape), get_range(untyped.structure.base, ctx.tape).term, env, ctx);
         } else {
             PiType struct_type = (PiType) {
                 .sort = TStruct,
@@ -1133,9 +1256,9 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     ret_ty = source_type.structure.fields.data[i].val;
                 }
             }
+
             if (ret_ty == NULL) {
-                err.message = mv_cstr_doc("Field not found in struct!", a);
-                throw_pi_error(point, err);
+                type_error_proj_missing_field(&source_type, ref, ctx);
             }
             set_type(ref, ret_ty, ctx.tape);;
 
@@ -1318,8 +1441,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         *t = (PiType) {.sort = TPrim,.prim = Bool};
         type_check_i(untyped.if_expr.condition, t, (Range){}, env, ctx);
 
-        PiType* out_type = mk_uvar(ctx.pia);
-        type_check_i(untyped.if_expr.true_branch, out_type, (Range){}, env, ctx);
+        type_infer_i(untyped.if_expr.true_branch, env, ctx);
+        PiType* out_type = get_type(untyped.if_expr.true_branch, ctx.tape);
         Range tysrc = get_range(untyped.if_expr.true_branch, ctx.tape).term;
         type_check_i(untyped.if_expr.false_branch, out_type, tysrc, env, ctx);
         set_type(ref, out_type, ctx.tape);;
@@ -1670,6 +1793,12 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 type_check_i(syn, t, (Range){}, env, ctx);
             }
         }
+        break;
+    }
+    case SFlagsType: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType){.sort = TType};
+        set_type(ref, t, ctx.tape);;
         break;
     }
     case SResetType: {
@@ -2357,42 +2486,101 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SConstructor:  {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
+        PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
 
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
-            if (symbol_eq(cell.key, syn.variant.tagname)) {
-                found_variant = true;
-                syn.variant.tag = i;
-                set_syntax(ref, syn, ctx.tape);
-                break;
+        if (src_type->sort == TEnum) {
+            PiType* enum_type = src_type;
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
+                if (symbol_eq(cell.key, syn.variant.tagname)) {
+                    found_variant = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
             }
-        }
-        if (!found_variant) {
-            panic(mv_string("Unable to find constructor tag in post-unify."));
+            if (!found_variant) {
+                panic(mv_string("Unable to find constructor tag in post-unify."));
+            }
+        } else {
+            PiType* flag_type = src_type;
+            bool found_flag = false;
+            for (size_t i = 0; i < flag_type->flags.flag_values.len; i++) {
+                Symbol sym = flag_type->flags.flag_values.data[i];
+                if (symbol_eq(sym, syn.variant.tagname)) {
+                    found_flag = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
+            }
+            if (!found_flag) {
+                panic(mv_string("Unable to find flag in post-unify."));
+            }
         }
         break;
     }
     case SVariant: {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
-
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
-            if (symbol_eq(cell.key, syn.variant.tagname)) {
-                found_variant = true;
-                syn.variant.tag = i;
-                set_syntax(ref, syn, ctx.tape);
-                break;
+        PiType* src_type = unwrap_type(get_type(ref, ctx.tape), type_env_module(env), ctx.pia, ctx.a);
+        if (src_type->sort == TEnum) {
+            PiType* enum_type = src_type;
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
+                if (symbol_eq(cell.key, syn.variant.tagname)) {
+                    found_variant = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
+            }
+            if (!found_variant) {
+                panic(mv_string("Unable to find variant tag in post-unify."));
+            }
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                post_unify(syn.variant.args.data[i], env, ctx);
+            }
+        } else {
+            PiType* flag_type = src_type;
+            bool found_flag = false;
+            for (size_t i = 0; i < flag_type->flags.flag_values.len; i++) {
+                Symbol sym = flag_type->flags.flag_values.data[i];
+                if (symbol_eq(sym, syn.variant.tagname)) {
+                    found_flag = true;
+                    syn.variant.tag = i;
+                    set_syntax(ref, syn, ctx.tape);
+                    break;
+                }
+            }
+            if (!found_flag) {
+                panic(mv_string("Unable to find flag in post-unify."));
             }
         }
-        if (!found_variant) {
-            panic(mv_string("Unable to find variant tag in post-unify."));
+        break;
+    }
+    case SFlags: {
+        PiType* unwrapped = get_type(ref, ctx.tape);
+        PiType* type = unwrap_type(unwrapped, type_env_module(env), ctx.pia, ctx.a);
+        if (type->sort != TFlags) {
+            type_error_flags_not_flag(type, ref, ctx);
         }
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            post_unify(syn.variant.args.data[i], env, ctx);
+        break;
+    }
+    case SFlagsIntersect: {
+        PiType* type = get_type(ref, ctx.tape);
+        PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+        if (unwrapped->sort != TFlags) {
+            type_error_flags_not_flag(type, ref, ctx);
+        }
+        break;
+    }
+    case SFlagsEmpty: {
+        PiType* type = get_type(syn.flags_empty.val, ctx.tape);
+        PiType* unwrapped = unwrap_type(type, type_env_module(env), ctx.pia, ctx.a);
+        if (unwrapped->sort != TFlags) {
+            type_error_flags_empty_not_flag(type, ref, ctx);
         }
         break;
     }
@@ -2657,6 +2845,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     case STileType:
     case SStructType:
     case SEnumType:
+    case SFlagsType:
     case SResetType:
     case SDynamicType:
     case SNamedType:
@@ -2800,6 +2989,22 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < typed.variant.args.len; i++) {
             squash_types(typed.variant.args.data[i], env, ctx);
         }
+        break;
+    }
+    case SFlags: {
+        for (size_t i = 0; i < typed.flags.flags.len; i++) {
+            squash_types(typed.flags.flags.data[i], env, ctx);
+        }
+        break;
+    }
+    case SFlagsIntersect: {
+        for (size_t i = 0; i < typed.flags.flags.len; i++) {
+            squash_types(typed.flags_intersect.flags.data[i], env, ctx);
+        }
+        break;
+    }
+    case SFlagsEmpty: {
+        squash_types(typed.flags_empty.val, env, ctx);
         break;
     }
     case SMatch: {
@@ -3007,6 +3212,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 squash_types(args->data[j], env, ctx);
             }
         }
+        break;
+    }
+
+    case SFlagsType: {
         break;
     }
     case SResetType: {

@@ -33,6 +33,7 @@ typedef struct {
 //     Paths 
 // ---------------------------------------------------------------------------
 
+bool is_absolute_path(String str);
 String path_cat(String path1, String path2, Allocator* alloc);
 String path_name(String path);
 
@@ -120,6 +121,13 @@ bool write_chunk(File* file, U8Array arr);
 //     Records 
 // ---------------------------------------------------------------------------
 
+typedef struct {
+    uint64_t epoch_sec;
+    uint64_t epoch_ns;
+} FSTime;
+
+int fstime_comp(FSTime lhs, FSTime rhs);
+
 typedef enum : uint8_t {
     FRead = 0x4,
     FWrite = 0x2,
@@ -133,7 +141,6 @@ typedef struct {
 } FilePermissions;
 
 RecordResult set_permissions(String file, FilePermissions perms);
-
 
 bool record_exists(String path);
 
@@ -152,6 +159,15 @@ typedef struct {
 
 typedef struct {
     RecordType type;
+
+    // Times are:
+    // - read: file was last read.
+    // - mod: change to file contents
+    // - change: changes to metadata OR file contents 
+    FSTime read_time;
+    FSTime modification_time;
+    FSTime change_time;
+
     union {
         FileInfo file;
         DirectoryInfo dir;

@@ -12,10 +12,9 @@
 
 
 ProcessResult relic_create_process(String string, StringPiList strlist) {
-    StringArray arr = (StringArray) {
+    StringSlice arr = {
         .data = strlist.data,
         .len = strlist.len,
-        .size = strlist.size,
     };
     return create_process(string, arr);
 }

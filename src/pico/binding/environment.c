@@ -39,13 +39,22 @@ struct Environment {
 };
 
 // Helper function:
-void check_entry(ModuleEntry* entry, bool expect_module, Name name, Module* mfor, ErrorPoint* point, Allocator* a) {
+void check_entry(ModuleEntry* entry, bool expect_module, Name name, Module* mfor, Module* parent, ErrorPoint* point, Allocator* a) {
     if (!entry) {
-        PtrArray nodes = mk_ptr_array(4, a);
+        PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Module not found:"), a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(name), a), a), &nodes);
         push_ptr(mk_str_doc(mv_string("while constructing environment for module"), a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(mfor)), a), a), &nodes);
+
+        ModuleEntry* private = get_def_internal(name, parent);
+        if (private) {
+            push_ptr(mk_str_doc(mv_string("It appears that "), a), &nodes);
+            push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(name), a), a), &nodes);
+            push_ptr(mk_str_doc(mv_string("is a private definition in module"), a), &nodes);
+            push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(parent)), a), a), &nodes);
+        }
+         
         throw_error(point, mv_sep_doc(nodes, a));
     }
     if (!entry->is_module && expect_module) {
@@ -98,7 +107,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
     case SegName: {
         ModuleEntry* entry = get_def_internal(segment.name, parent);
         if (!entry) goto symbol_root_check;
-        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+        check_entry(entry, !last_iteration, segment.name, mfor, parent, point, a);
         all_modules &= entry->is_module;
         if (entry->is_module) {
             refresh_re_exports(entry->value, point, a);
@@ -113,7 +122,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
 
         symbol_root_check:
         entry = get_def_internal(segment.name, root);
-        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+        check_entry(entry, !last_iteration, segment.name, mfor, parent, point, a);
         all_modules &= entry->is_module;
         if (entry->is_module) {
             refresh_re_exports(entry->value, point, a);
@@ -130,7 +139,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
         for (size_t k = 0; k < segment.names.len; k++) {
             ModuleEntry* entry = get_def_internal(segment.names.data[k], parent);
             if (!entry) goto symbols_root_check;
-            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, parent, point, a);
             all_modules &= entry->is_module;
             if (entry->is_module) {
                 refresh_re_exports(entry->value, point, a);
@@ -145,7 +154,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
 
         symbols_root_check:
             entry = get_def_internal(segment.names.data[k], root);
-            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, parent, point, a);
             all_modules &= entry->is_module;
             if (entry->is_module) {
                 refresh_re_exports(entry->value, point, a);
@@ -186,7 +195,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             switch (segment.type) {
             case SegName: {
                 ModuleEntry* entry = get_def_external(segment.name, module);
-                check_entry(entry, !last_iteration, segment.name, mfor, point, a);
+                check_entry(entry, !last_iteration, segment.name, mfor, module, point, a);
                 all_modules &= entry->is_module;
                 if (entry->is_module) {
                     refresh_re_exports(entry->value, point, a);
@@ -202,7 +211,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             case SegNames: {
                 for (size_t k = 0; k < segment.names.len; k++) {
                     ModuleEntry* entry = get_def_external(segment.names.data[k], module);
-                    check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
+                    check_entry(entry, !last_iteration, segment.names.data[k], mfor, module, point, a);
                     all_modules &= entry->is_module;
                     if (entry->is_module) {
                         refresh_re_exports(entry->value, point, a);
@@ -221,7 +230,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
                 NameArray names = exports.self_exports;
                 for (size_t k = 0; k < names.len; k++) {
                     ModuleEntry* entry = get_def_external(names.data[k], module);
-                    check_entry(entry, !last_iteration, names.data[k], mfor, point, a);
+                    check_entry(entry, !last_iteration, names.data[k], mfor, module, point, a);
                     all_modules &= entry->is_module;
                     if (entry->is_module) {
                         refresh_re_exports(entry->value, point, a);
@@ -452,7 +461,7 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                         }
                     }
                     ModuleEntry* entry = get_def_external(name, target);
-                    check_entry(entry, false, name, module, point, a);
+                    check_entry(entry, false, name, module, target, point, a);
                     if (clause.values.data[j].should_rename) {
                         u64_name_insert(data.origins->len, name, data.rename);
                         name_ptr_insert(clause.values.data[j].to, target, data.origins);

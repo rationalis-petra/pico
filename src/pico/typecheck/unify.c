@@ -20,14 +20,15 @@
  * as follows:
  * 1. Currently, UVars store 'substitutions', lists of [name ↦ type]
  *   substitutions, to make up for the fact that we don't keep track of scope
- *   properly. These should be removed (DONE), and instead, just rely on type-scoping
+ *   properly. These should be removed (DONE), and instead, just rely on
+type-scoping
  *   information during the 'squash' phase instaed (TODO).
- * 
+ *
  * 2. During typechecking, instead of unifying in-place, produce a parallel
  *    syntax tree 'a problem' that keeps track of both type-scope, and all
- *    unification constraints. This problem is then 'solved' before moving 
+ *    unification constraints. This problem is then 'solved' before moving
  *    the solution into the syntax tree (this replaces the squashing phase).
- * 
+ *
  * 3. Once the problem/solution architecture is set-up, rework types to be much
  *    more efficient memory-wise:
  *    - UVars should be slimmed down to 32-bit indices into a pool/array (rather
@@ -36,18 +37,23 @@
  *      some contextually relevant pool.
  *    - Instead of being full types, primitives should be encoded directly into
  *      the indices.
- * 
+ *
  * 4. At this point, the main thing to work on will be general correctness. Look
  *    into Higher-Order unification and possibly consult how Caledon structured
  *    its' type-checker. See if there is a way to report an easy error message
  *    when backtracking *would* normally be necessary. This may allow
  *    efficiency/speed improvemints, at the cost of only a little extra
  *    explicitness in the (Relic) code.
- * 
+ *
  * 5. At current, typechecking is by far the slowest step. Investigate whether
  *    it still is via profiling, and if so, look into more optimisations (I
  *    recall there being like, 1 paper for speeding up HM type inference that
  *    the creator of Elm mentioned on the 'Software Unscripted' podcast).
+ *
+ * Other TODOs
+ * - Require bidirectional checking (less unification = more efficient)
+ * - We have a `has-field` constraint, add `matches-fields` for structures with
+ *   a known set of fields, but whose fields could be in any order.
  */
 
 /**
@@ -418,6 +424,23 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 
 
         return (UnifyResult) {.type = UOk,};
+        break;
+    }
+    case TFlags: {
+        if (pi_type_eql(lhs, rhs, a)) {
+            return (UnifyResult) {.type = UOk};
+        } else {
+            PtrArray nodes = mk_ptr_array(8, a);
+            push_ptr(mk_str_doc(mv_string("Unification failed: could not unify unequal primitives"), a), &nodes);
+            push_ptr(pretty_type(lhs, default_ptp, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+            push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
+
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_sep_doc(nodes, a),
+            };
+        }
         break;
     }
     case TReset: {
@@ -892,6 +915,8 @@ bool has_unification_vars_p(PiType type) {
         }
         return false;
     }
+    case TFlags:
+        return false;
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
     }
@@ -1035,6 +1060,8 @@ bool occurs(UVarType* var, PiType *type) {
         }
         return false;
     }
+    case TFlags:
+        return false;
     case TReset: {
         if (occurs(var, type->reset.in)) return true;
         if (occurs(var, type->reset.out)) return true;
@@ -1159,6 +1186,8 @@ void squash_type(PiType* type, UnifyContext ctx) {
         }
         break;
     }
+    case TFlags:
+        break;
     case TReset: {
         squash_type((PiType*)type->reset.in, ctx);
         squash_type((PiType*)type->reset.out, ctx);

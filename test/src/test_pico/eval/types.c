@@ -84,13 +84,25 @@ void run_pico_eval_types_tests(TestLog *log, Module* module, Environment* env, T
     //  Enumeration
     // -----------------------------------------------------
     if (test_start(log, mv_string("enum-basic"))) {
-        PiType* expected = mk_sz_enum_type(pia, 64, 2, "x", 1, mk_prim_type(pia, Int_64), "y", 1, mk_prim_type(pia, Int_64));
+        PiType* expected = mk_enum_type(pia, 2, "x", 1, mk_prim_type(pia, Int_64), "y", 1, mk_prim_type(pia, Int_64));
         TEST_EQ("(Enum [:x I64] [:y I64])");
     }
 
     if (test_start(log, mv_string("enum-with-size"))) {
         PiType* expected = mk_sz_enum_type(pia, 8, 2, "x", 1, mk_prim_type(pia, Int_64), "y", 1, mk_prim_type(pia, Int_64));
         TEST_EQ("(Enum 8 [:x I64] [:y I64])");
+    }
+
+    //  Flags
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("flags-basic"))) {
+        PiType* expected = mk_flags_type(pia, 3, "read", "write", "execute");
+        TEST_EQ("(Flags :read :write :execute)");
+    }
+
+    if (test_start(log, mv_string("enum-with-size"))) {
+        PiType* expected = mk_sz_flags_type(pia, 8, 3, "read", "write", "execute");
+        TEST_EQ("(Flags 8 :read :write :execute)");
     }
 
     //  Procedures and Polymorphic Procedures

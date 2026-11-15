@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <windows.h>
 
-RawKey keycode_to_rawkey(WPARAM windows_keycode);
+RawKey keycode_to_rawkey(WPARAM windows_keycode, LPARAM lParam);
 
 WPARAM rawkey_to_keycode(RawKey rawkey);
 

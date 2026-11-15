@@ -4,13 +4,12 @@
 
 #include "platform/memory/executable.h"
 #include "platform/filesystem/filesystem.h"
+#include "platform/process.h"
 #include "platform/signals.h"
 
 #include "data/stream.h"
 
-#include "pico/data/name_ptr_amap.h"
 #include "pico/values/modular.h"
-
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
 #include "pico/abstraction/abstraction.h"
@@ -21,65 +20,85 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 
+#include "rune/eval/eval.h"
+
+#include "atlas/eval/target.h"
 #include "atlas/eval/instance.h"
 
 struct AtlasInstance {
     Package* project_package;
     PtrArray packages;
 
-    NamePtrAMap targets;
     bool project_set;
     Project project;
+
+    RuneEnv* env;
+
+    TargetMap* map;
+    ValRef target_type;
 
     Allocator* gpa;
 };
 
-typedef struct {
-    Name name;
-    String path;
-    StringOption filename;
-    NameOption entrypoint;
-    NameArray target_dependencies;
-    StringArray file_dependencies;
-    Module* module;
-} AtlasTarget;
-
 AtlasInstance* make_atlas_instance(Allocator* a) {
     AtlasInstance* instance = mem_alloc(sizeof(AtlasInstance), a);
     *instance = (AtlasInstance) {
-        .packages = mk_ptr_array(4, a),
-        .targets = mk_name_ptr_amap(32, a),
-        .project_set = false,
-        .gpa = a,
+      .packages = mk_ptr_array(4, a),
+      .project_set = false,
+      .env = mk_rune_env(a),
+      .map = mk_target_map(a),
+      .gpa = a,
     };
+
+    populate_std_builtins(instance->env);
+
     return instance;
 }
 
 void delete_atlas_instance(AtlasInstance* instance) {
     Allocator* a = instance->gpa;
     sdelete_ptr_array(instance->packages);
-    for (size_t i = 0; i < instance->targets.len; i++) {
-        AtlasTarget* target = instance->targets.data[i].val;
-        if (target->filename.type == Some) {
-            mem_free(target->filename.val.bytes, a);
-        }
-        for (size_t i = 0; i < target->file_dependencies.len; i++) {
-            delete_string(target->file_dependencies.data[i], a);
-        }
-        sdelete_string_array(target->file_dependencies);
-        sdelete_name_array(target->target_dependencies);
-        mem_free(target, a);
-    }
+    delete_rune_env(instance->env);
+    delete_target_map(instance->map);
 
     if (instance->project_package) {
         delete_package(instance->project_package);
     }
 
-    sdelete_name_ptr_amap(instance->targets);
     mem_free(instance, a);
 }
 
-static Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point);
+AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance) {
+    return (AtlasDefaultTargets) { 
+        .build = instance->project.package.default_build,
+        .run = instance->project.package.default_run,
+        .test = instance->project.package.default_test,
+    };
+}
+
+ExprPool* get_expr_pool(AtlasInstance* instance) {
+    return get_pools(instance->env).expr;
+}
+
+ValueHeap* get_val_heap(AtlasInstance* instance) {
+    return get_pools(instance->env).value;
+}
+
+static void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef target, RegionAllocator* region, AtErrorPoint* point);
+static Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point);
+
+static TargetRef get_target(AtlasInstance* instance, Name name, RegionAllocator* region, AtErrorPoint* point) {
+    RuneEvalResult res = get_value(name, instance->env, region);
+    if (res.type != AValue) {
+        AtlasError err = {
+            .message = res.error_message,
+        };
+        throw_at_error(point, err);
+    }
+
+    TargetRef target = translate_from_rune(res.value, instance->env, instance->map, region, point);
+    return target;
+}
 
 void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, AtErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
@@ -91,70 +110,52 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         };
         throw_at_error(point, err);
     }
+    TargetRef target_ref = get_target(instance, name, region, point);
+    AtlasTarget target = deref_target(target_ref, instance->map);
 
-    size_t tidx;
-    if (name_ptr_find(&tidx, name, instance->targets)) {
-        AtlasTarget* target = instance->targets.data[tidx].val;
-        NameOption entry = target->entrypoint;
-        if (entry.type == None) {
-            PtrArray nodes = mk_ptr_array(5, &ra);
-            push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
-            push_ptr(mk_str_doc(target_name, &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore is not runnable."), &ra), &nodes);
+    NameOption entry = (target.type == TPico) ? target.pico.entrypoint : (NameOption){.type = None};
+    if (entry.type == None) {
+        PtrArray nodes = mk_ptr_array(5, &ra);
+        push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
+        push_ptr(mk_str_doc(target_name, &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore is not runnable."), &ra), &nodes);
 
-            AtlasError err = {
-                .message = mv_cat_doc(nodes, &ra),
-            };
-            throw_at_error(point, err);
-        }
+        AtlasError err = {
+            .message = mv_cat_doc(nodes, &ra),
+        };
+        throw_at_error(point, err);
+    }
 
-        // First, create a new package for the project
-        PiAllocator pico_alloc = get_std_perm_allocator();
-        Package* package;
-        if (instance->project_package) {
-            package = instance->project_package;
-        } else {
-            package = mk_package(instance->project.package.name, pico_alloc);
-            set_instance_package(instance, package);
-        }
+    // First, create a new package for the project
+    PiAllocator pico_alloc = get_std_perm_allocator();
+    Package* package;
+    if (instance->project_package) {
+        package = instance->project_package;
+    } else {
+        package = mk_package(instance->project.package.name, pico_alloc);
+        set_instance_package(instance, package);
+    }
 
-        // Then, add all dependencies
-        NameArray deps = instance->project.package.dependencies;
-        PtrArray avail = instance->packages;
-        for (size_t i = 0; i < deps.len; i++) {
-            bool found_dep = false;
-            Name dep_name = deps.data[i];
-            for (size_t j = 0; j < avail.len; j++) {
-                Package* avail_package = avail.data[j];
-                Name pkg_name = package_name(avail_package);
-                if (dep_name == pkg_name) {
-                    add_dependency(package, avail_package);
-                    found_dep = true;
-                    break;
-                }
-            }
-
-            if (!found_dep) {
-                PtrArray nodes = mk_ptr_array(5, &ra);
-                push_ptr(mk_str_doc(mv_string("Dependency '"), &ra), &nodes);
-                push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
-                push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
-
-                AtlasError err = {
-                    .message = mv_cat_doc(nodes, &ra),
-                };
-                throw_at_error(point, err);
+    // Then, add all dependencies
+    NameArray deps = instance->project.package.dependencies;
+    PtrArray avail = instance->packages;
+    for (size_t i = 0; i < deps.len; i++) {
+        bool found_dep = false;
+        Name dep_name = deps.data[i];
+        for (size_t j = 0; j < avail.len; j++) {
+            Package* avail_package = avail.data[j];
+            Name pkg_name = package_name(avail_package);
+            if (dep_name == pkg_name) {
+                add_dependency(package, avail_package);
+                found_dep = true;
+                break;
             }
         }
 
-        Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def_external(entry.value, module);
-        if (!e) {
+        if (!found_dep) {
             PtrArray nodes = mk_ptr_array(5, &ra);
-            push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
-            push_ptr(mk_str_doc(target_name, &ra), &nodes);
+            push_ptr(mk_str_doc(mv_string("Dependency '"), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
             AtlasError err = {
@@ -162,35 +163,43 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             };
             throw_at_error(point, err);
         }
+    }
 
-        PiAllocator pia = convert_to_pallocator(&ra);
-        PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
-        if (pi_type_eql(check_ty, &e->type, &ra)) {
-            call_unit_fn(*(void**)e->value, &ra);
-        } else {
-            PtrArray nodes = mk_ptr_array(5, &ra);
-            {
-                PtrArray ep_nodes = mk_ptr_array(5, &ra);
-                push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
-                push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
-            }
-            push_ptr(pretty_type(&e->type, default_ptp, &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
-            push_ptr(pretty_type(check_ty, default_ptp, &ra), &nodes);
-            AtlasError err = {
-                .message = mv_sep_doc(nodes, &ra),
-            };
-            throw_at_error(point, err);
-        }
-    } else {
+    // We can guarantee at the moment that this is a pico
+    Module* module = atlas_load_pico_target(instance, package, target_ref, region, point);
+    ModuleEntry* e = get_def_external(entry.val, module);
+    if (!e) {
         PtrArray nodes = mk_ptr_array(5, &ra);
-        push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
+        push_ptr(mk_str_doc(view_name_string(target.pico.entrypoint.val), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
         push_ptr(mk_str_doc(target_name, &ra), &nodes);
-        push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
+
         AtlasError err = {
             .message = mv_cat_doc(nodes, &ra),
+        };
+        throw_at_error(point, err);
+    }
+
+    PiAllocator pia = convert_to_pallocator(&ra);
+    PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
+    if (pi_type_eql(check_ty, &e->type, &ra)) {
+        call_unit_fn(*(void**)e->value, &ra);
+    } else {
+        PtrArray nodes = mk_ptr_array(5, &ra);
+        {
+            PtrArray ep_nodes = mk_ptr_array(5, &ra);
+            push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
+            push_ptr(mk_str_doc(view_name_string(target.pico.entrypoint.val), &ra), &ep_nodes);
+            push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
+            push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
+        }
+        push_ptr(pretty_type(&e->type, default_ptp, &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
+        push_ptr(pretty_type(check_ty, default_ptp, &ra), &nodes);
+        AtlasError err = {
+            .message = mv_sep_doc(nodes, &ra),
         };
         throw_at_error(point, err);
     }
@@ -207,69 +216,52 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         throw_at_error(point, err);
     }
 
-    size_t tidx;
-    if (name_ptr_find(&tidx, name, instance->targets)) {
-        AtlasTarget* target = instance->targets.data[tidx].val;
-        NameOption entry = target->entrypoint;
-        if (entry.type == None) {
-            PtrArray nodes = mk_ptr_array(5, &ra);
-            push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
-            push_ptr(mk_str_doc(target_name, &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore cannot be built."), &ra), &nodes);
+    TargetRef target_ref = get_target(instance, name, region, point);
+    AtlasTarget target = deref_target(target_ref, instance->map);
 
-            AtlasError err = {
-                .message = mv_cat_doc(nodes, &ra),
-            };
-            throw_at_error(point, err);
-        }
+    NameOption entry = (target.type == TPico) ? target.pico.entrypoint : (NameOption){.type = None};
+    if (entry.type == None) {
+        PtrArray nodes = mk_ptr_array(5, &ra);
+        push_ptr(mk_str_doc(mv_string("Target '"), &ra), &nodes);
+        push_ptr(mk_str_doc(target_name, &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore cannot be built."), &ra), &nodes);
 
-        // First, create a new package for the project
-        PiAllocator pico_alloc = get_std_perm_allocator();
-        Package* package;
-        if (instance->project_package) {
-            package = instance->project_package;
-        } else {
-            package = mk_package(instance->project.package.name, pico_alloc);
-            set_instance_package(instance, package);
-        }
+        AtlasError err = {
+            .message = mv_cat_doc(nodes, &ra),
+        };
+        throw_at_error(point, err);
+    }
 
-        // Then, add all dependencies
-        NameArray deps = instance->project.package.dependencies;
-        PtrArray avail = instance->packages;
-        for (size_t i = 0; i < deps.len; i++) {
-            bool found_dep = false;
-            Name dep_name = deps.data[i];
-            for (size_t j = 0; j < avail.len; j++) {
-                Package* avail_package = avail.data[j];
-                Name pkg_name = package_name(avail_package);
-                if (dep_name == pkg_name) {
-                    add_dependency(package, avail_package);
-                    found_dep = true;
-                    break;
-                }
-            }
+    // First, create a new package for the project
+    PiAllocator pico_alloc = get_std_perm_allocator();
+    Package* package;
+    if (instance->project_package) {
+        package = instance->project_package;
+    } else {
+        package = mk_package(instance->project.package.name, pico_alloc);
+        set_instance_package(instance, package);
+    }
 
-            if (!found_dep) {
-                PtrArray nodes = mk_ptr_array(5, &ra);
-                push_ptr(mk_str_doc(mv_string("Dependency '"), &ra), &nodes);
-                push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
-                push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
-
-                AtlasError err = {
-                    .message = mv_cat_doc(nodes, &ra),
-                };
-                throw_at_error(point, err);
+    // Then, add all dependencies
+    NameArray deps = instance->project.package.dependencies;
+    PtrArray avail = instance->packages;
+    for (size_t i = 0; i < deps.len; i++) {
+        bool found_dep = false;
+        Name dep_name = deps.data[i];
+        for (size_t j = 0; j < avail.len; j++) {
+            Package* avail_package = avail.data[j];
+            Name pkg_name = package_name(avail_package);
+            if (dep_name == pkg_name) {
+                add_dependency(package, avail_package);
+                found_dep = true;
+                break;
             }
         }
 
-        Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def_external(entry.value, module);
-        if (!e) {
+        if (!found_dep) {
             PtrArray nodes = mk_ptr_array(5, &ra);
-            push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
-            push_ptr(mk_str_doc(target_name, &ra), &nodes);
+            push_ptr(mk_str_doc(mv_string("Dependency '"), &ra), &nodes);
+            push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
             AtlasError err = {
@@ -277,74 +269,82 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
             };
             throw_at_error(point, err);
         }
+    }
 
-        PiAllocator pia = convert_to_pallocator(&ra);
-        PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
-        if (pi_type_eql(check_ty, &e->type, &ra)) {
-            BuildErrorPoint build_point;
-            if (catch_error(build_point)) {
-                if (build_point.multi.has_many) {
-                    PtrArray out = mk_ptr_array(build_point.multi.errors.len, &ra);
-                    for (size_t i = 0; i < build_point.multi.errors.len; i++) {
-                        BuildError* berr = build_point.multi.errors.data[i];
-                        AtlasError* err = mem_alloc(sizeof(AtlasError), &ra);
-                        *err = (AtlasError) {
-                            .message = berr->message,
-                        };
-                    }
-                    AtlasMultiError err = {
-                        .error.has_many = true,
-                        .error.errors = out,
-                    };
-                    throw_at_multi_error(point, err);
-                } else {
-                    AtlasError err = {
-                        .message = build_point.multi.error.message,
-                    };
-                    throw_at_error(point, err);
-                }
-            }
-
-            // TODO: replace with proper allocator??
-            RelicProgram* program = build_program(module, entry.value, &build_point, &ra);
-            String image = path_cat(mv_string("build"), target_name, &ra);
-            write_program(program, image, &ra);
-            //link_program(String program, String lib, String out_name);
-
-            FormattedOStream* fout = get_formatted_stdout();
-            write_fstring(mv_string("Wrote image to "), fout);
-            write_fstring(image, fout);
-            write_fstring(mv_string("\n"), fout);
-        } else {
-            PtrArray nodes = mk_ptr_array(5, &ra);
-            {
-                PtrArray ep_nodes = mk_ptr_array(5, &ra);
-                push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(view_name_string(target->entrypoint.value), &ra), &ep_nodes);
-                push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
-                push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
-            }
-            push_ptr(pretty_type(&e->type, default_ptp, &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
-            push_ptr(pretty_type(check_ty, default_ptp, &ra), &nodes);
-            AtlasError err = {
-                .message = mv_sep_doc(nodes, &ra),
-            };
-            throw_at_error(point, err);
-        }
-    } else {
+    // Guaranteed to be pico target as has an entry-point
+    Module* module = atlas_load_pico_target(instance, package, target_ref, region, point);
+    ModuleEntry* e = get_def_external(entry.val, module);
+    if (!e) {
         PtrArray nodes = mk_ptr_array(5, &ra);
-        push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
+        push_ptr(mk_str_doc(view_name_string(target.pico.entrypoint.val), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' in target '"), &ra), &nodes);
         push_ptr(mk_str_doc(target_name, &ra), &nodes);
-        push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
+
         AtlasError err = {
             .message = mv_cat_doc(nodes, &ra),
         };
         throw_at_error(point, err);
     }
+
+    PiAllocator pia = convert_to_pallocator(&ra);
+    PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
+    if (pi_type_eql(check_ty, &e->type, &ra)) {
+        BuildErrorPoint build_point;
+        if (catch_error(build_point)) {
+            if (build_point.multi.has_many) {
+                PtrArray out = mk_ptr_array(build_point.multi.errors.len, &ra);
+                for (size_t i = 0; i < build_point.multi.errors.len; i++) {
+                    BuildError* berr = build_point.multi.errors.data[i];
+                    AtlasError* err = mem_alloc(sizeof(AtlasError), &ra);
+                    *err = (AtlasError) {
+                        .message = berr->message,
+                    };
+                }
+                AtlasMultiError err = {
+                    .error.has_many = true,
+                    .error.errors = out,
+                };
+                throw_at_multi_error(point, err);
+            } else {
+                AtlasError err = {
+                    .message = build_point.multi.error.message,
+                };
+                throw_at_error(point, err);
+            }
+        }
+
+        // TODO: replace with proper allocator??
+        RelicProgram* program = build_program(module, entry.val, &build_point, &ra);
+        String image = path_cat(mv_string("build"), target_name, &ra);
+        write_program(program, image, &ra);
+        //link_program(String program, String lib, String out_name);
+
+        FormattedOStream* fout = get_formatted_stdout();
+        write_fstring(mv_string("Wrote image to "), fout);
+        write_fstring(image, fout);
+        write_fstring(mv_string("\n"), fout);
+    } else {
+        PtrArray nodes = mk_ptr_array(5, &ra);
+        {
+            PtrArray ep_nodes = mk_ptr_array(5, &ra);
+            push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
+            push_ptr(mk_str_doc(view_name_string(target.pico.entrypoint.val), &ra), &ep_nodes);
+            push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
+            push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
+        }
+        push_ptr(pretty_type(&e->type, default_ptp, &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
+        push_ptr(pretty_type(check_ty, default_ptp, &ra), &nodes);
+        AtlasError err = {
+            .message = mv_sep_doc(nodes, &ra),
+        };
+        throw_at_error(point, err);
+    }
 }
 
-Module* atlas_load_file(String filename, Package* package, Module* parent, StringArray dependencies, RegionAllocator* region, AtErrorPoint* point) {
+Module* atlas_load_file(String filename, String path, Package* package, Module* parent, StringSlice dependencies, RegionAllocator* region, AtErrorPoint* point) {
     // Create new Module in package
     // TODO: use different procedure for scripts?
     // Load module from system
@@ -370,7 +370,8 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     Module* volatile old_module = NULL;
     volatile String vol_filename = filename;
 
-    IStream* in = open_file_istream(filename, &ra);
+    String full_name = path_cat(path, filename, &ra);
+    IStream* in = open_file_istream(full_name, &ra);
     if (!in) {
         if (old_module) set_std_current_module(old_module);
         release_subregion(iter_region);
@@ -378,7 +379,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
         PtrArray docs = mk_ptr_array(4, &ra);
         push_ptr(mk_str_doc(mv_string("File not found:"), &ra), &docs);
-        push_ptr(mk_str_doc(filename, &ra), &docs);
+        push_ptr(mk_str_doc(full_name, &ra), &docs);
         AtlasError err = {
             .message = mv_sep_doc(docs, &ra),
         };
@@ -418,7 +419,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     set_std_current_module(module);
 
     for (size_t i = 0; i < dependencies.len; i++) {
-        atlas_load_file(dependencies.data[i], package, module, mk_string_array(0, &ra), region, point);
+        atlas_load_file(dependencies.data[i], path, package, module, (StringSlice){}, region, point);
     }
 
 
@@ -597,41 +598,37 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     }
 }
 
-Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point) {
+Module* atlas_load_pico_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    PicoTarget target = deref_target(ref, instance->map).pico;
     /* Loading algorithm
      *  - For now, assume that dependencies form not just a DAG, but a tree
      *  - Therefore, we do NOT need to check for duplicates and recursion
      *  - This will need to change as projects and dependencies get more complex;
      */
-    if (target->module) return target->module;
+    Module* module = target_module(ref, instance->map);
+    if (module) return module;
     Allocator ra = ra_to_gpa(region);
 
     // Does the target have an entry-point? If so, it is an executable,
     // otherwise it is a module.
     Module* out = NULL;
     // First, load all dependencies
-    for (size_t i = 0; i < target->target_dependencies.len; i++) {
-        size_t tidx;
-        Name dep_name = target->target_dependencies.data[i];
-        if (name_ptr_find(&tidx, dep_name, instance->targets)) {
-            atlas_load_target(instance, package, instance->targets.data[tidx].val, region, point);
-        } else {
-            PtrArray nodes = mk_ptr_array(5, &ra);
-            push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
-            push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
-            push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
+    for (size_t i = 0; i < target.target_dependencies.len; i++) {
+        TargetRef dep = target.target_dependencies.data[i];
+        atlas_load_target(instance, package, dep, region, point);
+    }
+
+    if (target.filename.type == Some) {
+        out = atlas_load_file(target.filename.val, target.path, package, NULL, target.file_dependencies, region, point);
+    } else {
+        if (target.name.type == None) {
             AtlasError err = {
-                .message = mv_cat_doc(nodes, &ra),
+                .message = mv_cstr_doc("Any library/executable without a name must have a filename.", &ra),
             };
             throw_at_error(point, err);
         }
-    }
-
-    if (target->filename.type == Some) {
-        out = atlas_load_file(target->filename.val, package, NULL, target->file_dependencies, region, point);
-    } else {
         ModuleHeader header = (ModuleHeader) {
-            .name = target->name,
+            .name = target.name.val,
             .imports = (Imports) {
                 .clauses = mk_import_clause_array(0, &ra),
             },
@@ -641,13 +638,157 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
             },
         };
         out = mk_module(header, package, NULL);
-        for (size_t i = 0; i < target->file_dependencies.len; i++) {
-            atlas_load_file(target->file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
+        for (size_t i = 0; i < target.file_dependencies.len; i++) {
+            atlas_load_file(target.file_dependencies.data[i], target.path, package, out, (StringSlice){}, region, point);
         }
     }
     
-    target->module = out;
+    set_target_module(ref, out, instance->map); 
     return out;
+}
+
+typedef struct {
+    String current_dir;
+} RunState;
+
+static ValRef run_monad(Run run, RunState* state, AtlasInstance* instance, RegionAllocator* region, AtErrorPoint* point) {
+    Allocator a = ra_to_gpa(region);
+ run_again:
+    switch (run.type) {
+    case RPure:
+        return run.pure;
+    case RBind: {
+        ValRef arg = run_monad(*run.bind.run, state, instance, region, point);
+        RuneEvalResult result = eval_apply(run.bind.fn, arg, instance->env, region);
+        if (result.type == AValue) {
+            // Result should be a monad: translate it & run again
+            run = translate_monad_from_rune(result.value, instance->env, region, point);
+            goto run_again;
+        } else {
+            AtlasError err = {.message = result.error_message,};
+            throw_at_error(point, err);
+        }
+        break;
+    }
+    case RShell: {
+        StringSlice vals = run.shell;
+        if (vals.len < 1) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell has too few arguments", &a),
+            };
+            throw_at_error(point, err);
+        }
+        StringSlice args = {
+            .len = vals.len - 1,
+            .data = vals.data + 1,
+        };
+        ProcessResult presult = create_process_in(vals.data[0], args, state->current_dir);
+        //ProcessResult presult = create_process(vals.data[0], args);
+        if (presult.type != Ok) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell command failed to launch.", &a),
+            };
+            throw_at_error(point, err);
+        }
+
+        WaitResult wresult = wait_on_process(presult.process);
+        if (wresult.type != Ok || wresult.status != 0) {
+            AtlasError err = {
+                .message = mv_cstr_doc("Shell command failed.", &a),
+            };
+            throw_at_error(point, err);
+        }
+        ValueHeap* heap = get_pools(instance->env).value;
+        ValRef ref = mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+        return ref;
+    }
+    case RSetCurrentDir: {
+        state->current_dir = run.record;
+        ValueHeap* heap = get_pools(instance->env).value;
+        return mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+    }
+    case RCreateDirectory: {
+        ValueHeap* heap = get_pools(instance->env).value;
+        String path = run.record;
+        String full_path = path_cat(state->current_dir, path, &a);
+        create_directory(full_path);
+        return mk_rune_data(string_to_name(mv_string("unit")), (ValRefOption){}, 0, heap);
+    }
+    case RRecordExists: {
+        ValueHeap* heap = get_pools(instance->env).value;
+        String path = run.record;
+        String full_path = path_cat(state->current_dir, path, &a);
+        if (record_exists(full_path)) {
+            return mk_rune_data(string_to_name(mv_string("true")), (ValRefOption){}, 0, heap);
+        } else {
+            return mk_rune_data(string_to_name(mv_string("false")), (ValRefOption){}, 0, heap);
+        }
+    }
+    }
+    panic(mv_string("Invalid monad."));
+}
+
+void atlas_load_generic_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    Allocator a = ra_to_gpa(region);
+    GenericTarget target = deref_target(ref, instance->map).generic;
+
+    FSTime last_mod = {}; 
+    for (size_t i = 0; i < target.target_dependencies.len; i++) {
+        TargetRef dep = target.target_dependencies.data[i];
+        atlas_load_target(instance, package, dep, region, point);
+
+        AtlasTarget dep_target = deref_target(dep, instance->map);
+        switch (dep_target.type) {
+        case TGeneric:
+            // TODO: file output?
+            break;
+        case TPico:
+            break;
+        case TFile: {
+            String path = path_cat(dep_target.file.path, dep_target.file.name, &a);
+            RecordInfo info = record_info(path);
+            if (fstime_comp(info.modification_time, last_mod) > 0) {
+                last_mod = info.modification_time;
+            }
+            break;
+        }
+        }
+    }
+
+    bool can_skip = false;
+    for (size_t i = 0; i < target.provides.len; i++) {
+        String provided = target.provides.data[i];
+        if (!is_absolute_path(provided)) {
+            provided = path_cat(target.path, provided, &a);
+        }
+        // Get the files produced by this target: the target can be skipped ONLY
+        RecordInfo info = record_info(provided);
+        if (fstime_comp(info.modification_time, last_mod) > 0) {
+            can_skip = true;
+        }
+    }
+
+    if (!can_skip) {
+        RunState state = {
+            .current_dir = target.path,
+        };
+        run_monad(target.monad, &state, instance, region, point);
+    }
+}
+
+void atlas_load_target(AtlasInstance* instance, Package* package, TargetRef ref, RegionAllocator* region, AtErrorPoint* point) {
+    AtlasTarget target = deref_target(ref, instance->map);
+    switch (target.type) {
+    case TGeneric:
+        atlas_load_generic_target(instance, package, ref, region, point);
+        break;
+    case TPico:
+        atlas_load_pico_target(instance, package, ref, region, point);
+        break;
+    case TFile: 
+        // Do nothing for files (for now) - in the future, want to check version/times.
+        break;
+    }
 }
 
 void register_package(AtlasInstance* instance, Package *package) {
@@ -663,59 +804,12 @@ void set_instance_project(AtlasInstance* instance, Project project) {
     instance->project = project;
 }
 
-void add_library(Library library, String path, AtlasInstance* instance) {
-    AtlasTarget* target = mem_alloc(sizeof(AtlasTarget), instance->gpa);
-
-    StringOption filename = {.type = None};
-    if (library.filename.type == Some) {
-        filename = (StringOption) {
-          .type = Some,
-          .val = string_ncat(instance->gpa, 4,
-                               path,
-                               mv_string("/"),
-                               library.filename.val,
-                               mv_string(".rl")),
-        };
-    }
-
-    *target = (AtlasTarget) {
-        .name = library.name,
-        .path = path,
-        .filename = filename,
-        .entrypoint = (NameOption) {.type = None},
-        .target_dependencies = scopy_name_array(library.dependencies, instance->gpa),
-        .file_dependencies = mk_string_array(library.submodules.len, instance->gpa),
-        .module = NULL,
-    };
-    // Path = library path + "/" + filename + ".rl"
-    for (size_t i = 0; i < library.submodules.len; i++) {
-        String submodule_path = string_ncat(instance->gpa, 4,
-                                            path,
-                                            mv_string("/"),
-                                            library.submodules.data[i],
-                                            mv_string(".rl"));
-        push_string(submodule_path, &target->file_dependencies);
-    }
-    
-    name_ptr_insert(library.name, target, &instance->targets);
+Project get_instance_project(AtlasInstance* instance) {
+    // TODO: in debug, panic when project set not true!
+    //instance->project_set = true;
+    return instance->project;
 }
 
-void add_executable(Executable executable, String path, AtlasInstance* instance) {
-    AtlasTarget* target = mem_alloc(sizeof(AtlasTarget), instance->gpa);
-
-    *target = (AtlasTarget) {
-        .name = executable.name,
-        .path = path,
-        .filename = (StringOption) {
-          .type = Some,
-          .val = string_ncat(instance->gpa, 4,
-                               path, mv_string("/"), executable.filename, mv_string(".rl")),
-        },
-        .entrypoint = (NameOption) {.type = Some, .value = executable.entry_point },
-        .target_dependencies = scopy_name_array(executable.dependencies, instance->gpa),
-        .file_dependencies = mk_string_array(0, instance->gpa),
-        .module = NULL,
-    };
-    name_ptr_insert(executable.name, target, &instance->targets);
+RuneEvalResult atlas_add_def(AtlasInstance* instance, Def def, RegionAllocator* region) {
+    return rune_add_def(def.name, def.expr, instance->env, region);
 }
-

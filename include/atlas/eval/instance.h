@@ -1,12 +1,13 @@
-#ifndef __ATLAS_INSTANCE_H
-#define __ATLAS_INSTANCE_H
+#ifndef __ATLAS_EVAL_INSTANCE_H
+#define __ATLAS_EVAL_INSTANCE_H
 
 #include "platform/memory/region.h"
 
 #include "pico/values/modular.h"
+#include "rune/syntax/expression.h"
+#include "rune/eval/eval.h"
 
 #include "atlas/data/error.h"
-#include "atlas/syntax/stanza.h"
 #include "atlas/syntax/project.h"
 
 // ----------------------------------------------------------------------------
@@ -21,6 +22,19 @@ typedef struct AtlasInstance AtlasInstance;
 
 AtlasInstance* make_atlas_instance(Allocator* a);
 void delete_atlas_instance(AtlasInstance* instance);
+
+/**
+ * Given that a project has been loaded, check what the default value for the
+ * commands 'run', 'build' or 'test' are:
+ */
+typedef struct {
+    NameOption build;
+    NameOption run;
+    NameOption test;
+} AtlasDefaultTargets;
+AtlasDefaultTargets atlas_default_targets(AtlasInstance* instance);
+ExprPool* get_expr_pool(AtlasInstance* instance);
+ValueHeap* get_val_heap(AtlasInstance* instance);
 
 /**
  * Given that a project has been loaded, lookup the 'target' in the atlas
@@ -43,10 +57,15 @@ void atlas_build(AtlasInstance* instance, String target, RegionAllocator* region
  */
 void register_package(AtlasInstance* instance, Package* package);
 
-
+/**
+ * Add or set pieces of internal state
+ */
 void set_instance_package(AtlasInstance* instance, Package* package);
 void set_instance_project(AtlasInstance* instance, Project project);
-void add_library(Library library, String path, AtlasInstance* instance);
-void add_executable(Executable executable, String path, AtlasInstance* instance);
+Project get_instance_project(AtlasInstance* instance);
+
+// Return true on fail and false on success
+RuneEvalResult atlas_add_def(AtlasInstance* instance, Def def, RegionAllocator* region);
+
 
 #endif

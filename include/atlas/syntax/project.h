@@ -6,6 +6,11 @@
 typedef struct {
     Name name;
     NameArray dependencies;
+
+    String build_file;
+    NameOption default_test;
+    NameOption default_build;
+    NameOption default_run;
 } AtlPackage;
 
 typedef struct {

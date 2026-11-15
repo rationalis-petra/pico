@@ -617,6 +617,41 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location 
     }
 }
 
+void* mk_flags_ty(uint64_t tag_size, uint64_t num_symbols, Symbol* symbols) {
+    PiAllocator pia = get_std_temp_allocator();
+
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
+    *ty = (PiType) {
+      .sort = TFlags, .flags.flag_size = tag_size,
+      .flags.flag_values = (SymbolPiList) {
+          .len = num_symbols,
+          .size = num_symbols,
+          .data = symbols,
+      },
+    };
+    return ty;
+}
+
+void gen_mk_flags_ty(Location dest, uint8_t flagsize, SymbolArray flags, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(Mov, reg(RDI, sz_8), imm8(flagsize), ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), imm64(flags.len), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)flags.data), ass, a, point);
+#elif ABI == WIN_64
+    build_binary_op(Mov, reg(RCX, sz_8), imm8((uint8_t)flagsize), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm64(flags.len), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), imm64((uint64_t)flags.data), ass, a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    generate_c_call(mk_flags_ty, ass, a, point);
+
+    if (dest.type != Dest_Register && dest.reg != RAX) {
+        build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);
+    }
+}
+
 void* mk_reset_ty(PiType* in, PiType* out) {
     PiAllocator pia = get_std_temp_allocator();
 

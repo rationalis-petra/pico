@@ -3,9 +3,8 @@
 
 #include <stdbool.h>
 #include "data/string.h"
+#include "data/slice.h"
 #include "data/result.h"
-
-#include "pico/data/string_array.h"
 
 typedef struct {union {uint64_t id; void* handle;};} Process;
 
@@ -19,17 +18,18 @@ typedef enum {
 } SpawnError;
 
 typedef struct {
-    Result_t result;
+    Result_t type;
     union { 
         Process process;
         SpawnError error;
     };
 } ProcessResult;
 
-ProcessResult create_process(String command, StringArray args);
+ProcessResult create_process(String command, StringSlice args);
+ProcessResult create_process_in(String command, StringSlice args, String directory);
 
 typedef struct {
-  Result_t result;
+  Result_t type;
   int status;
 } WaitResult;
 WaitResult wait_on_process(Process process);
