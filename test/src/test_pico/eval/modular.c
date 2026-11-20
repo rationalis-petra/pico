@@ -121,6 +121,26 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
+    if (test_start(log, mv_string("module-import-global-struct-value"))) {
+        MODULE("(module sub1 (import (core.kernel :all)) (export State init)) \n"
+            "(def State Struct [.x I64] [.y I64])\n"
+            "(def init struct State [.x 0] [.y 0])");
+        MODULE("(module test-module (import (core.kernel :all) (sub1 :as s :types)) (export val)) \n"
+            "(def val s.init)");
+        int64_t expected[2] = {0, 0};
+        TEST_EQ("test-module.val");
+    }
+
+    if (test_start(log, mv_string("module-import-global-backlink-name-collision"))) {
+        MODULE("(module player (import (core.kernel :all)) (export State init))\n"
+            "(def State Struct [.x I64])\n"
+            "(def init struct State [.x 0])");
+        MODULE("(module app (import (core.kernel :all) (player :types :as player)) (export init))\n"
+            "(def init proc [] player.init)");
+        int64_t expected[1] = {0};
+        TEST_EQ("(app.init)");
+    }
+
     if (test_start(log, mv_string("module-re-export-values-import-all"))) {
         MODULE("(module sub1 (import (core.kernel :all)) (export val1)) \n"
                "(def val1 7)");

@@ -34,6 +34,11 @@ void run_pico_stdlib_core_kernel_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(widen U64 (is (Struct [.x U32] [.y U32] [.z U32]) (struct [.x 678] [.y 567] [.z 456])).y)");
     }
 
+    if (test_start(log, mv_string("widnen-unsigned->signed"))) {
+        int64_t expected = 71298;
+        TEST_EQ("(widen I64 (is U32 71298))");
+    }
+
     /*
     if (test_start(log, mv_string("widen-f32->f64"))) {
         float64_t expected = 1.0;

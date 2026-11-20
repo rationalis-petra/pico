@@ -185,7 +185,7 @@ RExprCell get_rexpr_map_elt(RExprMap map, size_t idx, RExprPool* pool) {
 }
 
 
-Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
+Document* pretty_rune_rexpr(RExpr expr, RExprPool* pool, Allocator* a) {
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
     //DocStyle ty_former_style = scolour(colour(209, 118, 219), dstyle);
     DocStyle field_style = scolour(colour(60, 120, 210), dstyle);
@@ -194,7 +194,6 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
 
     Document* out = NULL;
 
-    RExpr expr = get_rexpr(ref, pool);
     switch (expr.type) {
     case REVar:
         out = mv_style_doc(var_style, mv_str_doc(view_name_string(expr.var), a), a);
@@ -213,15 +212,15 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
 
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mv_group_doc(mv_sep_doc(head, a), a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_rune_rexpr(expr.fn.body, pool, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr(expr.fn.body, pool), pool, a), a), &nodes);
         out = mk_paren_doc("(", ")", mv_group_doc(mv_sep_doc(nodes, a), a), a);
         break;
     }
     case REApp: {
         PtrArray nodes = mk_ptr_array(expr.app.args.len + 1, a);
-        push_ptr(pretty_rune_rexpr(expr.app.fn, pool, a), &nodes);
+        push_ptr(pretty_rune_rexpr(get_rexpr(expr.app.fn, pool), pool, a), &nodes);
         for (size_t i = 0; i < expr.app.args.len; i++) {
-            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr_elt(expr.app.args, i), pool, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr(get_rexpr_elt(expr.app.args, i), pool), pool, a), a), &nodes);
         }
         out = mv_group_doc(mk_paren_doc("(", ")", mv_group_doc(mv_sep_doc(nodes, a), a), a), a);
         break;
@@ -237,7 +236,7 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
         PtrArray nodes = mk_ptr_array(1 + expr.ecase.fields.len, a);
         PtrArray head_nodes = mk_ptr_array(2, a);
         push_ptr(mv_style_doc(former_style, mv_cstr_doc("case", a), a), &head_nodes);
-        push_ptr(mv_nest_doc(2, pretty_rune_rexpr(expr.ecase.val, pool, a), a), &head_nodes);
+        push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr(expr.ecase.val, pool), pool, a), a), &head_nodes);
         push_ptr(mv_sep_doc(head_nodes, a), &nodes);
         for (size_t i = 0; i < expr.ecase.fields.len; i++) {
             RPatternCell cell = get_rpat_map_elt(expr.ecase.fields, i, pool);
@@ -246,7 +245,7 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
             push_ptr(mv_cstr_doc(".", a), &head);
             push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
             push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
-            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(cell.pattern.body, pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr(cell.pattern.body, pool), pool, a), a), &fnodes);
             push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
         }
         return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
@@ -262,7 +261,7 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
             push_ptr(mv_cstr_doc(".", a), &head);
             push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
             push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
-            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(cell.pattern.body, pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(get_rexpr(cell.pattern.body, pool), pool, a), a), &fnodes);
             push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
         }
         return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
@@ -276,7 +275,19 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
         break;
     }
     case RERecord: {
-        panic(mv_string("TODO: implement pretty record"));
+        PtrArray nodes = mk_ptr_array(1 + expr.record.fields.len, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("record", a), a), &nodes);
+        for (size_t i = 0; i < expr.record.fields.len; i++) {
+            RExprCell cell = get_rexpr_map_elt(expr.record.fields, i, pool);
+            PtrArray fnodes = mk_ptr_array(2, a);
+            PtrArray head =  mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(".", a), &head);
+            push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
+            push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_rexpr(cell.expr, pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
+        }
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
         break;
     }
     case RECoData: {
@@ -317,7 +328,7 @@ Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a) {
         PtrArray nodes = mk_ptr_array(expr.list.len + 1, a);
         push_ptr(mv_style_doc(former_style, mv_cstr_doc("list", a), a), &nodes);
         for (size_t i = 0; i < expr.list.len; i++) {
-            RExprRef elt = get_rexpr_elt(expr.list, i);
+            RExpr elt = get_rexpr(get_rexpr_elt(expr.list, i), pool);
             push_ptr(mv_nest_doc(2, pretty_rune_rexpr(elt, pool, a), a), &nodes);
         }
         out = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
