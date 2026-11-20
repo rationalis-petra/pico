@@ -692,7 +692,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
-                backlink_global(target, syn.variable, out.backlink, links, a);
+                if (syn.type == SVariable) {
+                    // TODO (BUG): determine how to backlink against an absolute varable
+                    backlink_global(target, syn.variable, out.backlink, links, a);
+                }
 
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);

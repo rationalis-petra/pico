@@ -195,6 +195,6 @@ typedef struct {
     RExprRef expr;
 } RDef;
 
-Document* pretty_rune_rexpr(RExprRef ref, RExprPool* pool, Allocator* a);
+Document* pretty_rune_rexpr(RExpr ref, RExprPool* pool, Allocator* a);
 
 #endif

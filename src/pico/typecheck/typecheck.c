@@ -3109,7 +3109,7 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < typed.labels.terms.len; i++) {
             SynLabelBranch* branch = typed.labels.terms.data[i].val;
             for (size_t j = 0; j < branch->args.len; j++) {
-                PiType* type = branch->args.data[i].val;
+                PiType* type = branch->args.data[j].val;
                 squash_type(type, uctx);
             }
             squash_types(branch->body, env, ctx);

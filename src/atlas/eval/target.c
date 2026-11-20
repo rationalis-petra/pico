@@ -492,6 +492,23 @@ TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAl
 
     Bridge bstring = {.type = BString};
     Bridge bstring_list = {.type = BList, .element = &bstring};
+
+    BridgeVariant string_opt_variants[] = {
+        {.name = string_to_name(mv_string("none")),
+         .len = 0,},
+        {.name = string_to_name(mv_string("some")),
+         .len = 1,
+         .types = &bstring,}
+    };
+    Bridge bstring_opt = {
+        .type = BData,
+        .data = {
+            .len = sizeof(string_opt_variants) / sizeof(BridgeVariant),
+            .variants = string_opt_variants,
+        },
+    };
+
+
     Bridge btarget = {
         .type = BCustom,
         .custom.c_size = sizeof(TargetRef),
@@ -507,7 +524,7 @@ TargetRef translate_from_rune(ValRef val, RuneEnv* env, TargetMap* map, RegionAl
         {.name = string_to_name(mv_string("depends-on")),
          .val = btarget_list},
         {.name = string_to_name(mv_string("file")),
-         .val = bstring,},
+         .val = bstring_opt,},
         {.name = string_to_name(mv_string("submodules")),
          .val = bstring_list,},
     };

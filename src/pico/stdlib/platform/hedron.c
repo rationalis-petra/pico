@@ -1435,7 +1435,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 1, texture_heap_ty,
                          mk_prim_type(pia, Unit));
     build_destroy_texture_heap_fn(typep, ass, pia, &ra, &point);
-    name = string_to_name(mv_string("destory-texture-heap"));
+    name = string_to_name(mv_string("destroy-texture-heap"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

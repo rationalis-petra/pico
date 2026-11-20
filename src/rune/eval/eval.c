@@ -233,7 +233,24 @@ RuneEvalResult eval_rune_internal(Expr expr, RuneEvalCtx ctx) {
                     };
                     return callee(args, ctx.env, ctx.region);
                 } else {
-                    panic(mv_string("TODO: implement currying for non-variadic builtins."));
+                    const size_t req_args = bridge.fn.num_args;
+                    const size_t avail_args = expr.app.args.len - args_consumed;
+                    if (avail_args < req_args) {
+                        panic(mv_string("TODO: add currying to builtin functions."));
+                    }
+                    U64Array done_args = mk_u64_array(expr.app.args.len, &a);
+                    for (size_t i = 0; i < req_args; i++) {
+                        ExprRef arg = get_expr_elt(expr.app.args, i + args_consumed);
+                        RuneEvalResult result = eval_rune_internal(get_expr(arg, pool), ctx);
+                        if (result.type != AValue) return result;
+                        push_u64(result.value.ref, &done_args);
+                    }
+                    ValSlice args = {
+                        .len = done_args.len,
+                        .data = (void*)done_args.data,
+                    };
+                    args_consumed = req_args;
+                    result = callee(args, ctx.env, ctx.region);
                 }
             } else {
                 return (RuneEvalResult) {
