@@ -24,12 +24,14 @@ typedef enum : uint64_t {
     KeyEvent,
     ModifierKeyEvent,
     KeymapChanged,
+    PointerMove,
 } MessageType;
 
 typedef struct {
-    int64_t xpos;
-    int64_t ypos;
-} MousePos;
+    // Relative to top-left of the client window.
+    float x;
+    float y;
+} PointerPos;
 
 typedef struct {
     RawKey key_id;
@@ -49,6 +51,11 @@ typedef struct {
     uint32_t height;
 } WindowDimensions;
 
+typedef struct {
+    PointerPos new_pos;
+    // MousePos delta_pos;
+} PointerMoveEvent;
+
 typedef struct KeyMap KeyMap;
 typedef struct KeyboardState KeyboardState;
 
@@ -59,6 +66,7 @@ typedef struct {
         KeyEventData key_event;
         ModifierKeyEventData mod_event;
         KeyMap* keymap;
+        PointerMoveEvent pointer_move;
     };
 } WinMessage;
 
@@ -95,11 +103,15 @@ void present_framebuffer(FrameBuffer frame, PlWindow* window);
 /**
  * Human interaction.
  */
+// TODO: cursor visibility, cursor locking
+
 KeyboardState* create_keyboard_state(KeyMap* keymap);
 void destroy_keyboard_state(KeyboardState*);
 
 void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState* state);
 void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState* state);
+
+// TODO: query keystate for whether a key is pressed.
 
 // TODO: what about multiple unicocde characters?
 Key get_key(RawKey raw, KeyboardState* state);
