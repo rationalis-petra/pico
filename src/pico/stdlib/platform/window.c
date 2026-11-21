@@ -246,22 +246,31 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     keystate_ty = e->value;
 
     // Message Type
-    typep = mk_named_type(pia, "RawKey", mk_sz_enum_type(
-        pia, 32,  60, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
-        "i", 0, "j", 0, "k", 0, "l", 0, "m", 0, "n", 0, "o", 0, "p", 0, "q", 0,
-        "r", 0, "s", 0, "t", 0, "u", 0, "v", 0, "w", 0, "x", 0, "y", 0, "z", 0,
+    typep = mk_named_type(
+        pia, "RawKey",
+        mk_sz_enum_type(
+            pia, 32, 77, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0,
+            "h", 0, "i", 0, "j", 0, "k", 0, "l", 0, "m", 0, "n", 0, "o", 0, "p",
+            0, "q", 0, "r", 0, "s", 0, "t", 0, "u", 0, "v", 0, "w", 0, "x", 0,
+            "y", 0, "z", 0,
 
-        "one", 0, "two", 0, "three", 0, "four", 0, "five", 0, "six", 0, "seven",
-        0, "eight", 0, "nine", 0, "zero", 0,
+            "one", 0, "two", 0, "three", 0, "four", 0, "five", 0, "six", 0,
+            "seven", 0, "eight", 0, "nine", 0, "zero", 0,
 
-        "exclamation", 0, "at", 0, "hash",
-        0, "dollar", 0, "percent", 0, "caret", 0, "ampersand", 0, "asterisk", 0,
-        "lparen", 0, "rparen", 0, "minus", 0, "plus", 0, "divide", 0,
+            "exclamation", 0, "at", 0, "hash", 0, "dollar", 0, "percent", 0,
+            "caret", 0, "ampersand", 0, "asterisk", 0, "lparen", 0, "rparen", 0,
+            "minus", 0, "plus", 0, "divide", 0,
 
-        "rbrace", 0, "lbrace", 0, "colon", 0, "semicolon", 0, "comma", 0, "dot", 
-        0, "query", 0,
+            "lbrace", 0, "rbrace", 0, "colon", 0, "semicolon", 0, "comma", 0,
+            "dot", 0, "query", 0,
 
-        "space", 0, "shift", 0, "enter", 0, "backspace", 0));
+            "space", 0, "enter", 0, "tab", 0,
+
+            "capslock", 0, "numlock", 0, "lshift", 0, "rshift", 0, "lctrl", 0,
+            "rctrl", 0, "lalt", 0, "ralt", 0, "lmeta", 0, "rmeta", 0,
+
+            "esc", 0, "pgup", 0, "pgdown", 0, "home", 0, "end", 0, "insert",
+            0, "delete", 0, "backspace", 0));
 
     type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("RawKey"));
@@ -300,11 +309,12 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
 
     typep = mk_named_type(pia, "WindowMessage",
-        mk_enum_type(pia, 4,
+        mk_enum_type(pia, 5,
                      "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
                      "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
                      "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                     "keymap", 1, keymap_ty));
+                     "keymap", 1, keymap_ty,
+                     "pointer-move", 2, mk_prim_type(pia, Float_32), mk_prim_type(pia, Float_32)));
 
     type = (PiType) {.sort = TType};
     name = string_to_name(mv_string("WindowMessage"));

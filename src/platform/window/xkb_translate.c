@@ -341,6 +341,8 @@ RawKey scancode_to_rawkey(uint32_t scancode) {
     case KEY_Z:
         outkey = RKEY_Z;
         break;
+
+        // Numeric
     case KEY_1:
         outkey = RKEY_1;
         break;
@@ -368,25 +370,113 @@ RawKey scancode_to_rawkey(uint32_t scancode) {
     case KEY_9:
         outkey = RKEY_9;
         break;
-    case KEY_SPACE:
-        outkey = RKEY_SPACE;
-        break;
 
+        // Number-alt block
+        /** Cannot find - remove?? !, @, */
+    case KEY_NUMERIC_POUND:
+        outkey = RKEY_HASH;
+        break;
+        /** Cannot find - remove?? $, %, ^, &, */
+    case KEY_NUMERIC_STAR:
+        outkey = RKEY_ASTERISK;
+        break;
+    case KEY_KPLEFTPAREN:
+        outkey = RKEY_LPAREN;
+        break;
+    case KEY_KPRIGHTPAREN:
+        outkey = RKEY_RPAREN;
+        break;
     case KEY_MINUS:
         outkey = RKEY_MINUS;
         break;
     case KEY_KPPLUS:
         outkey = RKEY_PLUS;
         break;
+    case KEY_KPSLASH:
+        outkey = RKEY_DIVIDE;
+        break;
 
+        // Number-alt block
+    case KEY_LEFTBRACE:
+        outkey = RKEY_LBRACE;
+        break;
+    case KEY_RIGHTBRACE:
+        outkey = RKEY_RBRACE;
+        break;
     case KEY_SEMICOLON:
         outkey = RKEY_SEMICOLON;
         break;
     case KEY_COMMA:
         outkey = RKEY_COMMA;
         break;
+    case KEY_DOT:
+        outkey = RKEY_DOT;
+        break;
+        /** No ? */
+
+    case KEY_SPACE:
+        outkey = RKEY_SPACE;
+        break;
     case KEY_ENTER:
         outkey = RKEY_ENTER;
+        break;
+    case KEY_TAB:
+        outkey = RKEY_TAB;
+        break;
+
+        // Modifier keys
+    case KEY_CAPSLOCK:
+        outkey = RKEY_CAPSLOCK;
+        break;
+    case KEY_NUMLOCK:
+        outkey = RKEY_NUMLOCK;
+        break;
+    case KEY_LEFTSHIFT:
+        outkey = RKEY_LSHIFT;
+        break;
+    case KEY_RIGHTSHIFT:
+        outkey = RKEY_RSHIFT;
+        break;
+    case KEY_LEFTCTRL:
+        outkey = RKEY_LCTRL;
+        break;
+    case KEY_RIGHTCTRL:
+        outkey = RKEY_RCTRL;
+        break;
+    case KEY_LEFTALT:
+        outkey = RKEY_LALT;
+        break;
+    case KEY_RIGHTALT:
+        outkey = RKEY_RALT;
+        break;
+    case KEY_LEFTMETA:
+        outkey = RKEY_LMETA;
+        break;
+    case KEY_RIGHTMETA:
+        outkey = RKEY_RMETA;
+        break;
+
+        // Command Keys
+    case KEY_ESC:
+        outkey = RKEY_ESC;
+        break;
+    case KEY_PAGEUP:
+        outkey = RKEY_PGUP;
+        break;
+    case KEY_PAGEDOWN:
+        outkey = RKEY_PGDOWN;
+        break;
+    case KEY_HOME:
+        outkey = RKEY_HOME;
+        break;
+    case KEY_END:
+        outkey = RKEY_END;
+        break;
+    case KEY_INSERT:
+        outkey = RKEY_INSERT;
+        break;
+    case KEY_DELETE:
+        outkey = RKEY_DELETE;
         break;
     case KEY_BACKSPACE:
         outkey = RKEY_BACKSPACE;

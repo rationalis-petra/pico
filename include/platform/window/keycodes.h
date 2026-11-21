@@ -42,27 +42,27 @@ typedef enum : uint32_t {
   RKEY_9,
   RKEY_0,
 
-  RKEY_EXCLAMATION,
-  RKEY_AT,
+  RKEY_EXCLAMATION, // Remove?
+  RKEY_AT,          // Remove?
   RKEY_HASH,
-  RKEY_DOLLAR,
-  RKEY_PERCENT,
-  RKEY_CARET,
-  RKEY_AMPERSAND,
+  RKEY_DOLLAR,      // Remove?
+  RKEY_PERCENT,     // Remove?
+  RKEY_CARET,       // Remove?
+  RKEY_AMPERSAND,   // Remove?
   RKEY_ASTERISK,
   RKEY_LPAREN,
   RKEY_RPAREN,
   RKEY_MINUS,
   RKEY_PLUS,
-  RKEY_DIVIDE,
+  RKEY_DIVIDE, // TODO: distinguish between keypad / and /
 
   RKEY_LBRACE,
   RKEY_RBRACE,
-  RKEY_COLON,
+  RKEY_COLON, // Remove?
   RKEY_SEMICOLON,
   RKEY_COMMA,
   RKEY_DOT,
-  RKEY_QUERY,
+  RKEY_QUERY, // Remove?
 
   RKEY_SPACE,
   RKEY_ENTER,
