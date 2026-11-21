@@ -207,10 +207,6 @@ bool instance_search(uint64_t id, AddrPiList args, TraitInstance instance, Symbo
 }
 
 InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
-    PtrArray* instances = env_implicit_lookup(id, env->env);
-    if (!instances) {
-        return (InstanceEntry) {.type = IENotFound,};
-    }
     // Start with the local environment 
     // TODO: determine semantics of if multiple results are found??
     SymbolArray path = mk_symbol_array(4, env->gpa);
@@ -231,6 +227,10 @@ InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
         } 
     }
 
+    PtrArray* instances = env_implicit_lookup(id, env->env);
+    if (!instances) {
+        return (InstanceEntry) {.type = IENotFound,};
+    }
     InstanceEntry out = {.type = IENotFound,};
     InstSrcArray sources = mk_inst_src_array(1, env->gpa);
     for (size_t i = 0; i < instances->len; i++) {

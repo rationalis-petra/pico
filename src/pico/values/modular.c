@@ -4,6 +4,7 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/memory/arena.h"
 #include "platform/memory/executable.h"
 
 #include "data/num.h"
@@ -548,7 +549,13 @@ Result add_def(Module* module, Name name, PiType type, void* data, Segments segm
           if (type.instance.over.len == 0) {
             // Regular instance
             // TODO: add pi_instance_size to the types file.
-            size_t instance_size = pi_instance_size_of(type);
+            size_t instance_size;
+            if (pi_instance_size_of(type, &instance_size) != Ok) {
+                return (Result) {
+                    .type = Err,
+                    .error_message = mv_string("Attempting to create instance whose size is polymorphic and cannot be determined."),
+                };
+            }
             void* new_memory = call_alloc(instance_size, &module->pico_allocator);
             memcpy(new_memory, *(void**)data, instance_size);
 
@@ -786,11 +793,25 @@ void* get_instantiation(Module *module, Name name, SymPtrAssoc type_binds, U64Ar
     }
     
     // Run the expression
+    ArenaAllocator* size_arena = make_arena_allocator(1024, &module->allocator);
+    Allocator size_alloc = aa_to_gpa(size_arena);
+    PiAllocator size_pia = convert_to_pallocator(&size_alloc);
+    PiType instance_type_source = entry->type;
+    instance_type_source.instance.over.len = 0;
+    PiType* instance_type = pi_type_subst(&instance_type_source, type_binds, NULL, &size_pia, &size_alloc);
+    size_t instance_size;
+    Result_t size_result = pi_instance_size_of(*instance_type, &instance_size);
+    delete_arena_allocator(size_arena);
+    if (size_result != Ok) {
+        // TODO: allow error reporting here
+        panic(mv_string("(TODO - make me a proper error): Attempting to create instance whose size is polymorphic and cannot be determined."));
+    }
+
     void* instance = call_instance_fn(
         entry->code_segment->data + existing_instances.instance_offset,
         type_encodings,
         implicits,
-        pi_instance_size_of(entry->type),
+        instance_size,
         &module->pico_allocator,
         &module->allocator);
 

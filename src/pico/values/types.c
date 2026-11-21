@@ -1504,7 +1504,7 @@ size_t pi_align_of(PiType type) {
     return out;
 }
 
-size_t pi_instance_size_of(PiType type) {
+Result_t pi_instance_size_of(PiType type, size_t* out) {
   size_t align = 1;
   size_t total = 0; 
   for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
@@ -1530,10 +1530,11 @@ size_t pi_instance_size_of(PiType type) {
     total += field_size;
   }
 
-  return total;
+  *out = total;
+  return Ok;
 
  invalid_type:
-  panic(mv_string("Cannot get size of polymorphic type!"));
+  return Err;
 }
 
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
