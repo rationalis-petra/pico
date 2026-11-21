@@ -153,4 +153,24 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         int64_t expected = 9798;
         TEST_EQ("(seq [let! ptr (name (Ptr I64) (dyn-alloc (size-of I64)))] (address.store (unname ptr) 9798) (get ptr))");
     }
+
+    if (test_start(log, mv_string("trait-unknown-failure"))) {
+        RUN("(def Monoid Trait Monoid [A] [.+ Proc [A A] A] [.zero A])");
+        RUN("(def Vec2 Named Vec2 Family [A] Tile [2] A)");
+        RUN("(def vec2-zero all [A] proc {(mon (Monoid A))} [] name (Vec2 A) tile [mon.zero mon.zero])");
+        RUN("(def vec2-monoid instance [A] {(mon Monoid A)} (Monoid (Vec2 A))\n"
+            "  [.zero (vec2-zero)]\n"
+            "  [.+ proc [ln rn]\n"
+            "        let [l unname ln]\n"
+            "            [r unname rn]\n"
+            "          name (Vec2 A) with [i] [2] (mon.+ (telt [i] l) (telt [i] r))])\n");
+        RUN("(def i64-monoid instance (Monoid I64)\n"
+            "  [.zero 0]\n"
+            "  [.+ prim.i64.+])\n");
+
+        RUN("(def + all [A] proc {(n (Monoid A))} [(x A) (y A)] n.+ x y)");
+
+        int64_t expected[] = {7, 3};
+        TEST_EQ("(let [v1 name (Vec2 I64) tile [3 1]] [v2 name (Vec2 I64) tile [4 2]] (+ v1 v2))");
+    }
 }
