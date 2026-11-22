@@ -53,6 +53,15 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(get-second-value {I64} 5)");
     }
 
+    if (test_start(log, mv_string("instance-parametric-field-out-of-order"))) {
+        RUN("(def Pair Trait Pair [A] [.left I64] [.right I64])");
+        RUN("(def pair-i64 instance [A] (Pair A) [.right 7] [.left 42])");
+        RUN("(def get-left all [A] proc {(p (Pair A))} [(x A)] p.left)");
+
+        int64_t expected = 42;
+        TEST_EQ("(get-left {I64} 0)");
+    }
+
     if (test_start(log, mv_string("instance-const-single"))) {
         uint64_t expected = 43;
         RUN("(def MultiConstInhabited Trait MultiConstInhabited [A] [.val-1 A] [.val-2 U64])");

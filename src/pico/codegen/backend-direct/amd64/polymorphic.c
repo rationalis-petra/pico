@@ -222,11 +222,21 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     data_stack_grow(env, 2 * REGISTER_SIZE);
 
-    // TODO: This currently assumes that instance fields are generated in order;
-    //       make this not the case (see current poly struct for inspiration)
-    for (size_t i = 0; i < struct_fields.len; i++) {
+    // TODO: To enforce that we handle cases where the field order does not
+    //       match the declaration order (of the types), we iterate through the
+    //       type's fields then search for the struct field. This will not match
+    //       semantics if the field bodies have side-effects. Add a test then
+    //       fix this. 
+    for (size_t i = 0; i < struct_type_fields.len; i++) {
+        Symbol sym = struct_type_fields.data[i].key;
+        SynRef val;
+        for (size_t j = 0; j < struct_fields.len; j++) {
+            if (symbol_eq(sym, struct_fields.data[j].key)) {
+                val = struct_fields.data[j].val;
+            }
+        }
+
         // Generate value on stack
-        SynRef val = struct_fields.data[i].val;
         generate_i(val, env, ictx);
         PiType* member_type = strip_type(get_type(val, ictx.tape));
 
