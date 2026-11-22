@@ -13,6 +13,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/header.h"
 #include "pico/syntax/synrange.h"
+#include "pico/values/modular.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -148,7 +149,15 @@ typedef struct {
     PrimType type;
 } SynFloatingLiteral;
 
+// TODO: Global backlinks (in general) are an underdeveloped system. We need a
+// way of detecting when a redefinition occurs, and pushing that redefinition to
+// all affected clients. We also probably want two cases/modes:
+//   - A 'live' mode which allows arbitrary redefinitions, meaning we must keep
+//     around raw, unabstracted syntax.
+//   - A 'fixed' mode where the only "redefinitions" allowed are forward
+//     declarations + recursive functions. (Useful for scripts, build & run).
 typedef struct {
+    Module* source;
     Symbol symbol;
     size_t index;
     void* value;

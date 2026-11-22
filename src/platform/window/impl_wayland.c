@@ -67,6 +67,8 @@ struct wl_seat* seat;
 // There technically may be more than one keyboard plugged in. We should
 // gracefully handle this scenario.
 static struct wl_keyboard* kb;
+// TODO (MAYBE BUG) Investigate multiple pointers on wayland
+static struct wl_pointer* pointer;
 
 // ---------------------------------------- 
 
@@ -113,6 +115,11 @@ void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
     PlWindow* win = data;
     win->should_close = true;
 }
+
+/**
+ * Keyboard Listener
+ * 
+ */
 
 void kb_map(void* data, struct wl_keyboard* kb, uint32_t format, int32_t fd, uint32_t size) {
     // set xkb keymap...
@@ -190,6 +197,8 @@ void kb_rep(void* data, struct wl_keyboard* kb, int32_t rate, int32_t del) {
 	
 }
 
+// Stubs for now, implement these later.
+
 static struct wl_keyboard_listener kb_listener = {
 	.keymap = kb_map,
 	.enter = kb_enter,
@@ -199,10 +208,58 @@ static struct wl_keyboard_listener kb_listener = {
 	.repeat_info = kb_rep
 };
 
+/**
+ * Pointer Listener
+ * 
+ */
+
+static void on_pointer_enter(void* data, struct wl_pointer* p, uint32_t serial, struct wl_surface* surface, wl_fixed_t sx,  wl_fixed_t sy) {}
+
+static void on_pointer_leave(void* data, struct wl_pointer* p, uint32_t serial, struct wl_surface* surface) {}
+
+static void on_pointer_motion(void* data, struct wl_pointer* p, uint32_t time, wl_fixed_t sx, wl_fixed_t sy) {
+    PtrArray* windows = data;
+
+    // TODO: select currently active window!!!
+    PlWindow* window = windows->data[0];
+
+    WinMessage message = (WinMessage) {
+        .type = PointerMove,
+        .pointer_move.new_pos.x = wl_fixed_to_double(sx),
+        .pointer_move.new_pos.y = wl_fixed_to_double(sy),
+    };
+
+    push_wm(message, &window->messages);
+}
+
+static void on_pointer_button(void* data, struct wl_pointer* p, uint32_t s, uint32_t t, uint32_t b, uint32_t st) {};
+static void on_pointer_frame(void* data, struct wl_pointer* p) {};
+
+static void on_pointer_axis(void* data, struct wl_pointer* p, uint32_t t, uint32_t a, wl_fixed_t v) {};
+static void on_pointer_axis_source(void* data, struct wl_pointer* p, uint32_t s) {};
+static void on_pointer_axis_stop(void* data, struct wl_pointer* p, uint32_t t, uint32_t a) {};
+static void on_pointer_axis_discrete(void* data, struct wl_pointer* p, uint32_t a, int32_t d2) {};
+
+static struct wl_pointer_listener pointer_listener = {
+    .enter = on_pointer_enter,
+    .leave = on_pointer_leave,
+    .motion = on_pointer_motion,
+    .button = on_pointer_button,
+    .frame = on_pointer_frame,
+    .axis = on_pointer_axis,
+    .axis_source = on_pointer_axis_source,
+    .axis_stop = on_pointer_axis_stop,
+    .axis_discrete = on_pointer_axis_discrete,
+};
+
 void seat_capabilities(void* data, struct wl_seat* seat, uint32_t cap) {
 	if (cap & WL_SEAT_CAPABILITY_KEYBOARD && !kb) {
 		kb = wl_seat_get_keyboard(seat);
 		wl_keyboard_add_listener(kb, &kb_listener, data);
+	}
+	if (cap & WL_SEAT_CAPABILITY_POINTER && !pointer) {
+		pointer = wl_seat_get_pointer(seat);
+		wl_pointer_add_listener(pointer, &pointer_listener, data);
 	}
 }
 

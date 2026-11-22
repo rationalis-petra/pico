@@ -53,6 +53,15 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(get-second-value {I64} 5)");
     }
 
+    if (test_start(log, mv_string("instance-parametric-field-out-of-order"))) {
+        RUN("(def Pair Trait Pair [A] [.left I64] [.right I64])");
+        RUN("(def pair-i64 instance [A] (Pair A) [.right 7] [.left 42])");
+        RUN("(def get-left all [A] proc {(p (Pair A))} [(x A)] p.left)");
+
+        int64_t expected = 42;
+        TEST_EQ("(get-left {I64} 0)");
+    }
+
     if (test_start(log, mv_string("instance-const-single"))) {
         uint64_t expected = 43;
         RUN("(def MultiConstInhabited Trait MultiConstInhabited [A] [.val-1 A] [.val-2 U64])");
@@ -152,5 +161,64 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
 
         int64_t expected = 9798;
         TEST_EQ("(seq [let! ptr (name (Ptr I64) (dyn-alloc (size-of I64)))] (address.store (unname ptr) 9798) (get ptr))");
+    }
+
+    if (test_start(log, mv_string("trait-local-instantiation"))) {
+        RUN("(def Monoid Trait Monoid [A] [.+ Proc [A A] A] [.zero A])");
+        RUN("(def Vec2 Named Vec2 Family [A] Tile [2] A)");
+        RUN("(def vec2-zero all [A] proc {(mon (Monoid A))} [] name (Vec2 A) tile [mon.zero mon.zero])");
+        RUN("(def vec2-monoid instance [A] {(mon Monoid A)} (Monoid (Vec2 A))\n"
+            "  [.+ proc [ln rn]\n"
+            "        let [l unname ln]\n"
+            "            [r unname rn]\n"
+            "          name (Vec2 A) with [i] [2] (mon.+ (telt [i] l) (telt [i] r))]\n"
+            "  [.zero (vec2-zero)])\n");
+        RUN("(def i64-monoid instance (Monoid I64)\n"
+            "  [.+ prim.i64.+]"
+            "  [.zero 0])\n");
+
+        RUN("(def + all [A] proc {(n (Monoid A))} [(x A) (y A)] n.+ x y)");
+
+        int64_t expected[] = {7, 3};
+        TEST_EQ("(let [v1 name (Vec2 I64) tile [3 1]] [v2 name (Vec2 I64) tile [4 2]] (+ v1 v2))");
+    }
+
+    if (test_start(log, mv_string("trait-implicit-field-offset"))) {
+        RUN("(def Left Trait Left [A] [.identity Proc [A] A])");
+        RUN("(def i64-left instance (Left I64) [.identity proc [x] x])");
+
+        RUN("(def Padded Trait Padded [A] {.left Left A} [.values (Tile 2 A)])");
+        RUN("(def i64-padded instance (Padded I64) [.values tile [42 7]])");
+
+        int64_t expected = 7;
+        TEST_EQ("(let [p i64-padded] (telt [1] p.values))");
+    }
+
+    if (test_start(log, mv_string("trait-parametric-implicit-field-layout"))) {
+        RUN("(def Left Trait Left [A] [.identity Proc [A] A])");
+        RUN("(def i64-left instance (Left I64) [.identity proc [x] x])");
+
+        RUN("(def Padded Trait Padded [A] {.left Left A} [.values (Tile 2 I64)])");
+        RUN("(def poly-padded instance [A] {(left (Left A))} (Padded A) [.values tile [42 7]])");
+        RUN("(def padded-left all [A] proc {(p (Padded A))} [(x A)] p.left.identity x)");
+
+        int64_t expected = 42;
+        TEST_EQ("(padded-left {I64} 42)");
+    }
+
+    if (test_start(log, mv_string("trait-member-deductions"))) {
+        RUN("(def Group Trait Group [A] {.mon Monoid A} [.- Proc [A A] A])");
+        RUN("(def vec2-group instance [A] {(grp Group A)} (Group (Vec2 A))"
+            "  [.- proc [ln rn]"
+            "        let [l unname ln]"
+            "            [r unname rn]"
+            "          name (Vec2 A) with [i] [2] (grp.- (telt [i] l) (telt [i] r))])")
+        RUN("(def i64-group instance (Group I64)\n"
+            "  [.- prim.i64.-])\n");
+
+        RUN("(def - all [A] proc {(n (Group A))} [(x A) (y A)] n.- x y)");
+
+        int64_t expected[] = {2, -3};
+        TEST_EQ("(let [v1 name (Vec2 I64) tile [12 6]] [v2 name (Vec2 I64) tile [10 9]] (- v1 v2))");
     }
 }

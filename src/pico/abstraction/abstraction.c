@@ -3736,6 +3736,7 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
                     .abvar.value = is_sort_or_kind(e->type) ? &e->value : e->value,
                     .abvar.type = &e->type,
                     .abvar.symbol = msym->atom.symbol,
+                    .abvar.source = m,
                 };
                 SynRef res = new_syntax(ctx.tape);
                 set_syntax(res, syn , ctx.tape);

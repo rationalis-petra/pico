@@ -411,7 +411,19 @@ Document* pretty_rune_expr(Expr expr, ExprPool* pool, Allocator* a) {
         break;
     }
     case ERecord: {
-        panic(mv_string("TODO: implement pretty record."));
+        PtrArray nodes = mk_ptr_array(1 + expr.record.fields.len, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("record", a), a), &nodes);
+        for (size_t i = 0; i < expr.record.fields.len; i++) {
+            ExprCell cell = get_expr_map_elt(expr.record.fields, i, pool);
+            PtrArray fnodes = mk_ptr_array(2, a);
+            PtrArray head =  mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(".", a), &head);
+            push_ptr(mk_str_doc(view_name_string(cell.name), a), &head);
+            push_ptr(mv_style_doc(field_style, mv_cat_doc(head, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, pretty_rune_expr(cell.expr, pool, a), a), &fnodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), a), &nodes);
+        }
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }
     case ECase: {
         PtrArray nodes = mk_ptr_array(1 + expr.ecase.fields.len, a);

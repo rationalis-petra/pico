@@ -37,12 +37,22 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
+    const char* monoid_trait = 
+        "(def Monoid Trait Monoid [A]"
+        "  [.+ Proc [A A] A]"
+        "  [.zero A])\n";
+    compile_toplevel(monoid_trait, module, target, &point, &pi_point, region);
+
+    const char* group_trait = 
+        "(def Group Trait Group [A]"
+        "  {.monoid Monoid A}"
+        "  [.- Proc [A A] A])\n";
+    compile_toplevel(group_trait, module, target, &point, &pi_point, region);
+
     const char* ring_trait = 
         "(def Ring Trait Ring [A]"
-        "  [.+ Proc [A A] A]"
-        "  [.- Proc [A A] A]"
+        "  {.group Group A}"
         "  [.* Proc [A A] A]"
-        "  [.zero A]"
         "  [.one A])\n";
     compile_toplevel(ring_trait, module, target, &point, &pi_point, region);
 
@@ -60,11 +70,11 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
     compile_toplevel(real_trait, module, target, &point, &pi_point, region);
 
     const char* add_fn =
-        "(def + all [A] proc {(n (Ring A))} [(x A) (y A)] n.+ x y)";
+        "(def + all [A] proc {(n (Monoid A))} [(x A) (y A)] n.+ x y)";
     compile_toplevel(add_fn, module, target, &point, &pi_point, region);
 
     const char* sub_fn = 
-        "(def - all [A] proc {(n (Ring A))} [(x A) (y A)] n.- x y)";
+        "(def - all [A] proc {(n (Group A))} [(x A) (y A)] n.- x y)";
     compile_toplevel(sub_fn, module, target, &point, &pi_point, region);
 
     const char* mul_fn = 

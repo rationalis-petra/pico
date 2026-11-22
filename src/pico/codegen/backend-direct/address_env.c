@@ -469,6 +469,7 @@ void address_start_poly_instance(SymbolArray* types, BindingArray vars, SymPtrAM
 
 void address_end_poly_instance(AddressEnv* env, Allocator* a) {
     pop_ptr(&env->instance_implicits);
+    pop_ptr(&env->instance_types);
     LocalAddrs* old_locals = env->local_envs.data[env->local_envs.len - 1];
     pop_ptr(&env->local_envs);
     sdelete_saddr_array(old_locals->vars);

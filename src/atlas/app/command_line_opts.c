@@ -49,10 +49,10 @@ static AtlasCommand internal_parse_command(StringArray args, ArenaAllocator* a) 
             };
         }
     } else if (string_cmp(subcommand, mv_string("build")) == 0) {
-        if (args.len != 2) {
+        if (args.len > 2) {
             return (AtlasCommand) {
                 .type = CInvalid,
-                .error_message = mv_string("'atlas build' must take at most 1 argument, the name of the target to build."),
+                .error_message = mv_string("'atlas build' must take at most 1 argument, the name of the target to run."),
             };
         } else {
             return (AtlasCommand) {

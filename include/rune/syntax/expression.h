@@ -157,6 +157,7 @@ typedef struct {
 typedef struct ExprPool ExprPool;
 
 ExprPool* mk_expr_pool(Allocator* gpa);
+ExprPool* mk_garbage_collected_expr_pool(Allocator* gpa);
 void delete_expr_pool(ExprPool* );
 
 ExprRef new_expr(ExprPool* pool);
@@ -200,6 +201,11 @@ typedef struct {
     Name name;
     ExprRef expr;
 } Def;
+
+typedef struct {
+    size_t len;
+    ExprCell cells[];
+} VarSubst;
 
 NameArray free_vars(Expr expr, ExprPool* pool, Allocator* a);
 

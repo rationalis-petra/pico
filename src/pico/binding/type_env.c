@@ -206,13 +206,14 @@ bool instance_search(uint64_t id, AddrPiList args, TraitInstance instance, Symbo
     return eql;
 }
 
+/**
+ * Given a Trait, keyed by unique id (id) and a set of instantiated types 
+ * (the args), attempt to find or synthesize an instance of that trait for the
+ * given type.
+ */
 InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
-    PtrArray* instances = env_implicit_lookup(id, env->env);
-    if (!instances) {
-        return (InstanceEntry) {.type = IENotFound,};
-    }
     // Start with the local environment 
-    // TODO: determine semantics of if multiple results are found??
+    // TODO: determine semantics of if multiple locals are found??
     SymbolArray path = mk_symbol_array(4, env->gpa);
     for (size_t i = 1; i <= env->locals.len; i++) {
         Local local = env->locals.data[env->locals.len - i].val;
@@ -231,15 +232,24 @@ InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
         } 
     }
 
+    PtrArray* instances = env_implicit_lookup(id, env->env);
+    if (!instances) {
+        return (InstanceEntry) {.type = IENotFound,};
+    }
     InstanceEntry out = {.type = IENotFound,};
+    // Sources stores a list of all found items: we expect there to be only 1
+    // instance found, so if this list ends up with > 1 elements then we raise
+    // an error. 
     InstSrcArray sources = mk_inst_src_array(1, env->gpa);
+
+    // Loop over all globally bound instances 
     for (size_t i = 0; i < instances->len; i++) {
         InstanceSrc* src = instances->data[i];
         bool eql = true;
 
         if (src->over.len > 0) {
             InstanceEntry entry = parametric_instance_lookup(src, args, env);
-            if (entry.type == IEAbsSymbol) {
+            if (entry.type == IEAbsSymbol || entry.type == IELocal) {
                 push_inst_src(*src, &sources);
                 out = entry;
             }

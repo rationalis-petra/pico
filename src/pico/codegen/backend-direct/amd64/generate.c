@@ -692,7 +692,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
-                backlink_global(target, syn.variable, out.backlink, links, a);
+                if (syn.type == SVariable) {
+                    // TODO (BUG): determine how to backlink against an absolute varable
+                    backlink_global(target, syn.variable, out.backlink, links, a);
+                }
 
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
@@ -1928,7 +1931,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                     offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.implicit_fields.data[i].val));
                     if (symbol_eq(source_type->instance.implicit_fields.data[i].key, syn.projector.field))
                         break;
-                    offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
+                    offset += pi_size_of(*(PiType*)source_type->instance.implicit_fields.data[i].val);
                 }
                 if (!is_implicit) {
                     for (size_t i = 0; i < source_type->instance.fields.len; i++) {
@@ -2030,7 +2033,9 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
        */
 
         if (syn.instance.params.len > 0) {
-            // 
+            // TODO: in this instance, we really *actually* want to defer the
+            // generation of the instance code as we do with functions.
+            // (parametric instances are effectively functions).
             void* instance_address = get_instructions(target.code_aux).data;
             instance_address += get_instructions(target.code_aux).len;
 

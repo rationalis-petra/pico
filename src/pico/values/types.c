@@ -1504,7 +1504,7 @@ size_t pi_align_of(PiType type) {
     return out;
 }
 
-size_t pi_instance_size_of(PiType type) {
+Result_t pi_instance_size_of(PiType type, size_t* out) {
   size_t align = 1;
   size_t total = 0; 
   for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
@@ -1530,10 +1530,11 @@ size_t pi_instance_size_of(PiType type) {
     total += field_size;
   }
 
-  return total;
+  *out = total;
+  return Ok;
 
  invalid_type:
-  panic(mv_string("Cannot get size of polymorphic type!"));
+  return Err;
 }
 
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
@@ -1876,8 +1877,8 @@ void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiA
         for (size_t i = 0; i < body->instance.args.len; i++) {
             type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
         }
-        for (size_t i = 0; i < body->instance.args.len; i++) {
-            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
+        for (size_t i = 0; i < body->instance.implicits.len; i++) {
+            type_app_subst(body->instance.implicits.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->instance.implicit_fields.len; i++) {
             type_app_subst(body->instance.implicit_fields.data[i].val, subst, shadowed, pia, logger, a);
@@ -2642,10 +2643,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
             }
         }
         return false;
+    case TFlags:
     case TReset:
-        return false;
     case TResumeMark:
-        return false;
     case TDynamic:
         return false;
     case TNamed:
@@ -2692,9 +2692,8 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         // TODO: when the uvars no longer have substitutions, make this panic!
         return false;
 
-    default:
-        panic(mv_string("not implemented is_variable_for for this sort"));
     }
+    panic(mv_string("not implemented is_variable_for for this sort"));
 }
 
 bool is_variable_for(PiType *ty, SymbolArray vars) {

@@ -192,9 +192,26 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     build_unary_op(Push, reg(VSTACK_BASE, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+    PiAllocator pia = convert_to_pallocator(a);
+    SymAddrPiAMap struct_type_fields = mk_sym_addr_piamap(type->instance.implicit_fields.len + type->instance.fields.len, &pia);
+    SymSynAMap struct_fields = mk_sym_syn_amap(type->instance.implicit_fields.len + type->instance.fields.len, a);
+    for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+        SymAddrPiCell tcell = type->instance.implicit_fields.data[i];
+        sym_addr_insert(tcell.key, tcell.val, &struct_type_fields);
+
+        SymSynCell scell = syn.instance.implicit_fields.data[i];
+        sym_syn_insert(scell.key, scell.val, &struct_fields);
+    }
+    for (size_t i = 0; i < type->instance.fields.len; i++) {
+        SymAddrPiCell tcell = type->instance.fields.data[i];
+        sym_addr_insert(tcell.key, tcell.val, &struct_type_fields);
+
+        SymSynCell scell = syn.instance.fields.data[i];
+        sym_syn_insert(scell.key, scell.val, &struct_fields);
+    }
     PiType as_struct = {
         .sort = TStruct,
-        .structure.fields = type->instance.fields,
+        .structure.fields = struct_type_fields,
     };
     generate_stack_size_of(RSI, &as_struct, env, ass, a, point);
     generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
@@ -205,30 +222,64 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     data_stack_grow(env, 2 * REGISTER_SIZE);
 
-    // TODO: This currently assumes that instance fields are generated in order;
-    //       make this not the case (see current poly struct for inspiration)
-    for (size_t i = 0; i < type->instance.fields.len; i++) {
-        SynRef val = syn.instance.fields.data[i].val;
-        // TODO: copy into instance memory
+    // TODO: To enforce that we handle cases where the field order does not
+    //       match the declaration order (of the types), we iterate through the
+    //       type's fields then search for the struct field. This will not match
+    //       semantics if the field bodies have side-effects. Add a test then
+    //       fix this. 
+    for (size_t i = 0; i < struct_type_fields.len; i++) {
+        Symbol sym = struct_type_fields.data[i].key;
+        SynRef val;
+        for (size_t j = 0; j < struct_fields.len; j++) {
+            if (symbol_eq(sym, struct_fields.data[j].key)) {
+                val = struct_fields.data[j].val;
+            }
+        }
+
+        // Generate value on stack
         generate_i(val, env, ictx);
-        // Generate  
         PiType* member_type = strip_type(get_type(val, ictx.tape));
 
         // TODO: this code does NOT account for alignemet...
         if (is_variable_in(member_type, env)) {
-            size_t copy_sz = pi_stack_size_of(*type);
-            build_binary_op(Add, reg(RSP, sz_64), imm32(copy_sz), ass, a, point);
-            // TODO: copy value into instance; move pointer forward...
-            data_stack_grow(env, ADDRESS_SIZE);
+            // Generate the field size and push it; saving for later
+            generate_size_of(R9, member_type, env, ass, a, point);
+            build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+
+
+            // Stack looks like
+            //  RSP+16 | ptr to field dest
+            //  RSP+8  | ptr to field value
+            //  RSP    | field size
+            generate_poly_move(rref8(RSP, 0x10, sz_64), rref8(RSP, 0x8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Copy done: pop the field size
+            build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+
+            // Then, get a stack - aligned version and use it to pop the field
+            // from the dynamic stack.
+            build_binary_op(Mov, reg(RSI, sz_64), reg(RDI, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), imm32(STACK_ALIGN), ass, a, point);
+            generate_align_to(RSI, R9, ass, a, point);
+            build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RSI, sz_64), ass, a, point);
+
+            // Now, remove the pointer to the dynamic stack from the static stack.
+            build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+
+            // Now, the stack head points to the current field offset. Advance
+            // it to the start of the next field by adding the non-stack aligned size
+            build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(RDI, sz_64), ass, a, point);
+            data_stack_shrink(env, ADDRESS_SIZE);
         } else {
-            size_t copy_sz = pi_size_of(*type);
+            size_t copy_sz = pi_size_of(*member_type);
             size_t stack_val_sz = pi_stack_align(copy_sz);
-            build_binary_op(Mov, reg(R8, sz_64), rrefa(RSP, copy_sz, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R8, sz_64), rrefa(RSP, stack_val_sz, sz_64), ass, a, point);
+            // TODO: align R8!
             generate_monomorphic_copy(R8, RSP, copy_sz, ass, a, point);
 
             build_binary_op(Add, reg(RSP, sz_64), imm32(stack_val_sz), ass, a, point);
             build_binary_op(Add, rrefa(RSP, 0, sz_64), imm32(copy_sz), ass, a, point);
-            data_stack_grow(env, ADDRESS_SIZE);
+            data_stack_shrink(env, stack_val_sz);
         }
     }
 

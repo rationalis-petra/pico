@@ -16,6 +16,8 @@
 #define DVARS_REGISTER R13 // TODO: could this be a global?
 #define DMEM_REGISTER R12
 
+#define STACK_ALIGN 8
+
 /* Utility functions shared across code generation */
 
 typedef struct {

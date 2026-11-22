@@ -39,6 +39,39 @@ RuneEvalResult bi_rune_join(ValSlice values, RuneEnv* env, RegionAllocator* regi
     };
 }
 
+RuneEvalResult bi_rune_append(ValSlice values, RuneEnv* env, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    Allocator* a = &ra;
+    size_t output_len = 0;
+    for (size_t i = 0; i < values.len; i++) {
+        ValRef ref = values.data[i];
+        if (get_sort(ref) != ValList) {
+            return (RuneEvalResult) {
+                .type = AError,
+                .error_message = mv_cstr_doc("append expects all list arguments", a),
+            };
+        }
+        RuneList list = get_rune_list(ref);
+        output_len += list.len;
+    }
+
+    ValueHeap* heap = get_pools(env).value;
+    ValRef ret = mk_rune_list(output_len, heap);
+    RuneList output = get_rune_list(ret);
+
+    size_t output_offset = 0;
+    for (size_t i = 0; i < values.len; i++) {
+        ValRef ref = values.data[i];
+        RuneList list = get_rune_list(ref);
+        memcpy(output.data + output_offset, list.data, list.len * sizeof(ValRef));
+        output_offset += list.len;
+    }
+    return (RuneEvalResult) {
+        .type = AValue,
+        .value = ret,
+    };
+}
+
 void populate_std_builtins(RuneEnv* env) {
     ValueHeap* heap = get_pools(env).value;
 
@@ -49,4 +82,12 @@ void populate_std_builtins(RuneEnv* env) {
     void* fn = bi_rune_join;
     ValRef ref = mk_host_val(fn_bridge, &fn, heap);
     rune_add_val_def(string_to_name(mv_string("join")), ref, env);
+
+    fn_bridge = (Bridge) {
+        .type = BFn,
+        .fn.num_args = 2,
+    };
+    fn = bi_rune_append;
+    ref = mk_host_val(fn_bridge, &fn, heap);
+    rune_add_val_def(string_to_name(mv_string("append")), ref, env);
 }
