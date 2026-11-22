@@ -1877,8 +1877,8 @@ void type_app_subst(PiType* body, SymPtrAssoc* subst, SymbolArray* shadowed, PiA
         for (size_t i = 0; i < body->instance.args.len; i++) {
             type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
         }
-        for (size_t i = 0; i < body->instance.args.len; i++) {
-            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
+        for (size_t i = 0; i < body->instance.implicits.len; i++) {
+            type_app_subst(body->instance.implicits.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->instance.implicit_fields.len; i++) {
             type_app_subst(body->instance.implicit_fields.data[i].val, subst, shadowed, pia, logger, a);

@@ -2222,6 +2222,41 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     }
 }
 
+static SynRef synthesize_local_instance(LocalInstance local, TypeEnv* env, TypeCheckContext ctx) {
+    SynRef new_impl = new_syntax(ctx.tape);
+    PiType* current_type = local.head_type;
+    set_syntax(new_impl,
+               (Syntax){
+                   .type = SVariable,
+                   .variable = local.path.data[0],
+               },
+               ctx.tape);
+    set_type(new_impl, current_type, ctx.tape);
+    for (size_t i = 1; i < local.path.len; i++) {
+        // If the path has len 1, then nothing changes.
+        // Otherwise, we will start adding projections here.
+        Symbol var = local.path.data[i];
+        TraitInstance instance = current_type->instance;
+        for (size_t i = 0; i < instance.implicit_fields.len; i++) {
+            if (symbol_eq(var, instance.implicit_fields.data[i].key)) {
+                current_type = instance.implicit_fields.data[i].val;
+            }
+        }
+
+        SynRef old_impl = new_impl;
+        new_impl = new_syntax(ctx.tape);
+        set_syntax(new_impl,
+                   (Syntax){
+                       .type = SProjector,
+                       .projector.val = old_impl,
+                       .projector.field = var,
+                   },
+                   ctx.tape);
+        set_type(new_impl, current_type, ctx.tape);
+    }
+    return new_impl;
+}
+
 // Post Unify: perform actions which require types to be resolved,
 // i.e. no uvars!
 // This includes
@@ -2302,37 +2337,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
                 switch (e.type) {
                 case IELocal: {
-                    SynRef new_impl = new_syntax(ctx.tape);
-                    PiType* current_type = e.local.head_type;
-                    set_syntax(new_impl,
-                               (Syntax){
-                                   .type = SVariable,
-                                   .variable = e.local.path.data[0],
-                               },
-                               ctx.tape);
-                    set_type(new_impl, current_type, ctx.tape);
-                    for (size_t i = 1; i < e.local.path.len; i++) {
-                        // If the path has len 1, then nothing changes.
-                        // Otherwise, we will start adding projections here.
-                        Symbol var = e.local.path.data[i];
-                        TraitInstance instance = current_type->instance;
-                        for (size_t i = 0; i < instance.implicit_fields.len; i++) {
-                            if (symbol_eq(var, instance.implicit_fields.data[i].key)) {
-                                current_type = instance.implicit_fields.data[i].val;
-                            }
-                        }
-
-                        SynRef old_impl = new_impl;
-                        new_impl = new_syntax(ctx.tape);
-                        set_syntax(new_impl,
-                                   (Syntax){
-                                       .type = SProjector,
-                                       .projector.val = old_impl,
-                                       .projector.field = var,
-                                   },
-                                   ctx.tape);
-                        set_type(new_impl, current_type, ctx.tape);
-                    }
+                    SynRef new_impl = synthesize_local_instance(e.local, env, ctx);
                     push_syn(new_impl, &syn.application.implicits);
                     set_syntax(ref, syn, ctx.tape);
                     break;
@@ -2398,42 +2403,12 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
             switch (e.type) {
-                case IELocal: {
-                    SynRef new_impl = new_syntax(ctx.tape);
-                    PiType* current_type = e.local.head_type;
-                    set_syntax(new_impl,
-                               (Syntax){
-                                   .type = SVariable,
-                                   .variable = e.local.path.data[0],
-                               },
-                               ctx.tape);
-                    set_type(new_impl, current_type, ctx.tape);
-                    for (size_t i = 1; i < e.local.path.len; i++) {
-                        // If the path has len 1, then nothing changes.
-                        // Otherwise, we will start adding projections here.
-                        Symbol var = e.local.path.data[i];
-                        TraitInstance instance = current_type->instance;
-                        for (size_t j = 0; j < instance.implicit_fields.len; j++) {
-                            if (symbol_eq(var, instance.implicit_fields.data[j].key)) {
-                                current_type = instance.implicit_fields.data[j].val;
-                            }
-                        }
-
-                        SynRef old_impl = new_impl;
-                        new_impl = new_syntax(ctx.tape);
-                        set_syntax(new_impl,
-                                   (Syntax){
-                                       .type = SProjector,
-                                       .projector.val = old_impl,
-                                       .projector.field = var,
-                                   },
-                                   ctx.tape);
-                        set_type(new_impl, current_type, ctx.tape);
-                    }
-                    push_syn(new_impl, &syn.all_application.implicits);
-                    set_syntax(ref, syn, ctx.tape);
-                    break;
-                }
+            case IELocal: {
+                SynRef new_impl = synthesize_local_instance(e.local, env, ctx);
+                push_syn(new_impl, &syn.all_application.implicits);
+                set_syntax(ref, syn, ctx.tape);
+                break;
+            }
             case IEAbsSymbol: {
                 SynRef new_impl = new_syntax(ctx.tape);//mem_alloc(sizeof(Syntax), ctx.a);
                 set_syntax(new_impl,
@@ -2447,10 +2422,10 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 set_syntax(ref, syn, ctx.tape);
                 break;
             }
-                case IENotFound:
-                    type_error_instance_not_found(ref, arg_ty, ctx);
-                case IEAmbiguous:
-                    type_error_ambiguous_instance(ref, arg_ty, e.ambiguous_sources, ctx);
+            case IENotFound:
+                type_error_instance_not_found(ref, arg_ty, ctx);
+            case IEAmbiguous:
+                type_error_ambiguous_instance(ref, arg_ty, e.ambiguous_sources, ctx);
             default:
                 panic(mv_string("Invalid instance entry type!"));
             }
@@ -2678,6 +2653,13 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
             InstanceEntry e = type_instance_lookup(field_ty->instance.instance_of, field_ty->instance.args, env);
             switch (e.type) {
+            case IELocal: {
+                SynRef new_impl = synthesize_local_instance(e.local, env, ctx);
+                set_type(new_impl, field_ty, ctx.tape);
+                sym_syn_insert(field_name, new_impl, &syn.instance.implicit_fields);
+                set_syntax(ref, syn, ctx.tape);
+                break;
+            }
             case IEAbsSymbol: {
                 SynRef new_impl = new_syntax(ctx.tape);
                 set_syntax(new_impl,
@@ -3060,6 +3042,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
         }
 
+        for (size_t i = 0; i < typed.instance.implicit_fields.len; i++) {
+            SynRef syn = typed.instance.implicit_fields.data[i].val;
+            squash_types(syn, env, ctx);
+        }
         for (size_t i = 0; i < typed.instance.fields.len; i++) {
             SynRef syn = typed.instance.fields.data[i].val;
             squash_types(syn, env, ctx);

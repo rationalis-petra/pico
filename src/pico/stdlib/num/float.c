@@ -121,12 +121,20 @@ void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num,
                 mv_string(") [.+ +] [.zero 0.0])"));
     compile_str_toplevel(monoid_instance, module, target, &point, &pi_point, region);
 
+    String group_instance = string_ncat(a, 5, 
+                mv_string("(def group-"),
+                name_lower,
+                mv_string(" instance (Group "),
+                name_upper,
+                mv_string(") [.- -])"));
+    compile_str_toplevel(group_instance, module, target, &point, &pi_point, region);
+
     String ring_instance = string_ncat(a, 5, 
                 mv_string("(def ring-"),
                 name_lower,
                 mv_string(" instance (Ring "),
                 name_upper,
-                mv_string(") [.- -] [.* *] [.one 1.0])"));
+                mv_string(") [.* *] [.one 1.0])"));
     compile_str_toplevel(ring_instance, module, target, &point, &pi_point, region);
 
     String num_instance = string_ncat(a, 5, 
