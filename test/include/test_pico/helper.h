@@ -2,6 +2,7 @@
 #define __TEST_PICO_HELPER_H
 
 #include "platform/memory/region.h"
+#include "data/result.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/values/modular.h"
@@ -18,6 +19,7 @@ typedef struct {
 } TestContext;
 
 void test_toplevel_eq(const char *string, void *expected, Module *module, TestContext context);
+Result test_toplevel_result_eq(const char *string, void *expected, Module *module, TestContext context);
 void assert_toplevel_eq(const char *string, void *expected, Module *module, TestContext context);
 
 void test_toplevel_stdout(const char *string, const char *expected, Module *module, TestContext context);
@@ -43,6 +45,7 @@ void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 #define MODULE(str) module_from_string(str, module, context); refresh_env(env); clear_logger(log);
 
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define ASSERT_EQ(str, failure_label) do { if (test_toplevel_result_eq(str, &expected, module, context).type == Err) goto failure_label; } while (0)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 

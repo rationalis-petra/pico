@@ -23,6 +23,66 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("asm-add-r32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x83, 0xC0, 0x0C, 0x90 };
+            build_binary_op(Add, reg(RAX, sz_32), imm8(12), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-and-m32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x83, 0x64, 0x24, 0x00, 0x01, 0x90 };
+            build_binary_op(And, rref8(RSP, 0, sz_32), imm8(1), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-or-r32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x83, 0xC8, 0x02, 0x90 };
+            build_binary_op(Or, reg(RAX, sz_32), imm8(2), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-xor-r32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x83, 0xF0, 0x02, 0x90 };
+            build_binary_op(Xor, reg(RAX, sz_32), imm8(2), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-xor-m32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0x83, 0x74, 0x24, 0x00, 0x02, 0x90 };
+            build_binary_op(Xor, rref8(RSP, 0, sz_32), imm8(2), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-mov-m8-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0xC6, 0x44, 0x24, 0x00, 0x2A, 0x90 };
+            build_binary_op(Mov, rref8(RSP, 0, sz_8), imm8(0x2A), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
     if (test_start(log, mv_string("asm-add-r64-r64"))) { // Add RBX, RCX
         ASM_TEST() {
             uint8_t expected[] = { 0x48, 0x03, 0xD9, 0x90 };

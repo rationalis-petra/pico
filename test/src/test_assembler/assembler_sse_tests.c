@@ -83,6 +83,59 @@ void run_sse_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("cmpss-xmm32-xmm32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x0F, 0xC2, 0xC1, 0x01, 0x90 };
+            build_binary_op_imm8(CmpSS, reg(XMM0, sz_32), reg(XMM1, sz_32), 1, ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("cmpss-xmm32-m32-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x0F, 0xC2, 0x54, 0x24, 0x08, 0x00, 0x90 };
+            build_binary_op_imm8(CmpSS, reg(XMM2, sz_32), rref8(RSP, 8, sz_32), 0, ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("cmpss-extended-xmm-registers"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x45, 0x0F, 0xC2, 0xC1, 0x02, 0x90 };
+            build_binary_op_imm8(CmpSS, reg(XMM8, sz_32), reg(XMM9, sz_32), 2, ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("cmpsd-xmm64-xmm64-imm8"))) {
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF2, 0x48, 0x0F, 0xC2, 0xC1, 0x01, 0x90 };
+            build_binary_op_imm8(CmpSD, reg(XMM0, sz_64), reg(XMM1, sz_64), 1, ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("cmpsd-xmm64-m64-imm8"))) {
+        ASM_TEST() {
+            // TODO: the 0x48 is redundant here and the encoding is correct
+            // either way. For smaller binaries, see if you can prevent the
+            // assembler from emitting redundant REX.W bytes
+            uint8_t expected[] = { 0xF2, 0x48, 0x0F, 0xC2, 0x54, 0x24, 0x08, 0x00, 0x90 };
+            build_binary_op_imm8(CmpSD, reg(XMM2, sz_64), rref8(RSP, 8, sz_64), 0, ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
     // TODO: add test for XMM{n} where n >= 8
 
     delete_assembler(ass);

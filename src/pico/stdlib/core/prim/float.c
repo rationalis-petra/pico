@@ -26,6 +26,35 @@ void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocat
     build_nullary_op(Ret, ass, a, point);
 }
 
+void build_float_comp_fn(Assembler* ass, uint8_t predicate, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
+    BinaryOp comp_op = sz == sz_32 ? CmpSS : CmpSD;
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), ass, a, point);
+    build_binary_op(mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), ass, a, point);
+    build_binary_op_imm8(comp_op, reg(XMM0, sz), reg(XMM1, sz), predicate, ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+    build_binary_op(mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), ass, a, point);
+    build_binary_op(And, rref8(RSP, 0, sz), imm8(1), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
+}
+
+void build_float_negated_comp_fn(Assembler* ass, uint8_t predicate, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
+    BinaryOp comp_op = sz == sz_32 ? CmpSS : CmpSD;
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), ass, a, point);
+    build_binary_op(mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), ass, a, point);
+    build_binary_op_imm8(comp_op, reg(XMM0, sz), reg(XMM1, sz), predicate, ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+    build_binary_op(mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), ass, a, point);
+    build_binary_op(Xor, rref8(RSP, 0, sz), imm8(-127), ass, a, point);
+    build_binary_op(And, rref8(RSP, 0, sz), imm8(1), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
+}
+
 void build_unary_float_fn(PiType* type, LocationSize sz, void* cfn, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType arg_type = sz == sz_64 ? (CType){.sort = CSDouble} : (CType){.sort = CSFloat};
     CType fn_ctype = mk_fn_ctype(pia, 1, "x", arg_type, arg_type);
@@ -140,6 +169,51 @@ void add_prim_float_module(PrimType prim, Assembler* ass, Target target, Module*
 
     build_binary_float_fn(ass, div_op, sz, a, &point);
     name = string_to_name(mv_string("/"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, mk_prim_type(pia, prim), mk_prim_type(pia, prim), mk_prim_type(pia, Bool));
+    build_float_comp_fn(ass, OrdEq, sz, a, &point);
+    name = string_to_name(mv_string("="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_float_negated_comp_fn(ass, OrdEq, sz, a, &point);
+    name = string_to_name(mv_string("!="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, mk_prim_type(pia, prim), mk_prim_type(pia, prim), mk_prim_type(pia, Bool));
+    build_float_comp_fn(ass, OrdLt, sz, a, &point);
+    name = string_to_name(mv_string("<"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_float_negated_comp_fn(ass, OrdLt, sz, a, &point);
+    name = string_to_name(mv_string(">"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, mk_prim_type(pia, prim), mk_prim_type(pia, prim), mk_prim_type(pia, Bool));
+    build_float_comp_fn(ass, OrdLtEq, sz, a, &point);
+    name = string_to_name(mv_string("<="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_float_negated_comp_fn(ass, OrdLtEq, sz, a, &point);
+    name = string_to_name(mv_string(">="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

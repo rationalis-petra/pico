@@ -95,7 +95,6 @@ void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num,
                 mv_string(")  \n  [.show to-string])"));
     compile_str_toplevel(show_instance, module, target, &point, &pi_point, region);
 
-    /*
     String eq_instance = string_ncat(a, 5, 
                 mv_string("(def eq-"),
                 name_lower,
@@ -111,7 +110,6 @@ void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num,
                 name_upper,
                 mv_string(")  [.< <] [.<= <=] [.> >] [.>= >=])"));
     compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
-    */
 
     String monoid_instance = string_ncat(a, 5, 
                 mv_string("(def monoid-"),

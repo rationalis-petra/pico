@@ -393,6 +393,8 @@ typedef struct {
     uint64_t supported;
     BinOpBytes* entries;
     CPUFeatureFlags flags;
+    uint8_t mandatory_prefix;
+    bool has_trailing_imm8;
 } BinaryOpTable;
 
 static BinaryOpTable binary_opcode_tables[Binary_Op_Count];
@@ -445,6 +447,26 @@ void build_binary_table() {
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
         .num_immediate_bytes = 4,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+
+    // r/m32, imm8
+    binary_table[bindex(Dest_Register, sz_32, Dest_Immediate, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 1,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+    binary_table[bindex(Dest_Deref, sz_32, Dest_Immediate, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 1,
         .order = MI,
         .has_opcode_ext = true,
     };
@@ -707,6 +729,15 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = false,
     };
+    binary_table[bindex(Dest_Deref, sz_8, Dest_Immediate, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 1,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
 
 }
 
@@ -752,15 +783,16 @@ void add_op3(uint8_t op1, uint8_t op2, uint8_t op3, BinOpType type, uint64_t sup
 
 void build_binary_opcode_tables() {
     for (size_t i = 0; i < Binary_Op_Count; i++) {
-        binary_opcode_tables[i] = (BinaryOpTable){0, NULL, 0};
+        binary_opcode_tables[i] = (BinaryOpTable){0};
     }
 
     {   // Add Operation. Source - Intel Manual Vol 2. p142
-        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 |
+        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM32_Imm8 | RM64_R64 | R64_RM64 |
                               R32_RM32 | R16_RM16 | R8_RM8;
-        static BinOpBytes ops[7];
+        static BinOpBytes ops[8];
         add_op_ext(0x83, 0x0, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x0, RM64_Imm32, sup, ops);
+        add_op_ext(0x83, 0x0, RM32_Imm8, sup, ops);
 
         add_op(0x01, RM64_R64, sup, ops);
         add_op(0x03, R64_RM64, sup, ops);
@@ -809,6 +841,34 @@ void build_binary_opcode_tables() {
         binary_opcode_tables[Cmp] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
+        };
+    }
+
+    {   // Compare packed single-precision scalar values. The imm8 selects the predicate.
+        static uint64_t sup = XMM32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[2];
+        add_op2(0x0F, 0xC2, XMM32_XMM32, sup, ops);
+        add_op2(0x0F, 0xC2, XMM32_M32, sup, ops);
+        binary_opcode_tables[CmpSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE,
+            .mandatory_prefix = 0xF3,
+            .has_trailing_imm8 = true,
+        };
+    }
+
+    {   // Compare scalar double-precision values. The imm8 selects the predicate.
+        static uint64_t sup = XMM64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[2];
+        add_op2(0x0F, 0xC2, XMM64_XMM64, sup, ops);
+        add_op2(0x0F, 0xC2, XMM64_M64, sup, ops);
+        binary_opcode_tables[CmpSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE,
+            .mandatory_prefix = 0xF2,
+            .has_trailing_imm8 = true,
         };
     }
 
@@ -922,11 +982,12 @@ void build_binary_opcode_tables() {
 
     {   // And Operation. Source - Intel Manual Vol 2. p1407
         static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 |
-            R32_RM32 | RM32_R32 | R16_RM16 | RM16_R16 | R8_RM8 |
+            RM32_Imm8 | R32_RM32 | RM32_R32 | R16_RM16 | RM16_R16 | R8_RM8 |
             RM8_R8;
-        static BinOpBytes ops[10];
+        static BinOpBytes ops[11];
         add_op_ext(0x83, 0x4, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x4, RM64_Imm32, sup, ops);
+        add_op_ext(0x83, 0x4, RM32_Imm8, sup, ops);
 
         add_op(0x21, RM64_R64, sup, ops);
         add_op(0x23, R64_RM64, sup, ops);
@@ -947,11 +1008,12 @@ void build_binary_opcode_tables() {
 
     {   // Or Operation. Source - Intel Manual Vol 2. p902
         static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 |
-            R32_RM32 | RM32_R32 | R16_RM16 | RM16_R16 | R8_RM8 |
+            RM32_Imm8 | R32_RM32 | RM32_R32 | R16_RM16 | RM16_R16 | R8_RM8 |
             RM8_R8;
-        static BinOpBytes ops[10];
+        static BinOpBytes ops[11];
         add_op_ext(0x83, 0x1, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x1, RM64_Imm32, sup, ops);
+        add_op_ext(0x83, 0x1, RM32_Imm8, sup, ops);
 
         add_op(0x09, RM64_R64, sup, ops);
         add_op(0x0B, R64_RM64, sup, ops);
@@ -971,10 +1033,11 @@ void build_binary_opcode_tables() {
     }
 
     {   // XOr Operation. Source - Intel Manual Vol 2. p2236
-        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R8_RM8;
-        static BinOpBytes ops[5];
+        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM32_Imm8 | RM64_R64 | R64_RM64 | R8_RM8;
+        static BinOpBytes ops[6];
         add_op_ext(0x83, 0x6, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x6, RM64_Imm32, sup, ops);
+        add_op_ext(0x83, 0x6, RM32_Imm8, sup, ops);
 
         add_op(0x31, RM64_R64, sup, ops);
         add_op(0x33, R64_RM64, sup, ops);
@@ -1014,10 +1077,10 @@ void build_binary_opcode_tables() {
     // ------------------
 
     {   // Move. Source - Intel Manual Vol 2. 769
-      static uint64_t sup = R64_Imm64 | RM64_Imm32 | RM64_R64 | R64_RM64 |
+            static uint64_t sup = R64_Imm64 | RM64_Imm32 | RM64_R64 | R64_RM64 |
                             RM32_Imm32 | RM32_R32 | R32_RM32 | RM16_R16 | R16_RM16 | RM8_R8 | RM8_R8_x86 |
-                            R8_RM8 | R8_RM8_x86 | RM32_Imm32 | RM16_Imm16 | R8_Imm8;
-        static BinOpBytes ops[16];
+                                                        R8_RM8 | R8_RM8_x86 | RM32_Imm32 | RM16_Imm16 | R8_Imm8 | RM8_Imm8;
+                static BinOpBytes ops[16];
         add_op(0xB8, R64_Imm64, sup, ops);
         add_op_ext(0xC7, 0x0, RM64_Imm32, sup, ops);
         add_op_ext(0xC7, 0x0, RM64_Imm32, sup, ops);
@@ -1036,7 +1099,8 @@ void build_binary_opcode_tables() {
 
         add_op_ext(0xC7, 0x0, RM32_Imm32, sup, ops);
         add_op_ext(0xC7, 0x0, RM16_Imm16, sup, ops);
-        add_op(0xC6, R8_Imm8, sup, ops);
+        add_op_ext(0xC6, 0x0, R8_Imm8, sup, ops);
+        add_op_ext(0xC6, 0x0, RM8_Imm8, sup, ops);
         binary_opcode_tables[Mov] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
@@ -1295,13 +1359,16 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
         if (src.type == Dest_Immediate) {
             switch (dest.sz) {
             case sz_8:
-                goto report_error;
+                if (src.sz == sz_8) type = RM8_Imm8;
+                else goto report_error;
+                break;
             case sz_16:
                 if (src.sz == sz_16) type = RM16_Imm16;
                 else goto report_error;
                 break;
             case sz_32:
-                if (src.sz == sz_32) type = RM32_Imm32;
+                if (src.sz == sz_8) type = RM32_Imm8;
+                else if (src.sz == sz_32) type = RM32_Imm32;
                 else goto report_error;
                 break;
             case sz_64:
@@ -1379,13 +1446,18 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
     }
 }
 
-AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
+static AsmResult build_binary_op_internal(BinaryOp op, Location dest, Location src, bool has_trailing_imm8, uint8_t trailing_imm8, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary table entry for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
         throw_error(point, mv_cat_doc(nodes, err_allocator));
+    }
+
+    BinaryOpTable op_table = binary_opcode_tables[op];
+    if (op_table.has_trailing_imm8 != has_trailing_imm8) {
+        throw_error(point, mv_cstr_doc("Incorrect builder for binary operation immediate form", err_allocator));
     }
 
     uint8_t rex_byte = be.init_rex_byte;
@@ -1577,11 +1649,19 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
         }
     }
 
+    if (rex_byte & 0x0F) {
+        be.use_rex_byte = true;
+        rex_byte |= 0b01000000;
+    }
+
     // Step 5: write bytes
     AsmResult out = {.backlink = 0};
     U8Array* instructions = &assembler->instructions;
     if (be.use_size_override_prefix)
         push_u8(0x66, instructions);
+
+    if (op_table.mandatory_prefix)
+        push_u8(op_table.mandatory_prefix, instructions);
 
     if (be.use_rex_byte)
         push_u8(rex_byte, instructions);
@@ -1614,7 +1694,20 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
     for (uint8_t i = 0; i < be.num_immediate_bytes; i++)
         push_u8(src.immediate_bytes[i], &assembler->instructions);
 
+    if (op_table.has_trailing_imm8) {
+        out.backlink = instructions->len;
+        push_u8(trailing_imm8, instructions);
+    }
+
     return out;
+}
+
+AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
+    return build_binary_op_internal(op, dest, src, false, 0, assembler, err_allocator, point);
+}
+
+AsmResult build_binary_op_imm8(BinaryOp op, Location dest, Location src, uint8_t immediate, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
+    return build_binary_op_internal(op, dest, src, true, immediate, assembler, err_allocator, point);
 }
 
 void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte, Regname reg) {
@@ -2297,7 +2390,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char *names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "AddSS", "AddSD", "SubSS", "SubSD",
+        "Add", "Sub", "Cmp", "CmpSS", "CmpSD", "AddSS", "AddSD", "SubSS", "SubSD",
         "MulSS", "MulSD", "DivSS", "DivSD",
         "And", "Or", "Xor", "SHL", "SHR", "XCHG",
         "Mov", "MovSS", "MovSD", "MovZx", "LEA", 

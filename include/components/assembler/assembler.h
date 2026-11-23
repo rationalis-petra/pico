@@ -41,6 +41,9 @@ typedef enum {
     Sub,
     Cmp,
 
+    CmpSS,
+    CmpSD,
+
     AddSS,
     AddSD,
 
@@ -93,6 +96,13 @@ typedef enum {
     // ------------------
     Binary_Op_Count,
 } BinaryOp;
+
+// 
+typedef enum : uint8_t {
+    OrdEq,
+    OrdLt,
+    OrdLtEq,
+} FloatCmpPrefix;
 
 typedef enum {
     // ------------------
@@ -264,6 +274,7 @@ typedef struct AsmResult {
 } AsmResult;
 
 AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* assembeler, Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_binary_op_imm8(BinaryOp op, Location dest, Location src, uint8_t immediate, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point);
 AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler,Allocator* err_allocator, ErrorPoint* point);
 AsmResult build_nullary_op(NullaryOp op, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point);
 

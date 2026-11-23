@@ -36,8 +36,8 @@ typedef enum {
 typedef struct {
     void (*on_expr)(PiType* type, void* val, void* data, TestLog* log);
     void (*on_top)(void* data, TestLog* log);
-    void (*on_pi_error)(MultiError err, IStream* sin, TestLog* log);
-    void (*on_error)(String msg, TestLog* log);
+    void (*on_pi_error)(MultiError err, IStream* sin, void* data, TestLog* log);
+    void (*on_error)(String msg, void* data, TestLog* log);
     void (*on_exit)(void* data, TestLog* log);
 } Callbacks;
 
@@ -138,14 +138,14 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
  on_pi_error:
     if (callbacks.on_pi_error) {
-        callbacks.on_pi_error(pi_point.multi, cin, log);
+        callbacks.on_pi_error(pi_point.multi, cin, data, log);
     }
     delete_istream(sin, &ra);
     return;
 
  on_error:
     if (callbacks.on_error) {
-        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), log);
+        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), data, log);
     }
     delete_istream(sin, &ra);
     return;
@@ -168,12 +168,18 @@ void fail_exit(void* data, TestLog* log) {
     test_fail(log);
 }
 
-void fail_error(String err, TestLog* log) {
+void fail_error(String err, void* data, TestLog* log) {
+    (void)data;
     test_log_error(log, err);
     test_fail(log);
 }
 
-void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
+void fail_type_error(String err, TestLog* log) {
+    fail_error(err, NULL, log);
+}
+
+void fail_pi_error(MultiError err, IStream* cin, void* data, TestLog* log) {
+    (void)data;
     ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
     display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
@@ -224,6 +230,60 @@ void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
     }
 }
 
+typedef struct {
+    void* expected;
+    Result result;
+} ToplevelEqResult;
+
+void expr_result_eql(PiType* type, void* val, void* data, TestLog* log) {
+    ToplevelEqResult* comparison = data;
+    if (pi_value_eql(type, val, comparison->expected, get_std_allocator())) {
+        comparison->result.type = Ok;
+        return;
+    }
+
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
+    Allocator gpa = aa_to_gpa(arena);
+    FormattedOStream* os = get_fstream(log);
+    write_fstring(mv_string("Expected: "), os);
+    Document* doc = pretty_pi_value(comparison->expected, type, default_pvp, &gpa);
+    write_doc_formatted(doc, 120, os);
+    delete_doc(doc, &gpa);
+    write_fstring(mv_string("\n     Got: "), os);
+    doc = pretty_pi_value(val, type, default_pvp, &gpa);
+    write_doc_formatted(doc, 120, os);
+    delete_doc(doc, &gpa);
+    write_fstring(mv_string("\n"), os);
+    comparison->result.type = Err;
+    delete_arena_allocator(arena);
+}
+
+void top_result_eql(void* data, TestLog* log) {
+    ToplevelEqResult* comparison = data;
+    test_log_error(log, mv_string("Did not evaluate to a value."));
+    comparison->result.type = Err;
+}
+
+void fail_result_exit(void* data, TestLog* log) {
+    ToplevelEqResult* comparison = data;
+    test_log_error(log, mv_string("(exit) called unexpectedly during test"));
+    comparison->result.type = Err;
+}
+
+void fail_result_error(String err, void* data, TestLog* log) {
+    test_log_error(log, err);
+    ((ToplevelEqResult*)data)->result.type = Err;
+}
+
+void fail_result_pi_error(MultiError err, IStream* cin, void* data, TestLog* log) {
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
+    Allocator gpa = aa_to_gpa(arena);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
+    test_log_error(log, mv_string("Test failure - message logged"));
+    ((ToplevelEqResult*)data)->result.type = Err;
+    delete_arena_allocator(arena);
+}
+
 void top_eql(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
     write_fstring(mv_string("Did not evaluate to a value."), os);
@@ -243,6 +303,26 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
                           context.log, context.target, subregion);
     release_subregion(subregion);
     clear_not_implemented_hook();
+}
+
+Result test_toplevel_result_eq(const char *string, void *expected_val, Module *module, TestContext context) {
+    ToplevelEqResult comparison = {
+        .expected = expected_val,
+        .result = {.type = Ok},
+    };
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_result_eql,
+        .on_top = top_result_eql,
+        .on_pi_error = fail_result_pi_error,
+        .on_error = fail_result_error,
+        .on_exit = fail_result_exit,
+    };
+    RegionAllocator* subregion = make_subregion(context.region);
+    run_toplevel_internal(string, module, context.env, callbacks, &comparison,
+                          context.log, context.target, subregion);
+    release_subregion(subregion);
+    clear_not_implemented_hook();
+    return comparison.result;
 }
 
 void assert_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
@@ -481,11 +561,13 @@ void log_exit(void* data, TestLog* log) {
     test_log_error(log, mv_string("Test failure - (exit) called unexpectedly during test"));
 }
 
-void log_error(String err, TestLog* log) {
+void log_error(String err, void* data, TestLog* log) {
+    (void)data;
     test_log_error(log, err);
 }
 
-void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
+void log_pi_error(MultiError err, IStream* cin, void* data, TestLog* log) {
+    (void)data;
     // TODO: improve the 'test_log_error' so it can take in a document 
     ArenaAllocator* arena = make_arena_allocator(256, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
@@ -665,13 +747,13 @@ void build_module_internal(const char *string, Module *parent, Callbacks callbac
 
  on_pi_error:
     if (callbacks.on_pi_error) {
-        callbacks.on_pi_error(pi_point.multi, cin, log);
+        callbacks.on_pi_error(pi_point.multi, cin, NULL, log);
     }
     goto on_error_generic;
 
  on_error:
     if (callbacks.on_error) {
-        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), log);
+        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), NULL, log);
     }
     goto on_error_generic;
     
@@ -853,7 +935,7 @@ void test_typecheck_eq(const char *string, PiType* expected, Environment* env, T
         .on_expr = type_eql,
         .on_top = top_type,
         .on_pi_error = typecheck_fail_pi_error,
-        .on_error = fail_error,
+        .on_error = fail_type_error,
         .on_exit = fail_exit,
     };
     Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
@@ -888,7 +970,7 @@ void test_typecheck_fail(const char *string, Environment* env, TestContext conte
         .on_expr = type_fail,
         .on_top = top_type,
         .on_pi_error = succeed_if_type_error,
-        .on_error = fail_error,
+        .on_error = fail_type_error,
         .on_exit = fail_exit,
     };
     Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
@@ -917,7 +999,7 @@ void test_abstract_fail(const char *string, Environment* env, TestContext contex
         .on_expr = type_fail,
         .on_top = top_type,
         .on_pi_error = succeed_if_abstract_error,
-        .on_error = fail_error,
+        .on_error = fail_type_error,
         .on_exit = fail_exit,
     };
     Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};

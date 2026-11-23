@@ -260,6 +260,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("name-rejects-mismatched-representation"))) {
+        RUN("(def Vec3 Named Vec3 Family [A] Tile [3] A)");
+        TEST_TYPE_FAIL("(name (Vec3 F32) tile [(is F64 1.0) (is F64 2.0) (is F64 3.0)])");
+    }
+
     if (test_start(log, mv_string("cannot-coerce-to-disticnt"))) {
         RUN("(def DF Distinct DF F32)");
         RUN("(def id-df proc [(df DF)] df)");

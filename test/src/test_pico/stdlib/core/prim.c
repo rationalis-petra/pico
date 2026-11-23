@@ -182,6 +182,66 @@ void run_pico_stdlib_core_prim_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(prim.f64.* 51.5 2.45)");
     }
 
+    if (test_start(log, mv_string("f32-eq-true"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f32.= 51.5 51.5)");
+    }
+
+    if (test_start(log, mv_string("f32-eq-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f32.= 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-eq-true"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f64.= 51.5 51.5)");
+    }
+
+    if (test_start(log, mv_string("f64-eq-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f64.= 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f32-neq-true"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f32.!= 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f32-neq-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f32.!= 51.5 51.5)");
+    }
+
+    if (test_start(log, mv_string("f64-neq-tru"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f64.!= 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-neq-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f64.!= 51.5 51.5)");
+    }
+
+    if (test_start(log, mv_string("f32-lt-true"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f32.< 50.0 51.5)");
+    }
+
+    if (test_start(log, mv_string("f32-lt-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f32.< 51.5 51.5)");
+    }
+
+    if (test_start(log, mv_string("f64-lt-true"))) {
+        bool expected = true;
+        TEST_EQ("(prim.f64.< -0.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-lt-false"))) {
+        bool expected = false;
+        TEST_EQ("(prim.f64.< 51.0 51.0)");
+    }
+
     if (test_start(log, mv_string("f64-sin"))) {
         double expected = sin_f64(3.14159);
         TEST_EQ("(prim.f64.sin 3.14159)");

@@ -233,10 +233,10 @@ void type_check_i(SynRef ref, PiType* type, Range tysrc, TypeEnv* env, TypeCheck
                 PiType* aty = eval_type(*(SynRef*)cell.val, env, ctx);
                 UnifyResult out = unify(ann, aty, uctx);
                 UnifyReason reason = {
-                  .type = URCheck,
-                  .check.range= get_range(*(SynRef*)cell.val, ctx.tape).term,
-                  .check.expected = ann,
-                  .check.actual = aty,
+                                    .type = URCheck,
+                                    .check.range= get_range(*(SynRef*)cell.val, ctx.tape).term,
+                                    .check.expected = ann,
+                                    .check.actual = aty,
                 };
                 check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
             } else {
@@ -1644,25 +1644,35 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SName: {
-      AddrPiList* args = NULL;
-      if (untyped.name.args.len > 0) {
-        args = call_alloc(sizeof(AddrPiList), ctx.pia);
-        *args = mk_addr_list(untyped.name.args.len - 1, ctx.pia);
-        for (size_t i = 0; i < untyped.name.args.len; i++) {
-          push_addr(eval_type(untyped.name.args.data[i], env, ctx), args);
-        }
-      }
-      type_infer_i(untyped.name.body, env, ctx);
+        SynRef type_ref = new_syntax(ctx.tape);
+        set_syntax(type_ref, (Syntax) {
+                .type = SVariable,
+                .variable = untyped.name.name,
+            }, ctx.tape);
 
-      PiType* named = mem_alloc(sizeof(PiType), a);
-      *named = (PiType) {
-        .sort = TNamed,
-        .named.name = untyped.name.name,
-        .named.type = get_type(untyped.name.body, ctx.tape),
-        .named.args = args,
-      };
-      set_type(ref, named, ctx.tape);; 
-      break;
+        if (untyped.name.args.len > 0) {
+            SynRef application_ref = new_syntax(ctx.tape);
+            set_syntax(application_ref, (Syntax) {
+                    .type = SApplication,
+                    .application = {
+                        .function = type_ref,
+                        .args = untyped.name.args,
+                    },
+                }, ctx.tape);
+            type_ref = application_ref;
+        }
+
+        PiType* named_type = eval_type(type_ref, env, ctx);
+        if (named_type->sort != TNamed) {
+            type_error_named_must_have_type(ref, ctx);
+        }
+
+        type_infer_i(untyped.name.body, env, ctx);
+        Range type_range = get_range(type_ref, ctx.tape).term;
+        type_check_i(untyped.name.body, named_type->named.type, type_range, env, ctx);
+
+        set_type(ref, named_type, ctx.tape);;
+        break;
     }
     case SUnName: {
         type_infer_i(untyped.unname, env, ctx);
