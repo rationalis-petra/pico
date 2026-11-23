@@ -106,12 +106,10 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         "  [let! out (new {A} (u64.+ x.len y.len))]"
         "  (loop [for i from 0 below x.len]\n"
         "    [let! val (elt i x)]\n"
-        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num out.addr)))]\n"
-        "    (address.store dest-address val))\n"
+        "    (eset i val out))\n"
         "  (loop [for i from 0 below y.len]\n"
-        "    [let! val (elt (u64.+ i x.len) y)]\n"
-        "    [let! dest-address (address.num-to-address (u64.+ (u64.* i (size-of A)) (address.address-to-num out.addr)))]\n"
-        "    (address.store dest-address val))\n"
+        "    [let! val (elt i y)]\n"
+        "    (eset (u64.+ i x.len) val out))\n"
         "  out)" ;
     compile_toplevel(slice_join_fn, module, target, &point, &pi_point, region);
 

@@ -1,3 +1,5 @@
+#include "pico/stdlib/platform/submodules.h"
+
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
@@ -8,6 +10,8 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
         .log = log,
         .target = target,
     };
+    Allocator a = ra_to_gpa(region);
+    PiAllocator pia = convert_to_pallocator(&a);
 
     if (test_start(log, mv_string("str-memsize"))) {
         uint64_t expected = 4;
@@ -77,6 +81,13 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
     if (test_start(log, mv_string("len-empty"))) {
         uint64_t expected = 0;
         TEST_EQ("(string.len \"\")");
+    }
+
+    if (test_start(log, mv_string("join"))) {
+        PiAllocator old = set_std_current_allocator(pia);
+        bool expected = true;
+        TEST_EQ("(= \"lhsrhs\" (string.join \"lhs\" \"rhs\"))");
+        set_std_current_allocator(old);
     }
 
     if (test_start(log, mv_string("len-unicode"))) {

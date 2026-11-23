@@ -183,6 +183,30 @@ void run_pico_eval_trait_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(let [v1 name (Vec2 I64) tile [3 1]] [v2 name (Vec2 I64) tile [4 2]] (+ v1 v2))");
     }
 
+    if (test_start(log, mv_string("trait-local-instantiation-vec3-f32"))) {
+         MODULE("(module vec3-traits (import (core.kernel :all)) (export :all))\n"
+             "(def Monoid Trait Monoid [A] [.+ Proc [A A] A] [.zero A])\n"
+             "(def + all [A] proc {(n (Monoid A))} [(x A) (y A)] n.+ x y)");
+         MODULE("(module vec3-math (import (core.kernel :all) (core.prim :as prim) (vec3-traits :all)) (export :all))\n"
+               "(def Vec3 Named Vec3 Family [A] Tile [3] A)\n"
+               "(def vec3 all [A] proc [x y z] name (Vec3 A) tile [x y z])\n"
+             "(def f32-monoid instance (Monoid F32) [.+ prim.f32.+] [.zero 0.0])\n"
+               "(def vec3-zero all [A] proc {(mon Monoid A)} [] name (Vec3 A) with [i] [3] mon.zero)\n"
+               "(def vec3-monoid instance [A] {(mon Monoid A)} (Monoid (Vec3 A))"
+            "  [.+ proc [ln rn]"
+            "        let [l unname ln]"
+            "            [r unname rn]"
+            "          name (Vec3 A) with [i] [3] (mon.+ (telt [i] l) (telt [i] r))]"
+            "  [.zero (vec3-zero)])");
+        MODULE("(module vec3-player (import (core.kernel :all) (vec3-traits :all) (vec3-math :all)) (export :all))\n"
+               "(def add-position proc [(position (Vec3 F32)) (move (Vec3 F32))] (+ position move))");
+
+        {
+            float expected[] = {5.0f, 7.0f, 9.0f};
+            TEST_EQ("(vec3-player.add-position (vec3-math.vec3 {F32} 1.0 2.0 3.0) (vec3-math.vec3 {F32} 4.0 5.0 6.0))");
+        }
+    }
+
     if (test_start(log, mv_string("trait-implicit-field-offset"))) {
         RUN("(def Left Trait Left [A] [.identity Proc [A] A])");
         RUN("(def i64-left instance (Left I64) [.identity proc [x] x])");
